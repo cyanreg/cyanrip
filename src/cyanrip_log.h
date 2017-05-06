@@ -20,5 +20,11 @@
 
 #include "cyanrip_main.h"
 
-int cyanrip_create_log(cyanrip_ctx *ctx);
-int cyanrip_create_cue(cyanrip_ctx *ctx);
+int cyanrip_log_init(cyanrip_ctx *ctx);
+void cyanrip_log_end(cyanrip_ctx *ctx);
+
+void cyanrip_log_start_report(cyanrip_ctx *ctx);
+void cyanrip_log_finish_report(cyanrip_ctx *ctx);
+void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t);
+
+void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...);

@@ -24,93 +24,79 @@
 #include <string.h>
 #include <math.h>
 
-#include <cdio/mmc.h>
 #include <cdio/cdda.h>
 #include <cdio/paranoia.h>
-
-/* You seriously want to encode to more than 4 formats? Increase this. */
-#define CYANRIP_MAX_OUTPUTS 4
+#include <cdio/mmc.h>
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC = 0,
-    CYANRIP_FORMAT_WAVPACK,
     CYANRIP_FORMAT_TTA,
-    CYANRIP_FORMAT_ALAC,
-
-    CYANRIP_FORMAT_OPUS,
-    CYANRIP_FORMAT_VORBIS,
-    CYANRIP_FORMAT_MP3,
-
-    CYANRIP_FORMAT_WAV,
-    CYANRIP_FORMAT_RAW, /* Raw s16le 44100Hz 2ch interleaved data */
 };
 
-typedef struct cyanrip_track {
-    char name[16];
-    char isrc[16];
-    int preemphasis;
-    uint32_t samples;
-    uint32_t crc_v1;
-    uint32_t crc_v2;
-} cyanrip_track;
+typedef struct cyanrip_output_settings {
+    enum cyanrip_output_formats format;
+    float bitrate; /* Lossy formats only in kbps */
+} cyanrip_output_settings;
 
 typedef struct cyanrip_settings {
-    char *file;
+    char *dev_path;
+    bool verbose;
     int speed;
     int paranoia_mode;
     int frame_max_retries;
     int report_rate;
     uint32_t offset;
 
-    enum cyanrip_output_formats output_formats[CYANRIP_MAX_OUTPUTS];
-    int output_compression_level[CYANRIP_MAX_OUTPUTS];  /* Lossless only */
-    int output_bitrate[CYANRIP_MAX_OUTPUTS];            /* Lossy formats only */
-    int outputs_number;                                 /* Total number */
+    cyanrip_output_settings outputs[10];
+    int outputs_num;
 } cyanrip_settings;
+
+typedef struct cyanrip_track {
+    int index;
+    char name[256];
+    char isrc[16];
+    int preemphasis;
+    uint32_t ieee_crc_32;
+    uint32_t acurip_crc_v1;
+    uint32_t acurip_crc_v2;
+    int16_t *samples;
+    size_t nb_samples;
+} cyanrip_track;
 
 typedef struct cyanrip_ctx {
     cdrom_drive_t     *drive;
     cdrom_paranoia_t  *paranoia;
     cyanrip_settings   settings;
     cyanrip_track     *tracks;
+    CdIo_t            *cdio;
+    FILE              *logfile;
 
-    int cur_track;
-
-    int16_t *samples;
-    size_t samples_num;
-
-    uint32_t cur_frame;
-
-    uint32_t duration;   /* Sectors/frames */
-    uint32_t last_frame; /* Sector/frame */
+    char disc_name[256];
+    char *disc_mcn;
+    uint32_t duration;
+    uint32_t last_frame;
 } cyanrip_ctx;
 
+static inline void cyanrip_frames_to_duration(uint32_t sectors, char *str)
+{
+    if (!str)
+        return;
+    const double tot = sectors/75.0f; /* 75 frames per second */
+    const int hr    = tot/3600.0f;
+    const int min   = (tot/60.0f) - (hr * 60);
+    const int sec   = tot - ((hr * 3600) + min * 60);
+    const int msec  = tot - sec;
+    snprintf(str, 12, "%02i:%02i:%02i.%i", hr, min, sec, msec);
+}
 
-/* Exposed, just in case someone wants to use cyanrip as a library */
-
-int  cyanrip_sectors_to_duration(uint32_t sectors, char *str);
-
-/* Reads a single frame to the context */
-void cyanrip_read_frame(cyanrip_ctx *ctx);
-
-/* Read a track into the context, set index to 0 to rip the entire CD instead
- * of a single track. */
-int  cyanrip_read_track(cyanrip_ctx *ctx, int index);
-
-void cyanrip_ctx_flush(cyanrip_ctx *ctx);
-int  cyanrip_ctx_alloc_frames(cyanrip_ctx *ctx, uint32_t frames);
-
-int  cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings);
-void cyanrip_ctx_end(cyanrip_ctx **s);
-
-
-
-
-
-
-
-
-
-
-
-
+static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
+{
+    if (!str)
+        return;
+    const double tot = samples/44100.0; /* 44100 samples per second */
+    const int hr    = tot/3600.0f;
+    const int min   = (tot/60.0f) - (hr * 60);
+    const int sec   = tot - ((hr * 3600) + min * 60);
+    const int msec  = tot - sec;
+    snprintf(str, 12, "%02i:%02i:%02i.%i", hr, min, sec, msec);
+}
