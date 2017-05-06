@@ -18,66 +18,159 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "cyanrip_encode.h"
-
+#include <stdarg.h>
+#include <sys/stat.h>
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/log.h>
 
-static const char *extensions[] = { "flac", "wv", "tta", "alac", "opus", "ogg", "mp3", "wav", "dat" };
+#include "cyanrip_encode.h"
+#include "cyanrip_log.h"
 
-static int avcodec_init(void)
+typedef struct cyanrip_out_fmt {
+    const char *name;
+    const char *ext;
+} cyanrip_out_fmt;
+
+cyanrip_out_fmt fmt_map[] = {
+    [CYANRIP_FORMAT_FLAC]    = { "FLAC", "flac" },
+    [CYANRIP_FORMAT_TTA]     = { "TTA",  "tta"  },
+};
+
+cyanrip_ctx *log_ctx = NULL;
+
+static void log_cb_wrapper(void *avcl, int level, const char *fmt, va_list vl)
 {
-    int result;
-
-    AVCodec *enc = avcodec_find_encoder(AV_CODEC_ID_FLAC);
-    if (!enc) {
-        av_log(NULL, AV_LOG_ERROR, "Can't find encoder\n");
-        return 1;
-    }
-
-    AVCodecContext *ctx = avcodec_alloc_context3(enc);
-
-    ctx->sample_fmt = AV_SAMPLE_FMT_S16;
-    ctx->sample_rate = 44100;
-    ctx->channel_layout = AV_CH_LAYOUT_STEREO;
-
-    result = avcodec_open2(ctx, enc, NULL);
-    if (result < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Can't open encoder\n");
-        return result;
-    }
+    char buffer[256];
+    vsnprintf(buffer, sizeof(buffer), fmt, vl);
+    cyanrip_log(log_ctx, 0, "%s", buffer);
 }
 
-static int cyanrip_encode_format(cyanrip_ctx *ctx, int idx)
+int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
+                         cyanrip_output_settings *settings)
 {
-    char filename[255];
+    int ret;
 
-    sprintf(filename, "%s.%s", ctx->tracks[ctx->cur_track].name, extensions[ctx->settings.output_formats[idx]]);
+    av_register_all();
 
-    FILE *output = fopen(filename, "wb");
+    log_ctx = ctx;
+    av_log_set_callback(log_cb_wrapper);
 
-    if (ctx->settings.output_formats[idx] == CYANRIP_FORMAT_RAW) {
-        fwrite(ctx->samples, sizeof(int16_t), ctx->samples_num, output);
-    } else if (ctx->settings.output_formats[idx] == CYANRIP_FORMAT_WAV) {
+    cyanrip_out_fmt *cfmt = &fmt_map[settings->format];
 
-        uint8_t header[] = { 
-    0x52, 0x49, 0x46, 0x46, 0x24, 0x40, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
-    0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x44, 0xac, 0x00, 0x00, 0x10, 0xb1, 0x02, 0x00,
-    0x04, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61, 0xff, 0xff, 0xff, 0xff
-  };  
+    char dirname[259], filename[1024];
+    sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
+    sprintf(filename, "%s/%s.%s", dirname, t->name, cfmt->ext);
 
-        fwrite(header, sizeof(uint8_t), sizeof(header), output);
+    struct stat st_req = { 0 };
+    if (stat(dirname, &st_req) == -1)
+        mkdir(dirname, 0700);
 
-        fwrite(ctx->samples, sizeof(int16_t), ctx->samples_num, output);
+    AVFormatContext *avf;
+    if (avformat_alloc_output_context2(&avf, NULL, cfmt->ext, filename) < 0) {
+        cyanrip_log(ctx, 0, "Unable to init lavf context!\n");
+        goto fail;
+    }
+    AVOutputFormat *fmt = avf->oformat;
+
+    AVStream *st = avformat_new_stream(avf, NULL);
+    if (!st) {
+        cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
+        goto fail;
     }
 
-    fclose(output);
+    AVCodec *codec = avcodec_find_encoder(fmt->audio_codec);
+    if (!codec) {
+        cyanrip_log(ctx, 0, "Codec not found!\n");
+        goto fail;
+    }
+
+    AVCodecContext *avctx = avcodec_alloc_context3(codec);
+    if (!avctx) {
+        cyanrip_log(ctx, 0, "Unable to init avctx!\n");
+        goto fail;
+    }
+
+    avctx->opaque         = ctx;
+    avctx->bit_rate       = lrintf(settings->bitrate*1000.0f);
+    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
+    avctx->channel_layout = AV_CH_LAYOUT_STEREO;
+    avctx->sample_rate    = 44100;
+    avctx->channels       = 2;
+    st->id                = 0;
+    st->time_base         = (AVRational){ 1, avctx->sample_rate };
+
+    if (avf->oformat->flags & AVFMT_GLOBALHEADER)
+        avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    if (avcodec_open2(avctx, codec, NULL) < 0) {
+        cyanrip_log(ctx, 0, "Could not open codec!\n");
+        goto fail;
+    }
+
+    if (avcodec_parameters_from_context(st->codecpar, avctx) < 0) {
+        cyanrip_log(ctx, 0, "Couldn't copy codec params!\n");
+        goto fail;
+    }
+
+    /* Debug */
+    av_dump_format(avf, 0, filename, 1);
+
+    if ((ret = avio_open(&avf->pb, filename, AVIO_FLAG_WRITE)) < 0) {
+        cyanrip_log(ctx, 0, "Couldn't open %s - %s!\n", filename, av_err2str(ret));
+        goto fail;
+    }
+
+    if ((ret = avformat_write_header(avf, NULL)) < 0) {
+        cyanrip_log(ctx, 0, "Couldn't write header - %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    int16_t *src_samples = t->samples;
+    int samples_left = t->nb_samples;
+    while (samples_left > 0) {
+        AVFrame *frame        = av_frame_alloc();
+        frame->format         = avctx->sample_fmt;
+        frame->channel_layout = avctx->channel_layout;
+        frame->sample_rate    = avctx->sample_rate;
+        frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
+        frame->pts            = t->nb_samples*2 - samples_left*2;
+        av_frame_get_buffer(frame, 0);
+        frame->extended_data[0] = frame->data[0];
+        memcpy(frame->data[0], src_samples, frame->nb_samples*4);
+        src_samples  += frame->nb_samples*2;
+        samples_left -= frame->nb_samples*2;
+
+        avcodec_send_frame(avctx, frame);
+        while (1) {
+            AVPacket pkt = { 0 };
+            av_init_packet(&pkt);
+            ret = avcodec_receive_packet(avctx, &pkt);
+            if (ret == AVERROR(EAGAIN)) {
+                break;
+            } else if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error while encoding!\n");
+                goto fail;
+            }
+            ret = av_interleaved_write_frame(avf, &pkt);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error while writing packet - %s!\n", av_err2str(ret));
+                goto fail;
+            }
+            av_packet_unref(&pkt);
+        }
+        av_frame_free(&frame);
+    }
+
+    av_write_trailer(avf);
+    avcodec_close(avctx);
+    avio_closep(&avf->pb);
+    avformat_free_context(avf);
+    av_free(avctx);
 
     return 0;
-}
 
-int cyanrip_encode_track(cyanrip_ctx *ctx)
-{
-    for (int i = 0; i < ctx->settings.outputs_number; i++)
-        cyanrip_encode_format(ctx, i);
-    return 0;
+fail:
+
+    return 1;
 }

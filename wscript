@@ -36,6 +36,8 @@ def configure(ctx):
     ctx.check_cfg(package='libcdio', args='--cflags --libs', uselib_store='CDIO')
     ctx.check_cfg(package='libcdio_paranoia', args='--cflags --libs', uselib_store='PARA')
     ctx.check_cfg(package='libavcodec', args='--cflags --libs', uselib_store='LAVC')
+    ctx.check_cfg(package='libavformat', args='--cflags --libs', uselib_store='LAVF')
+    ctx.check_cfg(package='libavutil', args='--cflags --libs', uselib_store='LAVU')
 
     if (VERSION):
         package_ver = VERSION
@@ -59,14 +61,6 @@ def build(ctx):
         features  = ['c'],
         includes='. .. ../../',
     )
-    ctx(name='cyanrip_crc',
-        path=ctx.path,
-        uselib=[ ],
-        target='cyanrip_crc',
-        source='src/cyanrip_crc.c',
-        features  = ['c'],
-        includes='. .. ../../',
-    )
     ctx(name='cyanrip_log',
         path=ctx.path,
         uselib=[ ],
@@ -77,8 +71,8 @@ def build(ctx):
     )
     ctx(name='cyanrip',
         path=ctx.path,
-        uselib=['CDIO', 'PARA', 'LAVC'],
-        use=['in_file', 'cyanrip_encode', 'cyanrip_crc', 'cyanrip_log'],
+        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU'],
+        use=['in_file', 'cyanrip_encode', 'cyanrip_log'],
         target=APPNAME,
         source='src/cyanrip_main.c',
         features  = ['c', 'cprogram'],

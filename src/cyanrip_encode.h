@@ -22,4 +22,5 @@
 
 #include "cyanrip_main.h"
 
-int cyanrip_encode_track(cyanrip_ctx *ctx);
+int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
+                         cyanrip_output_settings *settings);
