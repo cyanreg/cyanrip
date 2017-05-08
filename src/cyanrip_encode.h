@@ -20,5 +20,10 @@
 
 #include "cyanrip_main.h"
 
+void cyanrip_init_encoding(cyanrip_ctx *ctx);
+void cyanrip_end_encoding(cyanrip_ctx *ctx);
+
+int cyanrip_setup_cover_image(cyanrip_ctx *ctx);
+
 int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
                          cyanrip_output_settings *settings);

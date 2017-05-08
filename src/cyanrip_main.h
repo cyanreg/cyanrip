@@ -28,8 +28,13 @@
 #include <cdio/paranoia.h>
 #include <cdio/mmc.h>
 
+enum cyanrip_cover_image_formats {
+    CYANRIP_COVER_IMAGE_JPG,
+    CYANRIP_COVER_IMAGE_PNG,
+};
+
 enum cyanrip_output_formats {
-    CYANRIP_FORMAT_FLAC = 0,
+    CYANRIP_FORMAT_FLAC,
     CYANRIP_FORMAT_TTA,
 };
 
@@ -40,6 +45,7 @@ typedef struct cyanrip_output_settings {
 
 typedef struct cyanrip_settings {
     char *dev_path;
+    char *cover_image_path;
     bool verbose;
     int speed;
     int paranoia_mode;
@@ -52,15 +58,18 @@ typedef struct cyanrip_settings {
 } cyanrip_settings;
 
 typedef struct cyanrip_track {
+    /* Metadata */
     int index;
     char name[256];
     char isrc[16];
     int preemphasis;
+    size_t nb_samples;
     uint32_t ieee_crc_32;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;
+    /* Metadata */
+
     int16_t *samples;
-    size_t nb_samples;
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {
@@ -71,8 +80,16 @@ typedef struct cyanrip_ctx {
     CdIo_t            *cdio;
     FILE              *logfile;
 
+    /* Metadata */
+    char album_artist[256];
     char disc_name[256];
     char *disc_mcn;
+    struct tm *disc_date;
+    /* Metadata */
+
+    void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
+    int cover_image_codec_id;
+
     uint32_t duration;
     uint32_t last_frame;
 } cyanrip_ctx;
