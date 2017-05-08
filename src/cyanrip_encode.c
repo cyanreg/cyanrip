@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <time.h>
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <libavcodec/avcodec.h>
@@ -46,12 +47,93 @@ static void log_cb_wrapper(void *avcl, int level, const char *fmt, va_list vl)
     cyanrip_log(log_ctx, 0, "%s", buffer);
 }
 
+void cyanrip_init_encoding(cyanrip_ctx *ctx)
+{
+    av_register_all();
+}
+
+void cyanrip_end_encoding(cyanrip_ctx *ctx)
+{
+    free(ctx->cover_image_pkt);
+}
+
+int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
+{
+    if (!ctx->settings.cover_image_path) {
+        ctx->cover_image_pkt = NULL;
+        return 0;
+    }
+
+    if (LIBAVFORMAT_VERSION_MAJOR < 57 ||
+        LIBAVFORMAT_VERSION_MINOR < 72 ||
+        LIBAVFORMAT_VERSION_MICRO < 101) {
+        cyanrip_log(ctx, 0, "Can't mux cover art, ffmpeg version too old!\n");
+        return 1;
+    }
+
+    AVFormatContext *avf = NULL;
+    if (avformat_open_input(&avf, ctx->settings.cover_image_path, NULL, NULL) < 0) {
+        cyanrip_log(ctx, 0, "Unable to open \"%s\"!\n", ctx->settings.cover_image_path);
+        goto fail;
+    }
+
+    if (avformat_find_stream_info(avf, NULL) < 0) {
+        cyanrip_log(ctx, 0, "Unable to get cover image info!\n");
+        goto fail;
+    }
+
+    ctx->cover_image_codec_id = avf->streams[0]->codecpar->codec_id;
+
+    AVCodec *codec = avcodec_find_decoder(avf->streams[0]->codecpar->codec_id);
+    if (!codec) {
+        cyanrip_log(ctx, 0, "Unable to find a valid image decoder!\n");
+        goto fail;
+    }
+
+    AVPacket *pkt = ctx->cover_image_pkt;
+    pkt = calloc(1, sizeof(AVPacket));
+    av_init_packet(pkt);
+
+    if (av_read_frame(avf, pkt) < 0) {
+        cyanrip_log(ctx, 0, "Error demuxing cover image!\n");
+        goto fail;
+    }
+
+    cyanrip_log(ctx, 0, "Cover image \"%s\" demuxed, codec - (%s)%s!\n",
+                ctx->settings.cover_image_path, codec->name, codec->long_name);
+
+    avformat_free_context(avf);
+
+    return 0;
+
+fail:
+    return 1;
+}
+
+static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *avf)
+{
+    char t_s[64];
+    char t_disc_date[64];
+
+    time_t t_c = time(NULL);
+    struct tm *t_l = localtime(&t_c);
+    strftime(t_s, sizeof(t_s), "%FT%H:%M:%S", t_l);
+
+    strftime(t_disc_date, sizeof(t_disc_date), "%FT%H:%M:%S", ctx->disc_date);
+
+    av_dict_set    (&avf->metadata, "comment",       "cyanrip",         0);
+    av_dict_set    (&avf->metadata, "title",         t->name,           0);
+    av_dict_set_int(&avf->metadata, "track",         t->index + 1,      0);
+    av_dict_set    (&avf->metadata, "creation_time", t_s,               0);
+    av_dict_set    (&avf->metadata, "album",         ctx->disc_name,    0);
+    av_dict_set    (&avf->metadata, "album_artist",  ctx->album_artist, 0);
+    av_dict_set    (&avf->metadata, "date",          t_disc_date,       0);
+}
+
 int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
                          cyanrip_output_settings *settings)
 {
     int ret;
-
-    av_register_all();
 
     log_ctx = ctx;
     av_log_set_callback(log_cb_wrapper);
@@ -60,13 +142,13 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     char dirname[259], filename[1024];
     sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
-    sprintf(filename, "%s/%s.%s", dirname, t->name, cfmt->ext);
+    sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1, t->name, cfmt->ext);
 
     struct stat st_req = { 0 };
     if (stat(dirname, &st_req) == -1)
         mkdir(dirname, 0700);
 
-    AVFormatContext *avf;
+    AVFormatContext *avf = NULL;
     if (avformat_alloc_output_context2(&avf, NULL, cfmt->ext, filename) < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context!\n");
         goto fail;
@@ -77,6 +159,17 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     if (!st) {
         cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
         goto fail;
+    }
+
+    AVStream *st_img = NULL;
+    if (ctx->cover_image_pkt) {
+        fmt->video_codec = ctx->cover_image_codec_id;
+        st_img = avformat_new_stream(avf, NULL);
+        if (!st_img) {
+            cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
+            goto fail;
+        }
+        avf->nb_streams = 2;
     }
 
     AVCodec *codec = avcodec_find_encoder(fmt->audio_codec);
@@ -98,10 +191,14 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     avctx->sample_rate    = 44100;
     avctx->channels       = 2;
     st->id                = 0;
+    if (ctx->cover_image_pkt)
+        st_img->id        = 1;
     st->time_base         = (AVRational){ 1, avctx->sample_rate };
 
     if (avf->oformat->flags & AVFMT_GLOBALHEADER)
         avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    set_metadata(ctx, t, avf);
 
     if (avcodec_open2(avctx, codec, NULL) < 0) {
         cyanrip_log(ctx, 0, "Could not open codec!\n");
@@ -124,6 +221,16 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     if ((ret = avformat_write_header(avf, NULL)) < 0) {
         cyanrip_log(ctx, 0, "Couldn't write header - %s!\n", av_err2str(ret));
         goto fail;
+    }
+
+    if (ctx->cover_image_pkt) {
+        AVPacket *pkt = ctx->cover_image_pkt;
+        pkt->stream_index = 0;
+        ret = av_interleaved_write_frame(avf, pkt);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error while writing packet - %s!\n", av_err2str(ret));
+            goto fail;
+        }
     }
 
     int16_t *src_samples = t->samples;
@@ -152,6 +259,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
                 cyanrip_log(ctx, 0, "Error while encoding!\n");
                 goto fail;
             }
+            pkt.stream_index = 0;
             ret = av_interleaved_write_frame(avf, &pkt);
             if (ret < 0) {
                 cyanrip_log(ctx, 0, "Error while writing packet - %s!\n", av_err2str(ret));

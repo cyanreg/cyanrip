@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <time.h>
+
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
 #include "cyanrip_crc.h"
@@ -49,6 +51,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     ctx = *s;
     for (int i = 0; i < ctx->drive->tracks; i++)
         free(ctx->tracks[i].samples);
+    cyanrip_end_encoding(ctx);
     if (ctx->cdio)
         cyanrip_end_metareader(ctx);
     if (ctx->paranoia)
@@ -110,6 +113,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
+    cyanrip_init_encoding(ctx);
+
     if (cyanrip_init_metareader(ctx)) {
         cyanrip_log(ctx, 0, "Unable to init cdio context!\n");
         cyanrip_ctx_end(&ctx);
@@ -129,10 +134,19 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     return 0;
 }
 
-void cyanrip_read_disc_meta(cyanrip_ctx *ctx)
+void cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     ctx->disc_mcn = cdio_get_mcn(ctx->cdio);
     strcpy(ctx->disc_name, "Album_name");
+    strcpy(ctx->album_artist, "Cool_dude");
+
+    /* Track name */
+    for (int i = 0; i < ctx->drive->tracks; i++)
+        strcpy(ctx->tracks[i].name, "Track_name");
+
+    /* Album time */
+    time_t t_c = time(NULL);
+    ctx->disc_date = localtime(&t_c);
 }
 
 void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -174,10 +188,9 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 }
 
-int cyanrip_read_track(cyanrip_ctx *ctx, int index)
+int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
     uint32_t frames = 0;
-    cyanrip_track *t = &ctx->tracks[index];
 
     t->index = index;
 
@@ -193,7 +206,7 @@ int cyanrip_read_track(cyanrip_ctx *ctx, int index)
         return 1;
     }
 
-    sprintf(t->name, "Track %02i", index + 1);
+    frames /= 30;
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
@@ -240,6 +253,7 @@ int main(void)
         cyanrip_log(ctx, 0, "Can't init signal handler!\n");
 
     settings.dev_path = "/dev/sr0";
+    settings.cover_image_path = "Cover.jpg";
     settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 0;
@@ -254,13 +268,14 @@ int main(void)
     if ((ret = cyanrip_ctx_init(&ctx, &settings)))
         return ret;
 
-    cyanrip_read_disc_meta(ctx);
+    cyanrip_fill_metadata(ctx);
+    cyanrip_setup_cover_image(ctx);
 
     cyanrip_log_init(ctx);
     cyanrip_log_start_report(ctx);
 
     for (int i = 0; i < ctx->drive->tracks; i++)
-        ret = cyanrip_read_track(ctx, i);
+        ret = cyanrip_read_track(ctx, &ctx->tracks[i], i);
 
     cyanrip_log_finish_report(ctx);
     cyanrip_log_end(ctx);
