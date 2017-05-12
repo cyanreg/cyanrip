@@ -28,13 +28,13 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_samples_to_duration(t->nb_samples, length);
 
     cyanrip_log(ctx, 0, "Track %s completed successfully!\n", t->name);
-    cyanrip_log(ctx, 0, "    ISRC:           %s\n", t->isrc);
-    cyanrip_log(ctx, 0, "    Preemphasis:    %i\n", t->preemphasis);
-    cyanrip_log(ctx, 0, "    Length:         %s\n", length);
-    cyanrip_log(ctx, 0, "    Samples:        %u\n", t->nb_samples);
-    cyanrip_log(ctx, 0, "    IEEE_CRC_32:    0x%08x\n", t->ieee_crc_32);
-    cyanrip_log(ctx, 0, "    Accurip CRC v1: 0x%08x\n", t->acurip_crc_v1);
-    cyanrip_log(ctx, 0, "    Accurip CRC v2: 0x%08x\n", t->acurip_crc_v2);
+    cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc);
+    cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
+    cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
+    cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
+    cyanrip_log(ctx, 0, "    IEEE CRC 32: 0x%08x\n", t->ieee_crc_32);
+    cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
+    cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
     cyanrip_log(ctx, 0, "\n");
 }
 

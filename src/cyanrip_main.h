@@ -93,7 +93,7 @@ typedef struct cyanrip_ctx {
     /* Metadata */
 
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
-    int cover_image_codec_id;
+    void *cover_image_params;
 
     uint32_t duration;
     uint32_t last_frame;
