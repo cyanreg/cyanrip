@@ -30,6 +30,8 @@
 #include <cdio/paranoia.h>
 #include <cdio/mmc.h>
 
+#include <discid/discid.h>
+
 enum cyanrip_cover_image_formats {
     CYANRIP_COVER_IMAGE_JPG,
     CYANRIP_COVER_IMAGE_PNG,
@@ -87,6 +89,7 @@ typedef struct cyanrip_ctx {
     char disc_name[256];
     char *disc_mcn;
     struct tm *disc_date;
+    char discid[64];
     /* Metadata */
 
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
