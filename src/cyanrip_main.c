@@ -149,13 +149,11 @@ void cyanrip_fill_metadata(cyanrip_ctx *ctx)
     ctx->disc_date = localtime(&t_c);
 
     /* DiscID */
-    DiscId *disc;
-    disc = discid_new();
-    if (discid_read_sparse(disc, ctx->settings.dev_path, 0) == 0) {
+    DiscId *disc = discid_new();
+    if (discid_read_sparse(disc, ctx->settings.dev_path, 0) == 0)
         cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(disc));
-    } else {
+    else
         strcpy(ctx->discid, discid_get_id(disc));
-    }
     discid_free(disc);
     cyanrip_log(ctx, 0, "DiscID: %s\n", ctx->discid);
 }
