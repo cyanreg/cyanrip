@@ -97,7 +97,7 @@ int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
         goto fail;
     }
 
-    cyanrip_log(ctx, 0, "Cover image \"%s\" demuxed, codec - (%s)%s!\n",
+    cyanrip_log(ctx, 0, "Cover image \"%s\" demuxed, codec - (%s) %s!\n",
                 ctx->settings.cover_image_path, codec->name, codec->long_name);
 
     avformat_free_context(avf);
