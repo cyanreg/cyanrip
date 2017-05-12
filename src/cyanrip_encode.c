@@ -190,8 +190,10 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     st->id                = 0;
     if (ctx->cover_image_pkt) {
         st_img->id = 1;
-        st_img->codecpar->codec_id = ctx->cover_image_codec_id;
         st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
+        st_img->nb_frames = 1;
+        st_img->time_base = (AVRational){ 1, 25 };
+        st_img->codecpar->codec_id = ctx->cover_image_codec_id;
         st_img->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     }
     st->time_base         = (AVRational){ 1, avctx->sample_rate };

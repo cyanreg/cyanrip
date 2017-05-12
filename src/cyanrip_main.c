@@ -204,8 +204,6 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
         return 1;
     }
 
-    frames /= 30;
-
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
     mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
