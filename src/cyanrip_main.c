@@ -155,7 +155,6 @@ void cyanrip_fill_metadata(cyanrip_ctx *ctx)
     else
         strcpy(ctx->discid, discid_get_id(disc));
     discid_free(disc);
-    cyanrip_log(ctx, 0, "DiscID: %s\n", ctx->discid);
 }
 
 void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)

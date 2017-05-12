@@ -44,6 +44,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
 
     char duration[16];
     cyanrip_frames_to_duration(ctx->duration, duration);
+    cyanrip_log(ctx, 0, "DiscID:     %s\n", ctx->discid);
     cyanrip_log(ctx, 0, "Disc MCN:   %s\n", ctx->disc_mcn);
     cyanrip_log(ctx, 0, "Total time: %s\n", duration);
 
