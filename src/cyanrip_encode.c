@@ -119,13 +119,14 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
 
     strftime(t_disc_date, sizeof(t_disc_date), "%FT%H:%M:%S", ctx->disc_date);
 
-    av_dict_set    (&avf->metadata, "comment",       "cyanrip",         0);
-    av_dict_set    (&avf->metadata, "title",         t->name,           0);
-    av_dict_set_int(&avf->metadata, "track",         t->index + 1,      0);
-    av_dict_set    (&avf->metadata, "creation_time", t_s,               0);
-    av_dict_set    (&avf->metadata, "album",         ctx->disc_name,    0);
-    av_dict_set    (&avf->metadata, "album_artist",  ctx->album_artist, 0);
-    av_dict_set    (&avf->metadata, "date",          t_disc_date,       0);
+    av_dict_set    (&avf->metadata, "comment",            "cyanrip",         0);
+    av_dict_set    (&avf->metadata, "title",              t->name,           0);
+    av_dict_set_int(&avf->metadata, "track",              t->index + 1,      0);
+    av_dict_set    (&avf->metadata, "creation_time",      t_s,               0);
+    av_dict_set    (&avf->metadata, "album",              ctx->disc_name,    0);
+    av_dict_set    (&avf->metadata, "album_artist",       ctx->album_artist, 0);
+    av_dict_set    (&avf->metadata, "date",               t_disc_date,       0);
+    av_dict_set    (&avf->metadata, "musicbrainz_discid", ctx->discid,       0);
 }
 
 int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,

@@ -38,6 +38,7 @@ def configure(ctx):
     ctx.check_cfg(package='libavcodec', args='--cflags --libs', uselib_store='LAVC')
     ctx.check_cfg(package='libavformat', args='--cflags --libs', uselib_store='LAVF')
     ctx.check_cfg(package='libavutil', args='--cflags --libs', uselib_store='LAVU')
+    ctx.check_cfg(package='libdiscid', args='--cflags --libs', uselib_store='DISCID')
 
     if (VERSION):
         package_ver = VERSION
@@ -71,7 +72,7 @@ def build(ctx):
     )
     ctx(name='cyanrip',
         path=ctx.path,
-        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU'],
+        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU', 'DISCID'],
         use=['in_file', 'cyanrip_encode', 'cyanrip_log'],
         target=APPNAME,
         source='src/cyanrip_main.c',
