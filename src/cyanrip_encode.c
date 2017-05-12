@@ -237,27 +237,34 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         }
     }
 
+    int eof_met = 0;
     int16_t *src_samples = t->samples;
     int samples_left = t->nb_samples;
-    while (samples_left > 0) {
-        AVFrame *frame        = av_frame_alloc();
-        frame->format         = avctx->sample_fmt;
-        frame->channel_layout = avctx->channel_layout;
-        frame->sample_rate    = avctx->sample_rate;
-        frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
-        frame->pts            = t->nb_samples*2 - samples_left*2;
-        av_frame_get_buffer(frame, 0);
-        frame->extended_data[0] = frame->data[0];
-        memcpy(frame->data[0], src_samples, frame->nb_samples*4);
-        src_samples  += frame->nb_samples*2;
-        samples_left -= frame->nb_samples*2;
+    while (!eof_met) {
+        AVFrame *frame = NULL;
+        if (samples_left > 0) {
+            frame                 = av_frame_alloc();
+            frame->format         = avctx->sample_fmt;
+            frame->channel_layout = avctx->channel_layout;
+            frame->sample_rate    = avctx->sample_rate;
+            frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
+            frame->pts            = t->nb_samples*2 - samples_left*2;
+            av_frame_get_buffer(frame, 0);
+            frame->extended_data[0] = frame->data[0];
+            memcpy(frame->data[0], src_samples, frame->nb_samples*4);
+            src_samples  += frame->nb_samples*2;
+            samples_left -= frame->nb_samples*2;
+        }
 
         avcodec_send_frame(avctx, frame);
         while (1) {
             AVPacket pkt = { 0 };
             av_init_packet(&pkt);
             ret = avcodec_receive_packet(avctx, &pkt);
-            if (ret == AVERROR(EAGAIN)) {
+            if (ret == AVERROR_EOF) {
+                eof_met = 1;
+                break;
+            } else if (ret == AVERROR(EAGAIN)) {
                 break;
             } else if (ret < 0) {
                 cyanrip_log(ctx, 0, "Error while encoding!\n");
