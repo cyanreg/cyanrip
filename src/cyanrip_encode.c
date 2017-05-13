@@ -32,15 +32,40 @@ typedef struct cyanrip_out_fmt {
     const char *ext;
     int resample;
     int coverart_supported;
+    int codec;
     int sfmt;
     int rate;
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "FLAC", "flac",  0, 1, AV_SAMPLE_FMT_S16,  44100 },
-    [CYANRIP_FORMAT_TTA]     = { "TTA",  "tta",   0, 0, AV_SAMPLE_FMT_S16,  44100 },
-    [CYANRIP_FORMAT_OPUS]    = { "OPUS",  "opus", 1, 0, AV_SAMPLE_FMT_FLT,  48000 },
+    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 1, AV_CODEC_ID_FLAC,    AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_MP3]     = { "MP3",     "mp3",   1, 1, AV_CODEC_ID_MP3,     AV_SAMPLE_FMT_S16P, 44100 },
+    [CYANRIP_FORMAT_TTA]     = { "TTA",     "tta",   0, 0, AV_CODEC_ID_TTA,     AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_OPUS]    = { "OPUS",    "opus",  1, 0, AV_CODEC_ID_OPUS,    AV_SAMPLE_FMT_FLT,  48000 },
+    [CYANRIP_FORMAT_AAC]     = { "AAC",     "aac",   1, 0, AV_CODEC_ID_AAC,     AV_SAMPLE_FMT_FLTP, 44100 },
+    [CYANRIP_FORMAT_WAVPACK] = { "WAVPACK", "wv",    1, 0, AV_CODEC_ID_WAVPACK, AV_SAMPLE_FMT_S16P, 44100 },
+    [CYANRIP_FORMAT_VORBIS]  = { "OGG",     "ogg",   1, 0, AV_CODEC_ID_VORBIS,  AV_SAMPLE_FMT_FLTP, 44100 },
+    [CYANRIP_FORMAT_ALAC]    = { "ALAC",    "m4a",   1, 0, AV_CODEC_ID_ALAC,    AV_SAMPLE_FMT_S16P, 44100 },
 };
+
+void cyanrip_print_codecs(void)
+{
+    for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
+        cyanrip_out_fmt *cfmt = &fmt_map[i];
+        const AVCodecDescriptor *cd = avcodec_descriptor_get(cfmt->codec);
+        cyanrip_log(NULL, 0, "    %s\n", cd->name);
+    }
+}
+
+int cyanrip_validate_fmt(const char *fmt)
+{
+    for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
+        cyanrip_out_fmt *cfmt = &fmt_map[i];
+        if (!strncasecmp(fmt, cfmt->name, strlen(cfmt->name)))
+            return i;
+    }
+    return -1;
+}
 
 void cyanrip_init_encoding(cyanrip_ctx *ctx)
 {
@@ -55,7 +80,7 @@ void cyanrip_end_encoding(cyanrip_ctx *ctx)
 
 int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
 {
-    if (!ctx->settings.cover_image_path) {
+    if (!ctx->settings.cover_image_path || !strlen(ctx->settings.cover_image_path)) {
         ctx->cover_image_pkt = NULL;
         return 0;
     }
@@ -149,7 +174,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         mkdir(dirname, 0700);
 
     AVFormatContext *avf = NULL;
-    if (avformat_alloc_output_context2(&avf, NULL, cfmt->ext, filename) < 0) {
+    if (avformat_alloc_output_context2(&avf, NULL, NULL, filename) < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context!\n");
         goto fail;
     }
@@ -174,15 +199,15 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         fmt->video_codec = st_img->codecpar->codec_id;
     }
 
-    AVCodec *codec = avcodec_find_encoder(fmt->audio_codec);
+    AVCodec *codec = avcodec_find_encoder(cfmt->codec);
     if (!codec) {
         cyanrip_log(ctx, 0, "Codec not found!\n");
         goto fail;
     }
+    fmt->audio_codec = cfmt->codec;
 
     SwrContext *swr = NULL;
     if (cfmt->resample) {
-        cyanrip_log(ctx, 0, "Resampling for format \"%s\"\n", cfmt->name);
         swr = swr_alloc();
         if (!swr) {
             cyanrip_log(ctx, 0, "swr init failure!\n");
@@ -209,7 +234,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     }
 
     avctx->opaque         = ctx;
-    avctx->bit_rate       = lrintf(settings->bitrate*1000.0f);
+    avctx->bit_rate       = lrintf(ctx->settings.bitrate*1000.0f);
     avctx->sample_fmt     = cfmt->sfmt;
     avctx->channel_layout = AV_CH_LAYOUT_STEREO;
     avctx->sample_rate    = cfmt->rate;
@@ -268,17 +293,21 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
             frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
             av_frame_get_buffer(frame, 0);
             frame->extended_data  = frame->data;
-            frame->pts            = t->nb_samples*2 - samples_left*2;
+            frame->pts            = samples_done;
             if (swr) {
-                const uint8_t *src[1] = { (const uint8_t *)src_samples };
-                frame->pts = swr_next_pts(swr, frame->pts);
+                const uint8_t *src[] = { (const uint8_t *)src_samples };
+                //AVRational cd_tb = (AVRational){ 1, 44100 };
+                //AVRational adj_tb = (AVRational){ 1, 44100 * avctx->sample_rate };
                 swr_convert(swr, frame->data, frame->nb_samples, src, frame->nb_samples);
+                //frame->pts = swr_next_pts(swr, av_rescale_q(frame->pts, cd_tb, adj_tb));
+                //frame->pts = av_rescale_q(frame->pts, adj_tb, cd_tb);
+                samples_done += frame->nb_samples;
             } else {
                 memcpy(frame->data[0], src_samples, frame->nb_samples*4);
+                samples_done += frame->nb_samples*2;
             }
             src_samples  += frame->nb_samples*2;
             samples_left -= frame->nb_samples*2;
-            samples_done += frame->nb_samples*2;
         }
 
         avcodec_send_frame(avctx, frame);
@@ -306,7 +335,10 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         av_frame_free(&frame);
     }
 
-    av_write_trailer(avf);
+    if ((ret = av_write_trailer(avf)) < 0) {
+        cyanrip_log(ctx, 0, "Error writing trailer - %s!\n", av_err2str(ret));
+        goto fail;
+    }
     avcodec_close(avctx);
     avio_closep(&avf->pb);
     avformat_free_context(avf);

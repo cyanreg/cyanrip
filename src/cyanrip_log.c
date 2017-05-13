@@ -23,9 +23,10 @@
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
-    cyanrip_samples_to_duration(t->nb_samples, length);
+    cyanrip_samples_to_duration(t->nb_samples >> 1, length);
 
-    cyanrip_log(ctx, 0, "Track %s completed successfully!\n", t->name);
+    cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->index + 1);
+    cyanrip_log(ctx, 0, "    Title:       %s\n", t->name);
     cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc);
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
@@ -38,13 +39,26 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
-    cyanrip_log(ctx, 0, "Device:     %s\n", ctx->drive->drive_model);
+    cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
+    cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
+    cyanrip_log(ctx, 0, "Paranoia:      %s\n",
+                ctx->settings.paranoia_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
+    cyanrip_log(ctx, 0, "Outputs:       %i (lossy bitrate: %.02fkbps)\n", ctx->settings.outputs_num,
+                ctx->settings.bitrate);
+    cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : "");
+    if (ctx->settings.rip_indices_count != -1) {
+        for (int i = 0; i < ctx->settings.rip_indices_count; i++)
+            cyanrip_log(ctx, 0, "%i%s", ctx->settings.rip_indices[i], i != (ctx->settings.rip_indices_count - 1) ? ", " : "");
+    }
+    cyanrip_log(ctx, 0, "\n");
 
     char duration[16];
     cyanrip_frames_to_duration(ctx->duration, duration);
-    cyanrip_log(ctx, 0, "DiscID:     %s\n", ctx->discid);
-    cyanrip_log(ctx, 0, "Disc MCN:   %s\n", ctx->disc_mcn);
-    cyanrip_log(ctx, 0, "Total time: %s\n", duration);
+    cyanrip_log(ctx, 0, "DiscID:        %s\n", ctx->discid);
+    cyanrip_log(ctx, 0, "Disc MCN:      %s\n", ctx->disc_mcn);
+    cyanrip_log(ctx, 0, "Album:         %s\n", ctx->disc_name);
+    cyanrip_log(ctx, 0, "Artist:        %s\n", ctx->album_artist);
+    cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
 
     cyanrip_log(ctx, 0, "\n\n");
 }
