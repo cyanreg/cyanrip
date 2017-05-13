@@ -146,12 +146,10 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release)
                     if (i >= ctx->drive->tracks) continue;
                     Mb5Track track = mb5_track_list_item(track_list, i);
                     Mb5Recording recording = mb5_track_get_recording(track);
-                    if (recording) {
+                    if (recording)
                         mb5_recording_get_title(recording, ctx->tracks[i].name, 255);
-                      } else {
+                    else
                         mb5_track_get_title(track, ctx->tracks[i].name, 255);
-                    }
-                    cyanrip_log(ctx, 0, "%d: %s\n", i, ctx->tracks[i].name);
                 }
             } else {
                 cyanrip_log(ctx, 0, "Medium has no track list.\n");
@@ -165,12 +163,13 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release)
     }
 }
 
-void cyanrip_mb_metadata(cyanrip_ctx *ctx)
+int cyanrip_mb_metadata(cyanrip_ctx *ctx)
 {
+    int ret = 0;
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
     if (query) {
-        char* names[] = {"inc"};
-        char* values[] = {"recordings"};
+        char* names[] = { "inc" };
+        char* values[] = { "recordings" };
         Mb5Metadata metadata = mb5_query_query(query, "discid", ctx->discid, 0, 1, names, values);
         if (metadata) {
             Mb5Disc disc = mb5_metadata_get_disc(metadata);
@@ -194,15 +193,21 @@ void cyanrip_mb_metadata(cyanrip_ctx *ctx)
             mb5_metadata_delete(metadata);
         } else {
             cyanrip_log(ctx, 0, "MusicBrainz lookup failed, try again later.\n");
+            ret = 1;
         }
         mb5_query_delete(query);
     } else {
         cyanrip_log(ctx, 0, "Could not connect to MusicBrainz.\n");
+        ret = 1;
     }
+
+    return ret;
 }
 
-void cyanrip_fill_metadata(cyanrip_ctx *ctx)
+int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
+    int ret = 0;
+
     ctx->disc_mcn = cdio_get_mcn(ctx->cdio);
 
     /* Album time */
@@ -218,7 +223,10 @@ void cyanrip_fill_metadata(cyanrip_ctx *ctx)
     discid_free(disc);
 
     /* MusicBrainz */
-    cyanrip_mb_metadata(ctx);
+    if (!ctx->settings.disable_mb)
+        ret |= cyanrip_mb_metadata(ctx);
+
+    return ret;
 }
 
 void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -288,9 +296,9 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
         if (!(i % ctx->settings.report_rate))
-            cyanrip_log(NULL, 0, "\r%s progress - %0.2f%%", t->name, ((double)i/frames)*100.0f);
+            cyanrip_log(NULL, 0, "\rTrack %i progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
-    cyanrip_log(NULL, 0, "\r%s ripped!\n", t->name);
+    cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
     cyanrip_crc_track(ctx, t);
 
@@ -312,7 +320,7 @@ void on_quit_signal(int signo)
     quit_now = 1;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     int ret;
 
@@ -320,37 +328,121 @@ int main(void)
     cyanrip_settings settings;
 
     if (signal(SIGINT, on_quit_signal) == SIG_ERR)
-        cyanrip_log(ctx, 0, "Can't init signal handler!\n");
+        cyanrip_log(NULL, 0, "Can't init signal handler!\n");
 
     settings.dev_path = "/dev/sr0";
-    settings.cover_image_path = "Cover.jpg";
+    settings.cover_image_path = "";
     settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 0;
     settings.paranoia_mode = PARANOIA_MODE_FULL;
     settings.report_rate = 20;
     settings.offset = 0;
+    settings.disable_mb = 0;
+    settings.bitrate = 128.0f;
+    settings.rip_indices_count = -1;
 
     /* Debug */
-    settings.outputs[0] = (struct cyanrip_output_settings){ CYANRIP_FORMAT_OPUS, 128.0f };
+    settings.outputs[0] = (struct cyanrip_output_settings){ CYANRIP_FORMAT_FLAC };
     settings.outputs_num = 1;
+
+    int c;
+    char *p;
+    while((c = getopt (argc, argv, "hnft:b:c:d:o:")) != -1) {
+        switch (c) {
+            case 'h':
+                cyanrip_log(NULL, 0, "cyanrip help:\n");
+                cyanrip_log(NULL, 0, "    -d <path>    Set device path\n");
+                cyanrip_log(NULL, 0, "    -c <path>    Set cover image path\n");
+                cyanrip_log(NULL, 0, "    -o <string>  Comma separated list of outputs\n");
+                cyanrip_log(NULL, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
+                cyanrip_log(NULL, 0, "    -t <list>    Select which tracks to rip\n");
+                cyanrip_log(NULL, 0, "    -f           Disable all error checking\n");
+                cyanrip_log(NULL, 0, "    -h           Print options help\n");
+                cyanrip_log(NULL, 0, "    -n           Disable musicbrainz lookup\n");
+                return 0;
+                break;
+            case 'n':
+                settings.disable_mb = 1;
+                break;
+            case 'b':
+                settings.bitrate = strtof(optarg, NULL);
+                break;
+            case 't':
+                settings.rip_indices_count = 0;
+                p = strtok(optarg, ",");
+                while(p != NULL) {
+                    settings.rip_indices[settings.rip_indices_count++] = strtol(p, NULL, 10);
+                    p = strtok(NULL, ",");
+                }
+                break;
+            case 'o':
+                settings.outputs_num = 0;
+                if (!strncmp("help", optarg, strlen("help"))) {
+                    cyanrip_log(NULL, 0, "Supported codecs:\n");
+                    cyanrip_print_codecs();
+                    return 0;
+                }
+                p = strtok(optarg, ",");
+                while(p != NULL) {
+                    int res = cyanrip_validate_fmt(p);
+                    if (res != -1) {
+                        settings.outputs[0].format = res;
+                        settings.outputs_num++;
+                    } else {
+                        cyanrip_log(NULL, 0, "Invalid format \"%s\"\n", p);
+                        return 1;
+                    }
+                    p = strtok(NULL, ",");
+                }
+                break;
+            case 'c':
+                settings.cover_image_path = optarg;
+                break;
+            case 'd':
+                settings.dev_path = optarg;
+                break;
+            case 'f':
+                settings.paranoia_mode = PARANOIA_MODE_DISABLE;
+                break;
+            case '?':
+                return 1;
+                break;
+            default:
+                abort();
+                break;
+        }
+    }
 
     if ((ret = cyanrip_ctx_init(&ctx, &settings)))
         return ret;
 
-    cyanrip_fill_metadata(ctx);
+    if (cyanrip_fill_metadata(ctx))
+        return 1;
+
     cyanrip_setup_cover_image(ctx);
 
     cyanrip_log_init(ctx);
     cyanrip_log_start_report(ctx);
 
-    for (int i = 0; i < ctx->drive->tracks; i++)
-        ret = cyanrip_read_track(ctx, &ctx->tracks[i], i);
+    ret = 0;
+
+    if (ctx->settings.rip_indices_count == -1) {
+        for (int i = 0; i < ctx->drive->tracks; i++)
+            ret |= cyanrip_read_track(ctx, &ctx->tracks[i], i);
+    } else {
+        for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
+            int index = ctx->settings.rip_indices[i] - 1;
+            if (index < 0 || index >= ctx->drive->tracks)
+                continue;
+            ret |= cyanrip_read_track(ctx, &ctx->tracks[index], index);
+        }
+    }
 
     cyanrip_log_finish_report(ctx);
     cyanrip_log_end(ctx);
 
     cyanrip_ctx_end(&ctx);
 
-    return 0;
+    return ret;
 }

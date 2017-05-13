@@ -22,6 +22,9 @@
 
 #include "cyanrip_main.h"
 
+void cyanrip_print_codecs(void);
+int cyanrip_validate_fmt(const char *fmt);
+
 void cyanrip_init_encoding(cyanrip_ctx *ctx);
 void cyanrip_end_encoding(cyanrip_ctx *ctx);
 

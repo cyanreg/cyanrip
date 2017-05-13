@@ -42,11 +42,17 @@ enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
     CYANRIP_FORMAT_TTA,
     CYANRIP_FORMAT_OPUS,
+    CYANRIP_FORMAT_AAC,
+    CYANRIP_FORMAT_WAVPACK,
+    CYANRIP_FORMAT_ALAC,
+    CYANRIP_FORMAT_MP3,
+    CYANRIP_FORMAT_VORBIS,
+
+    CYANRIP_FORMATS_NB,
 };
 
 typedef struct cyanrip_output_settings {
     enum cyanrip_output_formats format;
-    float bitrate; /* Lossy formats only in kbps */
 } cyanrip_output_settings;
 
 typedef struct cyanrip_settings {
@@ -58,6 +64,10 @@ typedef struct cyanrip_settings {
     int frame_max_retries;
     int report_rate;
     uint32_t offset;
+    int disable_mb;
+    float bitrate;
+    int rip_indices_count;
+    int rip_indices[99];
 
     cyanrip_output_settings outputs[10];
     int outputs_num;
