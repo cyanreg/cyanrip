@@ -332,7 +332,7 @@ int main(void)
     settings.offset = 0;
 
     /* Debug */
-    settings.outputs[0] = (struct cyanrip_output_settings){ CYANRIP_FORMAT_FLAC, 0.0f };
+    settings.outputs[0] = (struct cyanrip_output_settings){ CYANRIP_FORMAT_OPUS, 128.0f };
     settings.outputs_num = 1;
 
     if ((ret = cyanrip_ctx_init(&ctx, &settings)))
