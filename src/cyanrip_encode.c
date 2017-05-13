@@ -21,7 +21,8 @@
 #include <sys/stat.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/log.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
 
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
@@ -29,11 +30,16 @@
 typedef struct cyanrip_out_fmt {
     const char *name;
     const char *ext;
+    int resample;
+    int coverart_supported;
+    int sfmt;
+    int rate;
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "FLAC", "flac" },
-    [CYANRIP_FORMAT_TTA]     = { "TTA",  "tta"  },
+    [CYANRIP_FORMAT_FLAC]    = { "FLAC", "flac",  0, 1, AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_TTA]     = { "TTA",  "tta",   0, 0, AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_OPUS]    = { "OPUS",  "opus", 1, 0, AV_SAMPLE_FMT_FLT,  48000 },
 };
 
 void cyanrip_init_encoding(cyanrip_ctx *ctx)
@@ -156,7 +162,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     }
 
     AVStream *st_img = NULL;
-    if (ctx->cover_image_pkt) {
+    if (ctx->cover_image_pkt && cfmt->coverart_supported) {
         st_img = avformat_new_stream(avf, NULL);
         if (!st_img) {
             cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
@@ -174,6 +180,28 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         goto fail;
     }
 
+    SwrContext *swr = NULL;
+    if (cfmt->resample) {
+        cyanrip_log(ctx, 0, "Resampling for format \"%s\"\n", cfmt->name);
+        swr = swr_alloc();
+        if (!swr) {
+            cyanrip_log(ctx, 0, "swr init failure!\n");
+            goto fail;
+        }
+
+        av_opt_set_int(swr, "in_channel_layout",  AV_CH_LAYOUT_STEREO,  0);
+        av_opt_set_int(swr, "out_channel_layout", AV_CH_LAYOUT_STEREO,  0);
+        av_opt_set_int(swr, "in_sample_rate",     44100,                0);
+        av_opt_set_int(swr, "out_sample_rate",    cfmt->rate,           0);
+        av_opt_set_sample_fmt(swr, "in_sample_fmt",  AV_SAMPLE_FMT_S16, 0);
+        av_opt_set_sample_fmt(swr, "out_sample_fmt", cfmt->sfmt,        0);
+
+        if (swr_init(swr) < 0) {
+            cyanrip_log(ctx, 0, "swr init failure!\n");
+            goto fail;
+        }
+    }
+
     AVCodecContext *avctx = avcodec_alloc_context3(codec);
     if (!avctx) {
         cyanrip_log(ctx, 0, "Unable to init avctx!\n");
@@ -182,9 +210,9 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     avctx->opaque         = ctx;
     avctx->bit_rate       = lrintf(settings->bitrate*1000.0f);
-    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
+    avctx->sample_fmt     = cfmt->sfmt;
     avctx->channel_layout = AV_CH_LAYOUT_STEREO;
-    avctx->sample_rate    = 44100;
+    avctx->sample_rate    = cfmt->rate;
     avctx->channels       = 2;
     st->id                = 0;
     st->time_base         = (AVRational){ 1, avctx->sample_rate };
@@ -217,7 +245,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         goto fail;
     }
 
-    if (ctx->cover_image_pkt) {
+    if (ctx->cover_image_pkt && cfmt->coverart_supported) {
         AVPacket *pkt = av_packet_clone(ctx->cover_image_pkt);
         pkt->stream_index = 1;
         if ((ret = av_interleaved_write_frame(avf, pkt)) < 0) {
@@ -228,6 +256,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     int eof_met = 0;
     int16_t *src_samples = t->samples;
+    int samples_done = 0;
     int samples_left = t->nb_samples;
     while (!eof_met) {
         AVFrame *frame = NULL;
@@ -237,12 +266,19 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
             frame->channel_layout = avctx->channel_layout;
             frame->sample_rate    = avctx->sample_rate;
             frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
-            frame->pts            = t->nb_samples*2 - samples_left*2;
             av_frame_get_buffer(frame, 0);
-            frame->extended_data[0] = frame->data[0];
-            memcpy(frame->data[0], src_samples, frame->nb_samples*4);
+            frame->extended_data  = frame->data;
+            frame->pts            = t->nb_samples*2 - samples_left*2;
+            if (swr) {
+                const uint8_t *src[1] = { (const uint8_t *)src_samples };
+                frame->pts = swr_next_pts(swr, frame->pts);
+                swr_convert(swr, frame->data, frame->nb_samples, src, frame->nb_samples);
+            } else {
+                memcpy(frame->data[0], src_samples, frame->nb_samples*4);
+            }
             src_samples  += frame->nb_samples*2;
             samples_left -= frame->nb_samples*2;
+            samples_done += frame->nb_samples*2;
         }
 
         avcodec_send_frame(avctx, frame);

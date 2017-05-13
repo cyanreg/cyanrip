@@ -39,6 +39,7 @@ enum cyanrip_cover_image_formats {
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
     CYANRIP_FORMAT_TTA,
+    CYANRIP_FORMAT_OPUS,
 };
 
 typedef struct cyanrip_output_settings {
