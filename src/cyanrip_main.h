@@ -31,6 +31,7 @@
 #include <cdio/mmc.h>
 
 #include <discid/discid.h>
+#include <musicbrainz5/mb5_c.h>
 
 enum cyanrip_cover_image_formats {
     CYANRIP_COVER_IMAGE_JPG,

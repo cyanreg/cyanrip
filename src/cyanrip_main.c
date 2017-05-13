@@ -134,6 +134,29 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     return 0;
 }
 
+void cyanrip_mb_metadata(cyanrip_ctx *ctx)
+{
+    Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
+    if (query) {
+        Mb5ReleaseList release_list = mb5_query_lookup_discid(query, ctx->discid);
+        if (release_list) {
+            Mb5Release release = mb5_release_list_item(release_list, 0);
+            if (release) {
+                mb5_release_get_title(release, ctx->disc_name, 255);
+                cyanrip_log(ctx, 0, "Found MusicBrainz release: %s\n", ctx->disc_name);
+            } else {
+                cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
+            }
+            mb5_release_list_delete(release_list);
+        } else {
+            cyanrip_log(ctx, 0, "DiscID not found in MusicBrainz.\n");
+        }
+        mb5_query_delete(query);
+    } else {
+        cyanrip_log(ctx, 0, "Could not connect to MusicBrainz.\n");
+    }
+}
+
 void cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     ctx->disc_mcn = cdio_get_mcn(ctx->cdio);
@@ -149,6 +172,9 @@ void cyanrip_fill_metadata(cyanrip_ctx *ctx)
     else
         strcpy(ctx->discid, discid_get_id(disc));
     discid_free(disc);
+
+    /* MusicBrainz */
+    cyanrip_mb_metadata(ctx);
 }
 
 void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)

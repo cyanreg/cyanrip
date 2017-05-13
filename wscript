@@ -39,6 +39,7 @@ def configure(ctx):
     ctx.check_cfg(package='libavformat', args='--cflags --libs', uselib_store='LAVF')
     ctx.check_cfg(package='libavutil', args='--cflags --libs', uselib_store='LAVU')
     ctx.check_cfg(package='libdiscid', args='--cflags --libs', uselib_store='DISCID')
+    ctx.check_cfg(package='libmusicbrainz5', args='--cflags --libs', uselib_store='MB')
 
     if (VERSION):
         package_ver = VERSION
@@ -72,7 +73,7 @@ def build(ctx):
     )
     ctx(name='cyanrip',
         path=ctx.path,
-        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU', 'DISCID'],
+        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU', 'DISCID', 'MB'],
         use=['in_file', 'cyanrip_encode', 'cyanrip_log'],
         target=APPNAME,
         source='src/cyanrip_main.c',
