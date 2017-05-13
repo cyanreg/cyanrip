@@ -132,22 +132,66 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     return 0;
 }
 
+void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release)
+{
+    Mb5MediumList medium_list = mb5_release_media_matching_discid(release, ctx->discid);
+    if (medium_list) {
+        Mb5Medium medium = mb5_medium_list_item(medium_list, 0);
+        if (medium) {
+            Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
+            if (track_list) {
+                for (int i = 0; i < mb5_track_list_size(track_list); i++) {
+                    if (i >= ctx->drive->tracks) continue;
+                    Mb5Track track = mb5_track_list_item(track_list, i);
+                    Mb5Recording recording = mb5_track_get_recording(track);
+                    if (recording) {
+                        mb5_recording_get_title(recording, ctx->tracks[i].name, 255);
+                      } else {
+                        mb5_track_get_title(track, ctx->tracks[i].name, 255);
+                    }
+                    cyanrip_log(ctx, 0, "%d: %s\n", i, ctx->tracks[i].name);
+                }
+            } else {
+                cyanrip_log(ctx, 0, "Medium has no track list.\n");
+            }
+        } else {
+            cyanrip_log(ctx, 0, "Got empty medium list.\n");
+        }
+        mb5_medium_list_delete(medium_list);
+    } else {
+        cyanrip_log(ctx, 0, "No mediums matching DiscID.\n");
+    }
+}
+
 void cyanrip_mb_metadata(cyanrip_ctx *ctx)
 {
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
     if (query) {
-        Mb5ReleaseList release_list = mb5_query_lookup_discid(query, ctx->discid);
-        if (release_list) {
-            Mb5Release release = mb5_release_list_item(release_list, 0);
-            if (release) {
-                mb5_release_get_title(release, ctx->disc_name, 255);
-                cyanrip_log(ctx, 0, "Found MusicBrainz release: %s\n", ctx->disc_name);
-            } else {
-                cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
+        char* names[] = {"inc"};
+        char* values[] = {"recordings"};
+        Mb5Metadata metadata = mb5_query_query(query, "discid", ctx->discid, 0, 1, names, values);
+        if (metadata) {
+            Mb5Disc disc = mb5_metadata_get_disc(metadata);
+            if (disc) {
+                Mb5ReleaseList release_list = mb5_disc_get_releaselist(disc);
+                if (release_list) {
+                    Mb5Release release = mb5_release_list_item(release_list, 0);
+                    if (release) {
+                        mb5_release_get_title(release, ctx->disc_name, 255);
+                        cyanrip_log(ctx, 0, "Found MusicBrainz release: %s\n", ctx->disc_name);
+                        cyanrip_mb_tracks(ctx, release);
+                    } else {
+                        cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
+                    }
+                } else {
+                    cyanrip_log(ctx, 0, "DiscID has no associated releases.\n");
+                }
+             } else {
+                cyanrip_log(ctx, 0, "DiscID not found in MusicBrainz\n");
             }
-            mb5_release_list_delete(release_list);
+            mb5_metadata_delete(metadata);
         } else {
-            cyanrip_log(ctx, 0, "DiscID not found in MusicBrainz.\n");
+            cyanrip_log(ctx, 0, "MusicBrainz lookup failed, try again later.\n");
         }
         mb5_query_delete(query);
     } else {
