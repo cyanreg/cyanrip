@@ -125,8 +125,14 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     cyanrip_out_fmt *cfmt = &fmt_map[settings->format];
 
     char dirname[259], filename[1024];
-    sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
-    sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1, t->name, cfmt->ext);
+    if (strlen(ctx->disc_name))
+        sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
+    else
+        sprintf(dirname, "%s [%s]", ctx->discid, cfmt->name);
+    if (strlen(t->name))
+        sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1, t->name, cfmt->ext);
+    else
+        sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
 
     struct stat st_req = { 0 };
     if (stat(dirname, &st_req) == -1)

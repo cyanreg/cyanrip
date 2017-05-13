@@ -137,12 +137,6 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 void cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     ctx->disc_mcn = cdio_get_mcn(ctx->cdio);
-    strcpy(ctx->disc_name, "Album_name");
-    strcpy(ctx->album_artist, "Cool_dude");
-
-    /* Track name */
-    for (int i = 0; i < ctx->drive->tracks; i++)
-        strcpy(ctx->tracks[i].name, "Track_name");
 
     /* Album time */
     time_t t_c = time(NULL);
