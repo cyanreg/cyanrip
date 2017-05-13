@@ -57,7 +57,10 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
     char logfile[260];
-    sprintf(logfile, "%s.%s", ctx->disc_name, "log");
+    if (strlen(ctx->disc_name))
+        sprintf(logfile, "%s.%s", ctx->disc_name, "log");
+    else
+        sprintf(logfile, "%s.%s", ctx->discid, "log");
     ctx->logfile = fopen(logfile, "w");
     if (!ctx->logfile) {
         cyanrip_log(ctx, 0, "Error opening log file to write to!\n");
