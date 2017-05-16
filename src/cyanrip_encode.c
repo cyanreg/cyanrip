@@ -146,6 +146,7 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
 
     ADD_TAG(&avf->metadata, "comment",            "cyanrip",         0);
     ADD_TAG(&avf->metadata, "title",              t->name,           0);
+    ADD_TAG(&avf->metadata, "author",             t->artist,         0);
     ADD_TAG(&avf->metadata, "creation_time",      t_s,               0);
     ADD_TAG(&avf->metadata, "album",              ctx->disc_name,    0);
     ADD_TAG(&avf->metadata, "album_artist",       ctx->album_artist, 0);

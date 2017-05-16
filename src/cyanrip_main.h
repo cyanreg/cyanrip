@@ -77,6 +77,7 @@ typedef struct cyanrip_track {
     /* Metadata */
     int index;
     char name[256];
+    char artist[256];
     char isrc[16];
     int preemphasis;
     size_t nb_samples;
