@@ -132,6 +132,22 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     return 0;
 }
 
+void cyanrip_mb_credit(Mb5ArtistCredit credit, char *s, int len) {
+    Mb5NameCreditList namecredit_list = mb5_artistcredit_get_namecreditlist(credit);
+    int c = 0;
+    for (int i = 0; i < mb5_namecredit_list_size(namecredit_list); i++) {
+        Mb5NameCredit namecredit = mb5_namecredit_list_item(namecredit_list, i);
+        if (mb5_namecredit_get_name(namecredit, &s[c], len - c)) {
+            c += mb5_namecredit_get_name(namecredit, &s[c], len - c);
+        } else {
+            Mb5Artist artist = mb5_namecredit_get_artist(namecredit);
+            if (artist)
+                c += mb5_artist_get_name(artist, &s[c], len - c);
+        }
+        c += mb5_namecredit_get_joinphrase(namecredit, &s[c], len - c);
+    }
+}
+
 void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release)
 {
     Mb5MediumList medium_list = mb5_release_media_matching_discid(release, ctx->discid);
@@ -144,10 +160,15 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release)
                     if (i >= ctx->drive->tracks) continue;
                     Mb5Track track = mb5_track_list_item(track_list, i);
                     Mb5Recording recording = mb5_track_get_recording(track);
-                    if (recording)
+                    Mb5ArtistCredit credit;
+                    if (recording) {
                         mb5_recording_get_title(recording, ctx->tracks[i].name, 255);
-                    else
+                        credit = mb5_recording_get_artistcredit(recording);
+                      } else {
                         mb5_track_get_title(track, ctx->tracks[i].name, 255);
+                        credit = mb5_track_get_artistcredit(track);
+                    }
+                    if (credit) cyanrip_mb_credit(credit, ctx->tracks[i].artist, 255);
                 }
             } else {
                 cyanrip_log(ctx, 0, "Medium has no track list.\n");
@@ -167,7 +188,7 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
     if (query) {
         char* names[] = { "inc" };
-        char* values[] = { "recordings" };
+        char* values[] = { "recordings artist-credits" };
         Mb5Metadata metadata = mb5_query_query(query, "discid", ctx->discid, 0, 1, names, values);
         if (metadata) {
             Mb5Disc disc = mb5_metadata_get_disc(metadata);
@@ -177,7 +198,10 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
                     Mb5Release release = mb5_release_list_item(release_list, 0);
                     if (release) {
                         mb5_release_get_title(release, ctx->disc_name, 255);
-                        cyanrip_log(ctx, 0, "Found MusicBrainz release: %s\n", ctx->disc_name);
+                        Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
+                        if (artistcredit) cyanrip_mb_credit(artistcredit, ctx->album_artist, 255);
+                        cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
+                                    ctx->disc_name, ctx->album_artist);
                         cyanrip_mb_tracks(ctx, release);
                     } else {
                         cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
