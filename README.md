@@ -37,17 +37,16 @@ CLI
 All arguments are entirely optional. By default cyanrip will rip all tracks from /dev/sr0,
 output to flac only, enables all cd-paranoia error checking and performs musicbrainz lookup.
 
-|   Argument  | Description                                                   |
-|:-----------:|---------------------------------------------------------------|
-| -d *path*   | Optional device path (e.g. /dev/sr0)                          |
-| -c *path*   | Path to cover image to attach to files                        |
-| -s *int*    | CD Drive offset in samples                                    |
-| -S *int*    | Set the drive speed                                           |
-| -o *string* | Comma separated list of output formats (e.g. flac,alac,opus)  |
-| -b *float*  | Bitrate of lossy files in kbps                                |
-| -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 for CD info only) |
-| -r *int*    | Maximum number of retries to read a frame before erroring     |
-| -f          | Disable CD paranoia error checking                            |
-| -h          | List all arguments and their description (this)               |
-| -n          | Disable Musicbrainz lookup                                    |
-
+|   Argument  | Description                                                                |
+|-------------|----------------------------------------------------------------------------|
+| -d *path*   | Optional device path (e.g. /dev/sr0)                                       |
+| -c *path*   | Path to cover image to attach to files                                     |
+| -s *int*    | CD Drive offset in samples                                                 |
+| -S *int*    | Set the drive speed (0 for default/auto)                                   |
+| -o *string* | Comma separated list of output formats (e.g. flac,opus or help to list all)|
+| -b *float*  | Bitrate of lossy files in kbps                                             |
+| -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
+| -r *int*    | Max retries to read a frame before considering it corrupt                  |
+| -f          | Disable CD paranoia error checking (for speed)                             |
+| -h          | List all arguments and their description (this)                            |
+| -n          | Disable Musicbrainz lookup                                                 |
