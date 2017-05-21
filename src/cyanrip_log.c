@@ -17,6 +17,7 @@
  */
 
 #include <stdarg.h>
+#include <time.h>
 
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
@@ -71,7 +72,12 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
 
 void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 {
+    char t_s[64];
+    time_t t_c = time(NULL);
+    struct tm *t_l = localtime(&t_c);
+    strftime(t_s, sizeof(t_s), "%FT%H:%M:%S", t_l);
 
+    cyanrip_log(ctx, 0, "Ripping finished at %s!\n", t_s);
 }
 
 int cyanrip_log_init(cyanrip_ctx *ctx)
