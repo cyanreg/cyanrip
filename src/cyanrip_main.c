@@ -362,8 +362,6 @@ int main(int argc, char **argv)
     settings.disable_mb = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
-
-    /* Debug */
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
 
