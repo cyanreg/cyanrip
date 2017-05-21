@@ -45,6 +45,10 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
     cyanrip_log(ctx, 0, "Offset:        %c%i samples\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset));
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
+    if (ctx->settings.speed)
+        cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
+    else
+        cyanrip_log(ctx, 0, "Speed:         default\n");
     cyanrip_log(ctx, 0, "Paranoia:      %s\n",
                 ctx->settings.paranoia_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
     cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
@@ -52,7 +56,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, " (lossy bitrate: %.02fkbps)\n", ctx->settings.bitrate);
-    cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : "");
+    cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++)
             cyanrip_log(ctx, 0, "%i%s", ctx->settings.rip_indices[i], i != (ctx->settings.rip_indices_count - 1) ? ", " : "");
@@ -77,7 +81,7 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     struct tm *t_l = localtime(&t_c);
     strftime(t_s, sizeof(t_s), "%FT%H:%M:%S", t_l);
 
-    cyanrip_log(ctx, 0, "Ripping finished at %s!\n", t_s);
+    cyanrip_log(ctx, 0, "Ripping finished at %s\n", t_s);
 }
 
 int cyanrip_log_init(cyanrip_ctx *ctx)

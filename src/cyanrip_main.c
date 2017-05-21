@@ -365,13 +365,14 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnft:b:c:r:d:o:s:")) != -1) {
+    while((c = getopt (argc, argv, "hnft:b:c:r:d:o:s:S:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(NULL, 0, "cyanrip help:\n");
                 cyanrip_log(NULL, 0, "    -d <path>    Set device path\n");
                 cyanrip_log(NULL, 0, "    -c <path>    Set cover image path\n");
                 cyanrip_log(NULL, 0, "    -s <int>     CD Drive offset\n");
+                cyanrip_log(NULL, 0, "    -S <int>     Drive speed\n");
                 cyanrip_log(NULL, 0, "    -o <string>  Comma separated list of outputs\n");
                 cyanrip_log(NULL, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(NULL, 0, "    -t <list>    Select which tracks to rip\n");
@@ -380,6 +381,9 @@ int main(int argc, char **argv)
                 cyanrip_log(NULL, 0, "    -h           Print options help\n");
                 cyanrip_log(NULL, 0, "    -n           Disable musicbrainz lookup\n");
                 return 0;
+                break;
+            case 'S':
+                settings.speed = strtol(optarg, NULL, 10);
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
@@ -402,13 +406,17 @@ int main(int argc, char **argv)
                 p = strtok(optarg, ",");
                 while(p != NULL) {
                     settings.rip_indices[settings.rip_indices_count++] = strtol(p, NULL, 10);
+                    if (!settings.rip_indices[settings.rip_indices_count - 1]) {
+                        settings.rip_indices_count = 0;
+                        break;
+                    }
                     p = strtok(NULL, ",");
                 }
                 break;
             case 'o':
                 settings.outputs_num = 0;
                 if (!strncmp("help", optarg, strlen("help"))) {
-                    cyanrip_log(NULL, 0, "Supported codecs:\n");
+                    cyanrip_log(NULL, 0, "Supported outputs:\n");
                     cyanrip_print_codecs();
                     return 0;
                 }
