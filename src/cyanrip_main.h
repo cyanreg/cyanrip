@@ -23,18 +23,20 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include "config.h"
 
-#include <cdio/cdda.h>
+#ifdef HAVE_CDIO_PARANOIA_PARANOIA_H
+#include <cdio/paranoia/paranoia.h>
+#else
 #include <cdio/paranoia.h>
+#endif
+
 #include <cdio/mmc.h>
 
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 
-enum cyanrip_cover_image_formats {
-    CYANRIP_COVER_IMAGE_JPG,
-    CYANRIP_COVER_IMAGE_PNG,
-};
+#define MAX_DRIVE_OFFSET_BYTES 16384
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
@@ -49,10 +51,6 @@ enum cyanrip_output_formats {
     CYANRIP_FORMATS_NB,
 };
 
-typedef struct cyanrip_output_settings {
-    enum cyanrip_output_formats format;
-} cyanrip_output_settings;
-
 typedef struct cyanrip_settings {
     char *dev_path;
     char *cover_image_path;
@@ -61,13 +59,13 @@ typedef struct cyanrip_settings {
     int paranoia_mode;
     int frame_max_retries;
     int report_rate;
-    uint32_t offset;
+    int offset;
     int disable_mb;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];
 
-    cyanrip_output_settings outputs[10];
+    enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
 } cyanrip_settings;
 
@@ -106,8 +104,8 @@ typedef struct cyanrip_ctx {
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
     void *cover_image_params;
 
-    uint32_t duration;
-    uint32_t last_frame;
+    lsn_t duration;
+    lsn_t last_frame;
 } cyanrip_ctx;
 
 static inline void cyanrip_frames_to_duration(uint32_t sectors, char *str)

@@ -67,6 +67,11 @@ int cyanrip_validate_fmt(const char *fmt)
     return -1;
 }
 
+const char *cyanrip_fmt_desc(enum cyanrip_output_formats format)
+{
+    return format < CYANRIP_FORMATS_NB ? fmt_map[format].name : NULL;
+}
+
 void cyanrip_init_encoding(cyanrip_ctx *ctx)
 {
     av_register_all();
@@ -84,13 +89,6 @@ int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
         ctx->cover_image_pkt = NULL;
         return 0;
     }
-
-    /*if (LIBAVFORMAT_VERSION_MAJOR < 57 ||
-        LIBAVFORMAT_VERSION_MINOR < 72 ||
-        LIBAVFORMAT_VERSION_MICRO < 101) {
-        cyanrip_log(NULL, 0, "Can't mux cover art, ffmpeg version too old!\n");
-        return 1;
-    }*/
 
     AVFormatContext *avf = NULL;
     if (avformat_open_input(&avf, ctx->settings.cover_image_path, NULL, NULL) < 0) {
@@ -154,13 +152,13 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
 }
 
 int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
-                         cyanrip_output_settings *settings)
+                         enum cyanrip_output_formats format)
 {
     int ret;
-
-    cyanrip_out_fmt *cfmt = &fmt_map[settings->format];
+    cyanrip_out_fmt *cfmt = &fmt_map[format];
 
     char dirname[259], filename[1024];
+
     if (strlen(ctx->disc_name))
         sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
     else
@@ -280,35 +278,47 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         }
     }
 
+    int swr_flush = 0;
     int eof_met = 0;
-    int16_t *src_samples = t->samples;
+    int16_t *src_samples = (int16_t *)(((uint8_t *)t->samples) + ctx->settings.offset*4);
     int samples_done = 0;
     int samples_left = t->nb_samples;
     while (!eof_met) {
         AVFrame *frame = NULL;
-        if (samples_left > 0) {
+        if (samples_left > 0 || (swr_flush == 1)) {
             frame                 = av_frame_alloc();
             frame->format         = avctx->sample_fmt;
             frame->channel_layout = avctx->channel_layout;
             frame->sample_rate    = avctx->sample_rate;
             frame->nb_samples     = FFMIN(samples_left >> 1, avctx->frame_size);
+            if (swr_flush)
+                frame->nb_samples = avctx->frame_size;
             av_frame_get_buffer(frame, 0);
             frame->extended_data  = frame->data;
             frame->pts            = samples_done;
             if (swr) {
+                int ret_s;
+                int in_s = swr_flush ? 0 : frame->nb_samples;
                 const uint8_t *src[] = { (const uint8_t *)src_samples };
-                //AVRational cd_tb = (AVRational){ 1, 44100 };
-                //AVRational adj_tb = (AVRational){ 1, 44100 * avctx->sample_rate };
-                swr_convert(swr, frame->data, frame->nb_samples, src, frame->nb_samples);
-                //frame->pts = swr_next_pts(swr, av_rescale_q(frame->pts, cd_tb, adj_tb));
-                //frame->pts = av_rescale_q(frame->pts, adj_tb, cd_tb);
-                samples_done += frame->nb_samples;
+                AVRational cd_tb = (AVRational){ 1, 44100 };
+                AVRational adj_tb = (AVRational){ 1, 44100 * avctx->sample_rate };
+                ret_s = swr_convert(swr, frame->data, frame->nb_samples, src, in_s);
+                frame->pts = swr_next_pts(swr, av_rescale_q(frame->pts, cd_tb, adj_tb));
+                frame->pts /= 44100;
+                samples_done += swr_flush ? 0 : frame->nb_samples;
+                if (swr_flush && !ret_s) {
+                    av_frame_free(&frame);
+                    swr_flush = 2;
+                    continue;
+                }
             } else {
                 memcpy(frame->data[0], src_samples, frame->nb_samples*4);
                 samples_done += frame->nb_samples*2;
             }
             src_samples  += frame->nb_samples*2;
             samples_left -= frame->nb_samples*2;
+            if (samples_left <= 0 && swr && !swr_flush)
+                swr_flush = 1;
         }
 
         avcodec_send_frame(avctx, frame);

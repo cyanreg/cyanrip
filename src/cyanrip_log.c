@@ -18,6 +18,7 @@
 
 #include <stdarg.h>
 
+#include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -39,12 +40,17 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
+    cyanrip_log(ctx, 0, "%s\n",                PROGRAM_STRING);
     cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
+    cyanrip_log(ctx, 0, "Offset:        %c%i samples\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset));
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
     cyanrip_log(ctx, 0, "Paranoia:      %s\n",
                 ctx->settings.paranoia_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
-    cyanrip_log(ctx, 0, "Outputs:       %i (lossy bitrate: %.02fkbps)\n", ctx->settings.outputs_num,
-                ctx->settings.bitrate);
+    cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
+    cyanrip_log(ctx, 0, "Outputs:       ");
+    for (int i = 0; i < ctx->settings.outputs_num; i++)
+        cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
+    cyanrip_log(ctx, 0, " (lossy bitrate: %.02fkbps)\n", ctx->settings.bitrate);
     cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : "");
     if (ctx->settings.rip_indices_count != -1) {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++)
