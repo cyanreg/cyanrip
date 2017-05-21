@@ -5,10 +5,31 @@ Rips and encodes standard audio CDs with the least effort required from user.
 Features
 --------
  * Automatic tag lookup from the musicbrainz database
- * Audio data ripping via cd-paranoia
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
+ * Drive offset compensation, error recovery via cd-paranoia
  * Able to encode to multiple formats simultaneously
- * Able to mux in cover images to flac and mp3 files
+ * Able to mux in cover images to mp3 and flac (soon in latest ffmpeg git) files
+
+
+Compiling
+---------
+Complete list of dependencies:
+
+ * FFmpeg (3.0 or newer)
+ * libcdio-paranoia
+ * libdiscid
+ * libmusicbrainz5
+
+All are available on any up-to-date Linux distribution's package repositories. To compile and install:
+
+`./bootstrap.py`
+
+`./waf configure`
+
+`./waf build`
+
+`./waf install`
+
 
 CLI
 ---
@@ -30,22 +51,3 @@ output to flac only, enables all cd-paranoia error checking and performs musicbr
 | -h          | List all arguments and their description (this)               |
 | -n          | Disable Musicbrainz lookup                                    |
 
-
-Compiling
----------
-Complete list of dependencies:
-
- * FFmpeg (3.0 or newer)
- * libcdio-paranoia
- * libdiscid
- * libmusicbrainz5
-
-All are available on any up-to-date Linux distribution's package repositories. To compile and install:
-
-`./bootstrap.py`
-
-`./waf configure`
-
-`./waf build`
-
-`./waf install`
