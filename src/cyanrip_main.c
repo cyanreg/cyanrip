@@ -74,7 +74,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_FORGETIT, CDDA_MESSAGE_FORGETIT);
 
-    cyanrip_log(ctx, 1, "Opening drive...\n");
+    cyanrip_log(ctx, 0, "Opening drive...\n");
     rval = cdio_cddap_open(ctx->drive);
     if (rval < 0) {
         cyanrip_log(ctx, 0, "Unable to open device!\n");
@@ -348,7 +348,7 @@ int main(int argc, char **argv)
 
     settings.dev_path = "/dev/sr0";
     settings.cover_image_path = "";
-    settings.verbose = 1;
+    settings.verbose = 0;
     settings.speed = 0;
     settings.frame_max_retries = 5;
     settings.paranoia_mode = PARANOIA_MODE_FULL;
