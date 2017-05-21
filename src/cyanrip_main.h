@@ -36,7 +36,7 @@
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 
-#define MAX_DRIVE_OFFSET_BYTES 16384
+#define OVER_UNDER_READ_FRAMES 4
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,

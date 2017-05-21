@@ -293,17 +293,19 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
         return 1;
     }
 
+    frames += 2*OVER_UNDER_READ_FRAMES;
+
 #ifdef HAVE_CDIO_PARANOIA_PARANOIA_H
     strcpy(t->isrc, mmc_get_track_isrc(ctx->cdio, t->index + 1));
 #else
     mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
 #endif
 
-    cdio_paranoia_seek(ctx->paranoia, first_frame, SEEK_SET);
+    cdio_paranoia_seek(ctx->paranoia, first_frame - OVER_UNDER_READ_FRAMES, SEEK_SET);
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
-    t->samples = calloc(frames*CDIO_CD_FRAMESIZE_RAW + 2*MAX_DRIVE_OFFSET_BYTES, 1);
+    t->samples = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
     t->nb_samples = 0;
 
     for (int i = 0; i < frames; i++) {
@@ -312,6 +314,8 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
             cyanrip_log(NULL, 0, "\rTrack %i progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
+
+    t->nb_samples -= OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW;
 
     cyanrip_crc_track(ctx, t);
 
@@ -382,7 +386,7 @@ int main(int argc, char **argv)
                 break;
             case 's':
                 settings.offset = strtol(optarg, NULL, 10);
-                if (settings.offset*4 > MAX_DRIVE_OFFSET_BYTES) {
+                if (abs(settings.offset)*4 > OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW) {
                     cyanrip_log(NULL, 0, "Drive offset too large!\n");
                     abort();
                 }
