@@ -81,6 +81,7 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     struct tm *t_l = localtime(&t_c);
     strftime(t_s, sizeof(t_s), "%FT%H:%M:%S", t_l);
 
+    cyanrip_log(ctx, 0, "Ripping errors: %i\n", ctx->errors_count);
     cyanrip_log(ctx, 0, "Ripping finished at %s\n", t_s);
 }
 

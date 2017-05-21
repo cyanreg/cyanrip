@@ -237,7 +237,7 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 
 void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 {
-    char *err = NULL;
+    char *err = NULL, error_status = 0;
     int retries = ctx->settings.frame_max_retries;
 
     int16_t *samples = NULL;
@@ -257,19 +257,24 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "%s\n", err);
         free(err);
         err = NULL;
+        error_status = 1;
     }
 
     if ((err = cdio_cddap_messages(ctx->drive))) {
         cyanrip_log(ctx, 0, "%s\n", err);
         free(err);
         err = NULL;
+        error_status = 1;
     }
 
-    if (!samples)
+    if (!samples) {
         cyanrip_log(ctx, 0, "Frame read failed!\n");
-    else
+        error_status = 1;
+    } else {
         memcpy(t->samples + t->nb_samples, samples, CDIO_CD_FRAMESIZE_RAW);
+    }
 
+    ctx->errors_count += error_status;
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 }
 
@@ -348,7 +353,7 @@ int main(int argc, char **argv)
 
     settings.dev_path = "/dev/sr0";
     settings.cover_image_path = "";
-    settings.verbose = 0;
+    settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 5;
     settings.paranoia_mode = PARANOIA_MODE_FULL;

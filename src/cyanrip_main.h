@@ -104,6 +104,7 @@ typedef struct cyanrip_ctx {
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
     void *cover_image_params;
 
+    int errors_count;
     lsn_t duration;
     lsn_t last_frame;
 } cyanrip_ctx;
