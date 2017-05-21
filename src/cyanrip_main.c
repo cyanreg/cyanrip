@@ -265,12 +265,11 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
         err = NULL;
     }
 
-    if (!samples) {
+    if (!samples)
         cyanrip_log(ctx, 0, "Frame read failed!\n");
-        return;
-    }
+    else
+        memcpy(t->samples + t->nb_samples, samples, CDIO_CD_FRAMESIZE_RAW);
 
-    memcpy(t->samples + t->nb_samples, samples, CDIO_CD_FRAMESIZE_RAW);
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 }
 
@@ -383,7 +382,7 @@ int main(int argc, char **argv)
                 return 0;
                 break;
             case 'S':
-                settings.speed = strtol(optarg, NULL, 10);
+                settings.speed = abs(strtol(optarg, NULL, 10));
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
