@@ -305,7 +305,9 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
 #endif
 
-    cdio_paranoia_seek(ctx->paranoia, first_frame - OVER_UNDER_READ_FRAMES, SEEK_SET);
+    lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
+    seek_dest = seek_dest < 0 ? 0 : seek_dest;
+    cdio_paranoia_seek(ctx->paranoia, seek_dest, SEEK_SET);
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
