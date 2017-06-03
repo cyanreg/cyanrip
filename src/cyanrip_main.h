@@ -79,8 +79,6 @@ typedef struct cyanrip_track {
     int preemphasis;
     size_t nb_samples;
     uint32_t ieee_crc_32;
-    uint32_t acurip_crc_v1;
-    uint32_t acurip_crc_v2;
     /* Metadata */
 
     int16_t *samples;

@@ -34,8 +34,6 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
     cyanrip_log(ctx, 0, "    IEEE CRC 32: 0x%08x\n", t->ieee_crc_32);
-    cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
-    cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
     cyanrip_log(ctx, 0, "\n");
 }
 
