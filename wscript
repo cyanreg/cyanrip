@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys, os, re
 from waflib.Build import BuildContext
 
@@ -12,7 +13,7 @@ def try_git_version():
     try:
         version = os.popen('git rev-parse --short=10 HEAD').read().strip()
     except Exception as e:
-        print e
+        print(e)
     return version
 
 def try_pkg_path(name):
@@ -22,7 +23,7 @@ def try_pkg_path(name):
         path = os.popen(cmd).read().strip()
         path = os.path.basename(path)
     except Exception as e:
-        print e
+        print(e)
     return path
 
 def options(ctx):
@@ -56,7 +57,7 @@ def configure(ctx):
 
     ctx.write_config_header('config.h')
 
-    print '	CFLAGS:  	', ctx.env.CFLAGS
+    print('	CFLAGS:  	', ctx.env.CFLAGS)
 
 def build(ctx):
     ctx(name='cyanrip_encode',
