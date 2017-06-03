@@ -19,6 +19,10 @@
 #include <time.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#ifdef __MINGW32__
+#include <direct.h>
+#define mkdir(path,mode) _mkdir(path)
+#endif
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
