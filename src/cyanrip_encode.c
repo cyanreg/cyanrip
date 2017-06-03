@@ -134,9 +134,9 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
 
     time_t t_c = time(NULL);
     struct tm *t_l = localtime(&t_c);
-    strftime(t_s, sizeof(t_s), "%FT%H:%M:%S", t_l);
+    strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
 
-    strftime(t_disc_date, sizeof(t_disc_date), "%FT%H:%M:%S", ctx->disc_date);
+    strftime(t_disc_date, sizeof(t_disc_date), "%Y-%m-%dT%H:%M:%S", ctx->disc_date);
 
 #define ADD_TAG(dict, name, source, flags)          \
     do {                                            \
