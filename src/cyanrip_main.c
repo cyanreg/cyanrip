@@ -376,7 +376,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfti:b:c:r:d:o:s:S:")) != -1) {
+    while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(NULL, 0, "cyanrip help:\n");
