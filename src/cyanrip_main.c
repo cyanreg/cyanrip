@@ -299,11 +299,13 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     frames += 2*OVER_UNDER_READ_FRAMES;
 
+    if (ctx->settings.read_isrc) {
 #ifdef HAVE_CDIO_PARANOIA_PARANOIA_H
-    strcpy(t->isrc, mmc_get_track_isrc(ctx->cdio, t->index + 1));
+        strcpy(t->isrc, mmc_get_track_isrc(ctx->cdio, t->index + 1));
 #else
-    mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
+        mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
 #endif
+    }
 
     lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
     lsn_t prezero   = seek_dest < 0 ? -seek_dest : 0;
@@ -370,10 +372,11 @@ int main(int argc, char **argv)
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
+    settings.read_isrc = 0;
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnft:b:c:r:d:o:s:S:")) != -1) {
+    while((c = getopt (argc, argv, "hnfti:b:c:r:d:o:s:S:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(NULL, 0, "cyanrip help:\n");
@@ -385,6 +388,7 @@ int main(int argc, char **argv)
                 cyanrip_log(NULL, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(NULL, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(NULL, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(NULL, 0, "    -i           Reads ISRC codes for each track\n");
                 cyanrip_log(NULL, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(NULL, 0, "    -h           Print options help\n");
                 cyanrip_log(NULL, 0, "    -n           Disable musicbrainz lookup\n");
@@ -445,6 +449,9 @@ int main(int argc, char **argv)
                 break;
             case 'd':
                 settings.dev_path = optarg;
+                break;
+            case 'i':
+                settings.read_isrc = 1;
                 break;
             case 'f':
                 settings.paranoia_mode = PARANOIA_MODE_DISABLE;

@@ -63,6 +63,7 @@ typedef struct cyanrip_settings {
     int disable_mb;
     float bitrate;
     int rip_indices_count;
+    bool read_isrc;
     int rip_indices[99];
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
