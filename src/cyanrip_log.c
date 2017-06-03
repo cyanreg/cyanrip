@@ -54,6 +54,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, " (lossy bitrate: %.02fkbps)\n", ctx->settings.bitrate);
+    cyanrip_log(ctx, 0, "Disc tracks:   %i\n", ctx->drive->tracks);
     cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++)
