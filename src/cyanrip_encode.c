@@ -286,7 +286,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     int eof_met = 0;
     int samples_done = 0;
     int samples_left = t->nb_samples;
-    int16_t *src_samples = t->samples + (OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW >> 1) + ctx->settings.offset*2;
+    int16_t *src_samples = t->samples;
     while (!eof_met) {
         AVFrame *frame = NULL;
         if (samples_left > 0 || (swr_flush == 1)) {

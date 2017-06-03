@@ -33,14 +33,12 @@
  * Not that you need to know that since the program will warn on errors.
  * I'm a person who had to pour his blood, sweat and patience to implement an 18 bit CRC
  * on 10 bit data sources, so I have the dignity of NOT implementing that crap.
- * If someone else wants to do it instead, the data is in t->samples, just be sure to offset
- *it below like in the function which calculates a true checksum. */
+ * If someone else wants to do it instead, go right ahead and please send a patch. */
 
 static inline uint32_t ieee_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     const AVCRC *avcrc = av_crc_get_table(AV_CRC_32_IEEE);
-    int16_t *samples = t->samples + (OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW >> 1) + ctx->settings.offset*2;
-    return av_crc(avcrc, 0, (uint8_t *)samples, t->nb_samples << 1);
+    return av_crc(avcrc, 0, (uint8_t *)t->samples, t->nb_samples << 1);
 }
 
 static inline int cyanrip_crc_track(cyanrip_ctx *ctx, cyanrip_track *t)

@@ -33,15 +33,15 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     if (!s || !*s)
         return;
     ctx = *s;
-    for (int i = 0; i < ctx->drive->tracks; i++)
-        free(ctx->tracks[i].samples);
     cyanrip_end_encoding(ctx);
+    for (int i = 0; i < ctx->drive->tracks; i++)
+        free(ctx->tracks[i].base_data);
+    if (ctx->discid_ctx)
+        discid_free(ctx->discid_ctx);
     if (ctx->paranoia)
         cdio_paranoia_free(ctx->paranoia);
     if (ctx->drive)
         cdio_cddap_close_no_free_cdio(ctx->drive);
-    if (ctx->disc_mcn)
-        free(ctx->disc_mcn);
     if (ctx->cdio)
         cdio_destroy(ctx->cdio);
     free(ctx->tracks);
@@ -214,19 +214,18 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     int ret = 0;
 
-    ctx->disc_mcn = cdio_get_mcn(ctx->cdio);
-
     /* Album time */
     time_t t_c = time(NULL);
     ctx->disc_date = localtime(&t_c);
 
     /* DiscID */
-    DiscId *disc = discid_new();
-    if (discid_read_sparse(disc, ctx->settings.dev_path, 0) == 0)
-        cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(disc));
+    ctx->discid_ctx = discid_new();
+    if (discid_read(ctx->discid_ctx, ctx->settings.dev_path) == 0)
+        cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
     else
-        strcpy(ctx->discid, discid_get_id(disc));
-    discid_free(disc);
+        strcpy(ctx->discid, discid_get_id(ctx->discid_ctx));
+
+    ctx->disc_mcn = discid_get_mcn(ctx->discid_ctx);
 
     /* MusicBrainz */
     if (!ctx->settings.disable_mb)
@@ -271,14 +270,14 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "Frame read failed!\n");
         error_status = 1;
     } else {
-        memcpy(t->samples + t->nb_samples, samples, CDIO_CD_FRAMESIZE_RAW);
+        memcpy(t->base_data + t->nb_samples*2, samples, CDIO_CD_FRAMESIZE_RAW);
     }
 
     ctx->errors_count += error_status;
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 }
 
-int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
+int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
     uint32_t frames = 0, first_frame = 0;
 
@@ -299,22 +298,18 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     frames += 2*OVER_UNDER_READ_FRAMES;
 
-    if (ctx->settings.read_isrc) {
-#ifdef HAVE_CDIO_PARANOIA_PARANOIA_H
-        strcpy(t->isrc, mmc_get_track_isrc(ctx->cdio, t->index + 1));
-#else
-        mmc_isrc_track_read_subchannel(ctx->cdio, t->index + 1, t->isrc);
-#endif
-    }
+    t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
-    lsn_t prezero   = seek_dest < 0 ? -seek_dest : 0;
+    lsn_t prezero = seek_dest < 0 ? -seek_dest : 0;
     seek_dest = seek_dest < 0 ? 0 : seek_dest;
     cdio_paranoia_seek(ctx->paranoia, seek_dest, SEEK_SET);
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
-    t->samples = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
+    t->base_data = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
+    int offset = OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
+    t->samples = (int16_t *)(t->base_data + offset);
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
 
     frames -= prezero;
@@ -346,7 +341,7 @@ void on_quit_signal(int signo)
         exit(1);
     }
     cyanrip_log(NULL, 0, "Trying to quit\n");
-    quit_now = 1;
+    quit_now = 1;   
 }
 
 int main(int argc, char **argv)
@@ -372,7 +367,6 @@ int main(int argc, char **argv)
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
-    settings.read_isrc = 0;
 
     int c;
     char *p;
@@ -388,14 +382,13 @@ int main(int argc, char **argv)
                 cyanrip_log(NULL, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(NULL, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(NULL, 0, "    -r <int>     Maximum number of retries to read a frame\n");
-                cyanrip_log(NULL, 0, "    -i           Reads ISRC codes for each track\n");
                 cyanrip_log(NULL, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(NULL, 0, "    -h           Print options help\n");
                 cyanrip_log(NULL, 0, "    -n           Disable musicbrainz lookup\n");
                 return 0;
                 break;
             case 'S':
-                settings.speed = abs(strtol(optarg, NULL, 10));
+                settings.speed = abs((int)strtol(optarg, NULL, 10));
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
@@ -450,9 +443,6 @@ int main(int argc, char **argv)
             case 'd':
                 settings.dev_path = optarg;
                 break;
-            case 'i':
-                settings.read_isrc = 1;
-                break;
             case 'f':
                 settings.paranoia_mode = PARANOIA_MODE_DISABLE;
                 break;
@@ -480,13 +470,13 @@ int main(int argc, char **argv)
 
     if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->drive->tracks; i++)
-            ret |= cyanrip_read_track(ctx, &ctx->tracks[i], i);
+            ret |= cyanrip_rip_track(ctx, &ctx->tracks[i], i);
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             int index = ctx->settings.rip_indices[i] - 1;
             if (index < 0 || index >= ctx->drive->tracks)
                 continue;
-            ret |= cyanrip_read_track(ctx, &ctx->tracks[index], index);
+            ret |= cyanrip_rip_track(ctx, &ctx->tracks[index], index);
         }
     }
 

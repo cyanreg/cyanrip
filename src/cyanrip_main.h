@@ -31,8 +31,6 @@
 #include <cdio/paranoia.h>
 #endif
 
-#include <cdio/mmc.h>
-
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 
@@ -63,7 +61,6 @@ typedef struct cyanrip_settings {
     int disable_mb;
     float bitrate;
     int rip_indices_count;
-    bool read_isrc;
     int rip_indices[99];
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
@@ -75,13 +72,14 @@ typedef struct cyanrip_track {
     int index;
     char name[256];
     char artist[256];
-    char isrc[16];
+    char *isrc;
     int preemphasis;
     size_t nb_samples;
     uint32_t ieee_crc_32;
     /* Metadata */
 
-    int16_t *samples;
+    int16_t *samples;       /* Actual compensated track data with length nb_samples */
+    uint8_t *base_data;   /* Data without CD drive offset or underread compensation */
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {
@@ -90,6 +88,7 @@ typedef struct cyanrip_ctx {
     cyanrip_settings   settings;
     cyanrip_track     *tracks;
     CdIo_t            *cdio;
+    DiscId            *discid_ctx;
     FILE              *logfile;
 
     /* Metadata */
