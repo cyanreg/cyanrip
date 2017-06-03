@@ -306,13 +306,16 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 #endif
 
     lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
+    lsn_t prezero   = seek_dest < 0 ? -seek_dest : 0;
     seek_dest = seek_dest < 0 ? 0 : seek_dest;
     cdio_paranoia_seek(ctx->paranoia, seek_dest, SEEK_SET);
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
     t->samples = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
-    t->nb_samples = 0;
+    t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
+
+    frames -= prezero;
 
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
@@ -322,6 +325,7 @@ int cyanrip_read_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
     t->nb_samples -= OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW;
+    t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 
     cyanrip_crc_track(ctx, t);
 
