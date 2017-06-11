@@ -178,8 +178,12 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     AVFormatContext *avf = NULL;
     if (avformat_alloc_output_context2(&avf, NULL, NULL, filename) < 0) {
-        cyanrip_log(ctx, 0, "Unable to init lavf context!\n");
-        goto fail;
+        cyanrip_log(ctx, 0, "Attempting fallback filename!\n");
+        sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
+        if (avformat_alloc_output_context2(&avf, NULL, NULL, filename) < 0) {
+            cyanrip_log(ctx, 0, "Unable to init lavf context!\n");
+            goto fail;
+        }
     }
     AVOutputFormat *fmt = avf->oformat;
 
