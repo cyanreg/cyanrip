@@ -28,11 +28,16 @@ def try_pkg_path(name):
 
 def options(ctx):
     ctx.load('compiler_c')
+    ctx.add_option('--no-debug', dest='no_deb', action='store_true', default=False,
+                help='Unsets debug compilation flags.')
 
 def configure(ctx):
     ctx.load('compiler_c')
 
-    ctx.env.append_unique('CFLAGS', ['-O2', '-g', '-Wall', '-pedantic', '-std=gnu11'])
+    if (ctx.options.no_deb == False):
+        ctx.env.CFLAGS += ['-g']
+
+    ctx.env.append_unique('CFLAGS', ['-O2', '-Wall', '-pedantic', '-std=gnu11'])
 
     ctx.check_cfg(package='libcdio', args='--cflags --libs', uselib_store='CDIO')
     ctx.check_cfg(package='libcdio_paranoia', args='--cflags --libs', uselib_store='PARA')
