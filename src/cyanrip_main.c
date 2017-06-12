@@ -355,7 +355,8 @@ int main(int argc, char **argv)
         cyanrip_log(NULL, 0, "Can't init signal handler!\n");
 
     settings.dev_path = "/dev/sr0";
-    settings.cover_image_path = "";
+    settings.base_dst_folder = NULL;
+    settings.cover_image_path = NULL;
     settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 5;
@@ -370,11 +371,12 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:")) != -1) {
+    while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(NULL, 0, "cyanrip help:\n");
                 cyanrip_log(NULL, 0, "    -d <path>    Set device path\n");
+                cyanrip_log(NULL, 0, "    -D <path>    Folder to rip disc to\n");
                 cyanrip_log(NULL, 0, "    -c <path>    Set cover image path\n");
                 cyanrip_log(NULL, 0, "    -s <int>     CD Drive offset\n");
                 cyanrip_log(NULL, 0, "    -S <int>     Drive speed\n");
@@ -439,6 +441,9 @@ int main(int argc, char **argv)
                 break;
             case 'c':
                 settings.cover_image_path = optarg;
+                break;
+            case 'D':
+                settings.base_dst_folder = optarg;
                 break;
             case 'd':
                 settings.dev_path = optarg;

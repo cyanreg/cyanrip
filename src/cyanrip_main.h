@@ -52,6 +52,7 @@ enum cyanrip_output_formats {
 typedef struct cyanrip_settings {
     char *dev_path;
     char *cover_image_path;
+    char *base_dst_folder;
     bool verbose;
     int speed;
     int paranoia_mode;

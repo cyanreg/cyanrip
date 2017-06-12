@@ -89,7 +89,7 @@ void cyanrip_end_encoding(cyanrip_ctx *ctx)
 
 int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
 {
-    if (!ctx->settings.cover_image_path || !strlen(ctx->settings.cover_image_path)) {
+    if (!ctx->settings.cover_image_path) {
         ctx->cover_image_pkt = NULL;
         return 0;
     }
@@ -163,10 +163,13 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     char dirname[259], filename[1024];
 
-    if (strlen(ctx->disc_name))
+    if (ctx->settings.base_dst_folder)
+        sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->name);
+    else if (strlen(ctx->disc_name))
         sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
     else
         sprintf(dirname, "%s [%s]", ctx->discid, cfmt->name);
+
     if (strlen(t->name))
         sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1, t->name, cfmt->ext);
     else
@@ -267,7 +270,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         cyanrip_log(ctx, 0, "Couldn't open %s - %s, trying using a default name\n", filename, av_err2str(ret));
         sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
         if ((ret = avio_open(&avf->pb, filename, AVIO_FLAG_WRITE)) < 0) {
-            cyanrip_log(ctx, 0, "Couldn't open %s - %s!\n", filename, av_err2str(ret));
+            cyanrip_log(ctx, 0, "Couldn't open %s - %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
             goto fail;
         }
     }

@@ -40,6 +40,7 @@ output to flac only, enables all cd-paranoia error checking and performs musicbr
 |   Argument  | Description                                                                |
 |-------------|----------------------------------------------------------------------------|
 | -d *path*   | Optional device path (e.g. /dev/sr0)                                       |
+| -D *path*   | Optional path to use as base folder name to rip into                       |
 | -c *path*   | Path to cover image to attach to files                                     |
 | -s *int*    | CD Drive offset in samples                                                 |
 | -S *int*    | Set the drive speed (0 for default/auto)                                   |

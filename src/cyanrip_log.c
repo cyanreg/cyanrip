@@ -43,6 +43,11 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
     cyanrip_log(ctx, 0, "Offset:        %c%i samples\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset));
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
+    if (ctx->settings.cover_image_path)
+        cyanrip_log(ctx, 0, "Album Art:     %s\n", ctx->settings.cover_image_path);
+    cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->settings.base_dst_folder ?
+                                               ctx->settings.base_dst_folder :
+                                               strlen(ctx->disc_name) ? ctx->disc_name : ctx->discid);
     if (ctx->settings.speed)
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
     else
