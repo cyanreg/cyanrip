@@ -374,7 +374,7 @@ int main(int argc, char **argv)
     while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
-                cyanrip_log(NULL, 0, "cyanrip help:\n");
+                cyanrip_log(NULL, 0, "%s help:\n", PROGRAM_STRING);
                 cyanrip_log(NULL, 0, "    -d <path>    Set device path\n");
                 cyanrip_log(NULL, 0, "    -D <path>    Folder to rip disc to\n");
                 cyanrip_log(NULL, 0, "    -c <path>    Set cover image path\n");

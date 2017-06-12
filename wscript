@@ -83,7 +83,7 @@ def build(ctx):
     )
     ctx(name='cyanrip',
         path=ctx.path,
-        uselib=['CDIO', 'PARA', 'LAVC', 'LAVF', 'LAVU', 'LSWR', 'DISCID', 'MB' ],
+        uselib=['CDIO', 'PARA', 'MB', 'LAVF', 'LAVC', 'LAVU', 'LSWR', 'DISCID' ],
         use=['in_file', 'cyanrip_encode', 'cyanrip_log'],
         target=APPNAME,
         source='src/cyanrip_main.c',
