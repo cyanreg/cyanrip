@@ -42,11 +42,11 @@ typedef struct cyanrip_out_fmt {
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 1, AV_CODEC_ID_FLAC,    AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 0, AV_CODEC_ID_FLAC,    AV_SAMPLE_FMT_S16,  44100 },
     [CYANRIP_FORMAT_MP3]     = { "MP3",     "mp3",   1, 1, AV_CODEC_ID_MP3,     AV_SAMPLE_FMT_S16P, 44100 },
     [CYANRIP_FORMAT_TTA]     = { "TTA",     "tta",   0, 0, AV_CODEC_ID_TTA,     AV_SAMPLE_FMT_S16,  44100 },
     [CYANRIP_FORMAT_OPUS]    = { "OPUS",    "opus",  1, 0, AV_CODEC_ID_OPUS,    AV_SAMPLE_FMT_FLT,  48000 },
-    [CYANRIP_FORMAT_AAC]     = { "AAC",     "aac",   1, 0, AV_CODEC_ID_AAC,     AV_SAMPLE_FMT_FLTP, 44100 },
+    [CYANRIP_FORMAT_AAC]     = { "AAC",     "m4a",   1, 0, AV_CODEC_ID_AAC,     AV_SAMPLE_FMT_FLTP, 44100 },
     [CYANRIP_FORMAT_WAVPACK] = { "WAVPACK", "wv",    1, 0, AV_CODEC_ID_WAVPACK, AV_SAMPLE_FMT_S16P, 44100 },
     [CYANRIP_FORMAT_VORBIS]  = { "OGG",     "ogg",   1, 0, AV_CODEC_ID_VORBIS,  AV_SAMPLE_FMT_FLTP, 44100 },
     [CYANRIP_FORMAT_ALAC]    = { "ALAC",    "m4a",   1, 0, AV_CODEC_ID_ALAC,    AV_SAMPLE_FMT_S16P, 44100 },
