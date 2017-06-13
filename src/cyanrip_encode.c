@@ -54,10 +54,12 @@ cyanrip_out_fmt fmt_map[] = {
 
 void cyanrip_print_codecs(void)
 {
+    cyanrip_init_encoding(NULL);
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
         const AVCodecDescriptor *cd = avcodec_descriptor_get(cfmt->codec);
-        cyanrip_log(NULL, 0, "    %s\n", cd->name);
+        if (avcodec_find_encoder(cfmt->codec))
+            cyanrip_log(NULL, 0, "    %s\n", cd->name);
     }
 }
 
