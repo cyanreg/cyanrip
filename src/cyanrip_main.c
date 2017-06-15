@@ -108,8 +108,6 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     ctx->tracks = calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
-    ctx->last_frame = cdio_cddap_disc_lastsector(ctx->drive);
-
     *s = ctx;
     return 0;
 }
@@ -316,6 +314,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
 
     frames -= prezero;
+    if (ctx->drive->tracks == (t->index + 1))
+        frames -= OVER_UNDER_READ_FRAMES;
 
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
@@ -323,6 +323,9 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
             cyanrip_log(NULL, 0, "\rTrack %i progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
+
+    if (ctx->drive->tracks == (t->index + 1))
+        t->nb_samples += OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW >> 1;
 
     t->nb_samples -= OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW;
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
