@@ -310,17 +310,15 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
             frame->extended_data  = frame->data;
             frame->pts            = samples_done;
             if (swr) {
-                int ret_s;
                 int in_s = swr_flush ? 0 : frame->nb_samples;
                 const uint8_t *src[] = { (const uint8_t *)src_samples };
                 AVRational cd_tb = (AVRational){ 1, 44100 };
                 AVRational adj_tb = (AVRational){ 1, 44100 * avctx->sample_rate };
-                ret_s = swr_convert(swr, frame->data, frame->nb_samples, src, in_s);
-                frame->nb_samples = ret_s;
+                frame->nb_samples = swr_convert(swr, frame->data, frame->nb_samples, src, in_s);
                 frame->pts = swr_next_pts(swr, av_rescale_q(frame->pts, cd_tb, adj_tb));
                 frame->pts /= 44100;
                 samples_done += swr_flush ? 0 : frame->nb_samples;
-                if (swr_flush && !ret_s) {
+                if (swr_flush && !frame->nb_samples) {
                     av_frame_free(&frame);
                     swr_flush = 2;
                     continue;
