@@ -218,6 +218,8 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
     time_t t_c = time(NULL);
     ctx->disc_date = localtime(&t_c);
 
+     cyanrip_log(NULL, 0, "Reading disc data...\n");
+
     /* DiscID */
     ctx->discid_ctx = discid_new();
     if (discid_read(ctx->discid_ctx, ctx->settings.dev_path) == 0)
@@ -326,8 +328,16 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     cyanrip_crc_track(ctx, t);
 
+    int enc_errs = ctx->errors_count;
+
     for (int i = 0; i < ctx->settings.outputs_num; i++)
-        cyanrip_encode_track(ctx, t, ctx->settings.outputs[i]);
+        ctx->errors_count += cyanrip_encode_track(ctx, t, ctx->settings.outputs[i]);
+
+    enc_errs = ctx->errors_count - enc_errs;
+    if (enc_errs) {
+        cyanrip_log(ctx, 0, "Failed to encode track %i!\n", t->index + 1);
+        return 1;
+    }
 
     cyanrip_log_track_end(ctx, t);
 
