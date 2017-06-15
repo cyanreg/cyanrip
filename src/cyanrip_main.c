@@ -56,19 +56,22 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cyanrip_ctx *ctx = calloc(1, sizeof(cyanrip_ctx));
 
+    ctx->settings = *settings;
+
+    if (!ctx->settings.dev_path)
+        ctx->settings.dev_path = cdio_get_default_device(NULL);
+
     if (!(ctx->cdio = cdio_open(ctx->settings.dev_path, DRIVER_UNKNOWN))) {
-        cyanrip_log(ctx, 0, "Unable to init cdio context");
+        cyanrip_log(ctx, 0, "Unable to init cdio context\n");
         return 1;
     }
 
-    ctx->drive = cdio_cddap_identify_cdio(ctx->cdio, 1, &error);
-    if (!ctx->drive) {
+    if (!(ctx->drive = cdio_cddap_identify_cdio(ctx->cdio, 1, &error))) {
         cyanrip_log(ctx, 0, "Unable to init cddap context");
         if (error)
             cyanrip_log(ctx, 0, " - \"%s\"\n", error);
         else
             cyanrip_log(ctx, 0, "!\n");
-        cyanrip_ctx_end(&ctx);
         return 1;
     }
 
@@ -106,8 +109,6 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     ctx->tracks = calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
     ctx->last_frame = cdio_cddap_disc_lastsector(ctx->drive);
-
-    ctx->settings = *settings;
 
     *s = ctx;
     return 0;
@@ -218,7 +219,7 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
     time_t t_c = time(NULL);
     ctx->disc_date = localtime(&t_c);
 
-     cyanrip_log(NULL, 0, "Reading disc data...\n");
+    cyanrip_log(NULL, 0, "Reading disc data (could take a while)...\n");
 
     /* DiscID */
     ctx->discid_ctx = discid_new();
@@ -358,13 +359,14 @@ int main(int argc, char **argv)
 {
     int ret;
 
-    cyanrip_ctx *ctx;
+    cyanrip_ctx *ctx = NULL;
     cyanrip_settings settings;
 
     if (signal(SIGINT, on_quit_signal) == SIG_ERR)
-        cyanrip_log(NULL, 0, "Can't init signal handler!\n");
+        cyanrip_log(ctx, 0, "Can't init signal handler!\n");
 
-    settings.dev_path = "/dev/sr0";
+    /* Default settings */
+    settings.dev_path = NULL;
     settings.base_dst_folder = NULL;
     settings.cover_image_path = NULL;
     settings.verbose = 1;
@@ -384,19 +386,19 @@ int main(int argc, char **argv)
     while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
-                cyanrip_log(NULL, 0, "%s help:\n", PROGRAM_STRING);
-                cyanrip_log(NULL, 0, "    -d <path>    Set device path\n");
-                cyanrip_log(NULL, 0, "    -D <path>    Folder to rip disc to\n");
-                cyanrip_log(NULL, 0, "    -c <path>    Set cover image path\n");
-                cyanrip_log(NULL, 0, "    -s <int>     CD Drive offset\n");
-                cyanrip_log(NULL, 0, "    -S <int>     Drive speed\n");
-                cyanrip_log(NULL, 0, "    -o <string>  Comma separated list of outputs\n");
-                cyanrip_log(NULL, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
-                cyanrip_log(NULL, 0, "    -t <list>    Select which tracks to rip\n");
-                cyanrip_log(NULL, 0, "    -r <int>     Maximum number of retries to read a frame\n");
-                cyanrip_log(NULL, 0, "    -f           Disable all error checking\n");
-                cyanrip_log(NULL, 0, "    -h           Print options help\n");
-                cyanrip_log(NULL, 0, "    -n           Disable musicbrainz lookup\n");
+                cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
+                cyanrip_log(ctx, 0, "    -d <path>    Set device path\n");
+                cyanrip_log(ctx, 0, "    -D <path>    Folder to rip disc to\n");
+                cyanrip_log(ctx, 0, "    -c <path>    Set cover image path\n");
+                cyanrip_log(ctx, 0, "    -s <int>     CD Drive offset\n");
+                cyanrip_log(ctx, 0, "    -S <int>     Drive speed\n");
+                cyanrip_log(ctx, 0, "    -o <string>  Comma separated list of outputs\n");
+                cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
+                cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
+                cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
+                cyanrip_log(ctx, 0, "    -h           Print options help\n");
+                cyanrip_log(ctx, 0, "    -n           Disable musicbrainz lookup\n");
                 return 0;
                 break;
             case 'S':
@@ -408,7 +410,7 @@ int main(int argc, char **argv)
             case 's':
                 settings.offset = strtol(optarg, NULL, 10);
                 if (abs(settings.offset)*4 > OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW) {
-                    cyanrip_log(NULL, 0, "Drive offset too large!\n");
+                    cyanrip_log(ctx, 0, "Drive offset too large!\n");
                     abort();
                 }
                 break;
@@ -433,7 +435,7 @@ int main(int argc, char **argv)
             case 'o':
                 settings.outputs_num = 0;
                 if (!strncmp("help", optarg, strlen("help"))) {
-                    cyanrip_log(NULL, 0, "Supported outputs:\n");
+                    cyanrip_log(ctx, 0, "Supported outputs:\n");
                     cyanrip_print_codecs();
                     return 0;
                 }
@@ -443,7 +445,7 @@ int main(int argc, char **argv)
                     if (res != -1) {
                         settings.outputs[settings.outputs_num++] = res;
                     } else {
-                        cyanrip_log(NULL, 0, "Invalid format \"%s\"\n", p);
+                        cyanrip_log(ctx, 0, "Invalid format \"%s\"\n", p);
                         return 1;
                     }
                     p = strtok(NULL, ",");

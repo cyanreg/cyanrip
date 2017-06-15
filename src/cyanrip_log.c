@@ -119,7 +119,7 @@ void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
         vfprintf(ctx->logfile, format, args);
         va_end(args);
     }
-    if (ctx && !ctx->settings.verbose && !verbose)
+    if (ctx && !ctx->settings.verbose && verbose)
         return;
     va_start(args, format);
     vprintf(format, args);
