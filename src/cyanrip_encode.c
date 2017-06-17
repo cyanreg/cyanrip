@@ -157,23 +157,40 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
     av_dict_set_int(&avf->metadata, "track",      t->index + 1,      0);
 }
 
+char *sanitize_fn(char *str)
+{
+    char forbiddenchars[] = "<>:/\\|?*";
+    char *ret = str;
+    while(*str) {
+        if (*str == '"')
+            *str = '\'';
+        else if (strchr(forbiddenchars, *str))
+            *str = '_';
+        str++;
+    }
+    return ret;
+}
+
 int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
                          enum cyanrip_output_formats format)
 {
     int ret;
     cyanrip_out_fmt *cfmt = &fmt_map[format];
 
-    char dirname[259], filename[1024];
+    char dirname[259], filename[1024], disc_name[256], track_name[256];
+    strcpy(disc_name, ctx->disc_name);
+    strcpy(track_name, t->name);
 
     if (ctx->settings.base_dst_folder)
         sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->name);
     else if (strlen(ctx->disc_name))
-        sprintf(dirname, "%s [%s]", ctx->disc_name, cfmt->name);
+        sprintf(dirname, "%s [%s]", sanitize_fn(disc_name), cfmt->name);
     else
         sprintf(dirname, "%s [%s]", ctx->discid, cfmt->name);
 
     if (strlen(t->name))
-        sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1, t->name, cfmt->ext);
+        sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1,
+                sanitize_fn(track_name), cfmt->ext);
     else
         sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
 
@@ -269,12 +286,8 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     av_dump_format(avf, 0, filename, 1);
 
     if ((ret = avio_open(&avf->pb, filename, AVIO_FLAG_WRITE)) < 0) {
-        cyanrip_log(ctx, 0, "Couldn't open %s - %s, trying using a default name\n", filename, av_err2str(ret));
-        sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
-        if ((ret = avio_open(&avf->pb, filename, AVIO_FLAG_WRITE)) < 0) {
-            cyanrip_log(ctx, 0, "Couldn't open %s - %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
-            goto fail;
-        }
+        cyanrip_log(ctx, 0, "Couldn't open %s - %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
+        goto fail;
     }
 
     if ((ret = avformat_write_header(avf, NULL)) < 0) {
