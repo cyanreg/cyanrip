@@ -60,6 +60,7 @@ typedef struct cyanrip_settings {
     int report_rate;
     int offset;
     int disable_mb;
+    int disable_overreading;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];

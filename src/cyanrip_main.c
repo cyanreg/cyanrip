@@ -314,7 +314,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
 
     frames -= prezero;
-    if (ctx->drive->tracks == (t->index + 1))
+    if (ctx->settings.disable_overreading && ctx->drive->tracks == (t->index + 1))
         frames -= OVER_UNDER_READ_FRAMES;
 
     for (int i = 0; i < frames; i++) {
@@ -324,7 +324,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
-    if (ctx->drive->tracks == (t->index + 1))
+    if (ctx->settings.disable_overreading && ctx->drive->tracks == (t->index + 1))
         t->nb_samples += OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW >> 1;
 
     t->nb_samples -= OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW;
@@ -379,6 +379,7 @@ int main(int argc, char **argv)
     settings.report_rate = 20;
     settings.offset = 0;
     settings.disable_mb = 0;
+    settings.disable_overreading = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
@@ -386,7 +387,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfit:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnfRit:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
@@ -399,6 +400,7 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(ctx, 0, "    -R           Don't overread end track (for buggy drives)\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
                 cyanrip_log(ctx, 0, "    -n           Disable musicbrainz lookup\n");
@@ -406,6 +408,9 @@ int main(int argc, char **argv)
                 break;
             case 'S':
                 settings.speed = abs((int)strtol(optarg, NULL, 10));
+                break;
+            case 'R':
+                settings.disable_overreading = 1;
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
