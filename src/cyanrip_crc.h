@@ -41,9 +41,19 @@ static inline uint32_t ieee_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
     return av_crc(avcrc, 0, (uint8_t *)t->samples, t->nb_samples << 1);
 }
 
+static inline uint32_t eac_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    const AVCRC *avcrc = av_crc_get_table(AV_CRC_32_IEEE_LE);
+    uint32_t crc = 0xFFFFFFFF;
+    crc = av_crc(avcrc, crc, (uint8_t *)t->samples, t->nb_samples << 1);
+    crc ^= 0xFFFFFFFF;
+    return crc;
+}
+
 static inline int cyanrip_crc_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     t->ieee_crc_32 = ieee_crc_32(ctx, t);
+    t->eac_crc     = eac_crc_32(ctx, t);
 
     return 0;
 }
