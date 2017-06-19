@@ -34,8 +34,6 @@
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 
-#define OVER_UNDER_READ_FRAMES 4
-
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
     CYANRIP_FORMAT_TTA,
@@ -59,8 +57,8 @@ typedef struct cyanrip_settings {
     int frame_max_retries;
     int report_rate;
     int offset;
+    int over_under_read_frames;
     int disable_mb;
-    int disable_overreading;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];

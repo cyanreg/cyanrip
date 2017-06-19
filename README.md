@@ -49,7 +49,6 @@ output to flac only, enables all cd-paranoia error checking and performs musicbr
 | -b *float*  | Bitrate of lossy files in kbps                                             |
 | -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
 | -r *int*    | Max retries to read a frame before considering it corrupt                  |
-| -R          | Disables overreading on last track (buggy drives sometimes fail to seek)   |
 | -f          | Disable CD paranoia error checking (for speed)                             |
 | -h          | List all arguments and their description (this)                            |
 | -n          | Disable Musicbrainz lookup                                                 |

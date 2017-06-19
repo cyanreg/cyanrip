@@ -301,9 +301,15 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->end_sector = first_frame+frames;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
-    frames += 2*OVER_UNDER_READ_FRAMES;
+    frames += abs(ctx->settings.over_under_read_frames);
 
-    lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
+    int underread = ctx->settings.over_under_read_frames;
+    underread = underread < 0 ? underread : 0;
+
+    int overread = ctx->settings.over_under_read_frames;
+    overread = overread >= 0 ? overread : 0;
+
+    lsn_t seek_dest = first_frame - underread;
     lsn_t prezero = seek_dest < 0 ? -seek_dest : 0;
     seek_dest = seek_dest < 0 ? 0 : seek_dest;
     cdio_paranoia_seek(ctx->paranoia, seek_dest, SEEK_SET);
@@ -311,13 +317,12 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
     t->base_data = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
-    int offset = OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
+    int offset = underread*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
     t->samples = (int16_t *)(t->base_data + offset);
-    t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
 
+    /* For underreading */
+    t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
     frames -= prezero;
-    if (ctx->settings.disable_overreading && ctx->drive->tracks == (t->index + 1))
-        frames -= OVER_UNDER_READ_FRAMES;
 
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
@@ -326,10 +331,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
-    if (ctx->settings.disable_overreading && ctx->drive->tracks == (t->index + 1))
-        t->nb_samples += OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW >> 1;
-
-    t->nb_samples -= OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW;
+    t->nb_samples -= overread*CDIO_CD_FRAMESIZE_RAW;
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
 
     cyanrip_crc_track(ctx, t);
@@ -377,11 +379,11 @@ int main(int argc, char **argv)
     settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 5;
+    settings.over_under_read_frames = 0;
     settings.paranoia_mode = PARANOIA_MODE_FULL;
     settings.report_rate = 20;
     settings.offset = 0;
     settings.disable_mb = 0;
-    settings.disable_overreading = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
@@ -402,7 +404,6 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
-                cyanrip_log(ctx, 0, "    -R           Don't overread end track (for buggy drives)\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
                 cyanrip_log(ctx, 0, "    -n           Disable musicbrainz lookup\n");
@@ -411,18 +412,14 @@ int main(int argc, char **argv)
             case 'S':
                 settings.speed = abs((int)strtol(optarg, NULL, 10));
                 break;
-            case 'R':
-                settings.disable_overreading = 1;
-                break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
                 break;
             case 's':
                 settings.offset = strtol(optarg, NULL, 10);
-                if (abs(settings.offset)*4 > OVER_UNDER_READ_FRAMES*CDIO_CD_FRAMESIZE_RAW) {
-                    cyanrip_log(ctx, 0, "Drive offset too large!\n");
-                    abort();
-                }
+                int sign = settings.offset < 0 ? -1 : +1;
+                int frames = ceilf(abs(settings.offset)/(float)(CDIO_CD_FRAMESIZE_RAW >> 2));
+                settings.over_under_read_frames = sign*frames;
                 break;
             case 'n':
                 settings.disable_mb = 1;

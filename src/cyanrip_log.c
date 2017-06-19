@@ -46,7 +46,14 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
     cyanrip_log(ctx, 0, "%s\n",                PROGRAM_STRING);
     cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
-    cyanrip_log(ctx, 0, "Offset:        %c%i samples\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset));
+    cyanrip_log(ctx, 0, "Offset:        %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
+                abs(ctx->settings.offset) == 1 ? "sample" : "samples");
+    cyanrip_log(ctx, 0, "%s%c%i %s\n",
+                ctx->settings.over_under_read_frames < 0 ? "Underread:     " : "Overread:      ",
+                ctx->settings.over_under_read_frames >= 0 ? '+' : '-',
+                abs(ctx->settings.over_under_read_frames),
+                abs(ctx->settings.over_under_read_frames) == 1 ? "frame" : "frames");
+
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
     if (ctx->settings.cover_image_path)
         cyanrip_log(ctx, 0, "Album Art:     %s\n", ctx->settings.cover_image_path);
