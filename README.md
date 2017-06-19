@@ -9,6 +9,7 @@ Features
  * Drive offset compensation, error recovery via cd-paranoia
  * Able to encode to multiple formats simultaneously
  * Able to mux in cover images to mp3 and flac (soon in latest ffmpeg git) files
+ * Provides IEEE CRC32, EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
 Compiling

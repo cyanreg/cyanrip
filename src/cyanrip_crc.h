@@ -41,6 +41,7 @@ static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
     int mult = 1;
     int start = 0;
     int end   = t->nb_samples/2;
+    uint32_t *samples = (uint32_t *)t->samples;
 
     uint32_t sum = 0;
 
@@ -51,7 +52,7 @@ static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
 
     for (int i = 0; i < t->nb_samples; i++) {
 		if (mult >= start && mult <= end)
-			sum += mult * t->samples[i];
+			sum += mult * samples[i];
 
 		mult++;
 	}
