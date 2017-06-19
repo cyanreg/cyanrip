@@ -331,8 +331,10 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
-    t->nb_samples -= overread*CDIO_CD_FRAMESIZE_RAW;
-    t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
+    if (overread) {
+        t->nb_samples -= overread*CDIO_CD_FRAMESIZE_RAW;
+        t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
+    }
 
     cyanrip_crc_track(ctx, t);
 
