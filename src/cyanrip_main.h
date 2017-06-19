@@ -79,6 +79,8 @@ typedef struct cyanrip_track {
     size_t nb_samples;
     uint32_t ieee_crc_32;
     uint32_t eac_crc;
+    int start_sector;
+    int end_sector;
     /* Metadata */
 
     int16_t *samples;       /* Actual compensated track data with length nb_samples */

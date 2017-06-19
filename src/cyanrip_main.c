@@ -297,9 +297,11 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
         return 1;
     }
 
-    frames += 2*OVER_UNDER_READ_FRAMES;
-
+    t->start_sector = first_frame;
+    t->end_sector = first_frame+frames;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
+
+    frames += 2*OVER_UNDER_READ_FRAMES;
 
     lsn_t seek_dest = first_frame - OVER_UNDER_READ_FRAMES;
     lsn_t prezero = seek_dest < 0 ? -seek_dest : 0;
