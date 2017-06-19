@@ -280,7 +280,7 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
-    uint32_t frames = 0, first_frame = 0;
+    uint32_t samples, frames = 0, first_frame = 0;
 
     t->index = index;
 
@@ -297,8 +297,9 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
         return 1;
     }
 
+    samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
-    t->end_sector = first_frame+frames;
+    t->end_sector = first_frame + frames;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
@@ -307,7 +308,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     underread = underread < 0 ? underread : 0;
 
     int overread = ctx->settings.over_under_read_frames;
-    overread = overread >= 0 ? overread : 0;
+    overread = overread > 0 ? overread : 0;
 
     lsn_t seek_dest = first_frame - underread;
     lsn_t prezero = seek_dest < 0 ? -seek_dest : 0;
@@ -331,10 +332,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
-    if (overread) {
-        t->nb_samples -= overread*CDIO_CD_FRAMESIZE_RAW;
-        t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
-    }
+    t->nb_samples = samples;
 
     cyanrip_crc_track(ctx, t);
 
