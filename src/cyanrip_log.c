@@ -37,6 +37,8 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
     cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_sector);
     cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_sector);
+    cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
+    cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
     cyanrip_log(ctx, 0, "\n");
 }
 

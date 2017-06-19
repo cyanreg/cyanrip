@@ -21,20 +21,6 @@
 #include "cyanrip_main.h"
 #include "libavutil/crc.h"
 
-/* "Accurip checksums"? WHAT CHECKSUMS? THEY'RE NOT DESERVING OF BEING CALLED CHECKSUMS!
- * Checksums check things in the most optimal way in order to detect bit errors in completely
- * arbitrary positions. What a checksum is not, however, is all samples summed together.
- * Which is what theses so called "Accuraterip checksums" are. They're COMPLETELY UNSCIENTIFIC,
- * algorithms without any REAL MATHEMATICAL BASIS for error detection. They're complete crap
- * and the person who wrote them HAD ABSOLUTELY NO FUCKING CLUE WHAT A FUCKING CHECKSUM IS.
- * Below is a real checksum. Below is something way more optimal. Below is an IEEE 32 bit
- * checksum with a polynomial. A real checksum. The polynomial may not best fit the distribution
- * of CD data but nevertheless IT FUCKING CHECKS THINGS ARE OKAY AND WILL DETECT INACCURACIES!
- * Not that you need to know that since the program will warn on errors.
- * I'm a person who had to pour his blood, sweat and patience to implement an 18 bit CRC
- * on 10 bit data sources, so I have the dignity of NOT implementing that crap.
- * If someone else wants to do it instead, go right ahead and please send a patch. */
-
 static inline uint32_t ieee_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     const AVCRC *avcrc = av_crc_get_table(AV_CRC_32_IEEE);
@@ -50,10 +36,65 @@ static inline uint32_t eac_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
     return crc;
 }
 
+static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    int mult = 1;
+    int start = 0;
+    int end   = t->nb_samples/2;
+
+    uint32_t sum = 0;
+
+    if (!t->index)
+        start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
+    else if (t->index == ctx->drive->tracks - 1)
+        end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
+
+    for (int i = 0; i < t->nb_samples; i++) {
+		if (mult >= start && mult <= end)
+			sum += mult * t->samples[i];
+
+		mult++;
+	}
+
+    return sum;
+}
+
+static inline uint32_t acurip_crc_v2(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    int mult = 1;
+    int start = 0;
+    int end   = t->nb_samples/2;
+    uint32_t *samples = (uint32_t *)t->samples;
+
+    uint32_t sum = 0;
+
+    if (!t->index)
+        start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
+    else if (t->index == ctx->drive->tracks - 1)
+        end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
+
+    for (int i = 0; i < t->nb_samples >> 1; i++) {
+		if (mult >= start && mult <= end) {
+		    uint32_t val = samples[i];
+			uint64_t tmp = (uint64_t)val  * (uint64_t)mult;
+            uint32_t lo  = (uint32_t)(tmp & (uint64_t)0xFFFFFFFF);
+            uint32_t hi  = (uint32_t)(tmp / (uint64_t)0x100000000);
+            sum += hi;
+            sum += lo;
+	    }
+
+		mult++;
+	}
+
+    return sum;
+}
+
 static inline int cyanrip_crc_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     t->ieee_crc_32 = ieee_crc_32(ctx, t);
     t->eac_crc     = eac_crc_32(ctx, t);
+    t->acurip_crc_v1 = acurip_crc_v1(ctx, t);
+    t->acurip_crc_v2 = acurip_crc_v2(ctx, t);
 
     return 0;
 }
