@@ -96,12 +96,11 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_paranoia_modeset(ctx->paranoia, settings->paranoia_mode);
 
+    ctx->last_frame = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
     if (ctx->drive->tracks) {
         ctx->duration = cdio_get_track_last_lsn(ctx->cdio, ctx->drive->tracks) - cdio_get_track_last_lsn(ctx->cdio, 0);
-        ctx->last_frame = cdio_get_track_last_lsn(ctx->cdio, ctx->drive->tracks);
     } else {
         ctx->duration = cdio_get_disc_last_lsn(ctx->cdio);
-        ctx->last_frame = ctx->duration;
     }
 
     cyanrip_init_encoding(ctx);
@@ -280,7 +279,7 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
-    uint32_t samples, frames = 0, first_frame = 0;
+    uint32_t samples, frames = 1, first_frame = 0;
 
     t->index = index;
 
@@ -299,7 +298,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
-    t->end_sector = first_frame + frames;
+    t->end_sector = first_frame + frames - 1;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
@@ -318,22 +317,25 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
     t->base_data = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
-    int offset = underread*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
+    int offset = abs(underread)*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
     t->samples = (int16_t *)(t->base_data + offset);
 
     /* For underreading */
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
     frames -= prezero;
 
+    // cyanrip_log(NULL, 0, "before: offset=%i frames=%i samples=%i t->nb_samples=%i will be %i\n",
+    //     offset, frames, samples, t->nb_samples, frames*1176);
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
         if (!(i % ctx->settings.report_rate))
             cyanrip_log(NULL, 0, "\rTrack %i progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
+    // cyanrip_log(NULL, 0, "after:  offset=%i frames=%i samples=%i t->nb_samples=%i dif=%i\n",
+    //     offset, frames, samples, t->nb_samples, t->nb_samples-samples);
 
     t->nb_samples = samples;
-
     cyanrip_crc_track(ctx, t);
 
     int enc_errs = ctx->errors_count;
