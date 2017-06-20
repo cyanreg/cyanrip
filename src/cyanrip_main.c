@@ -356,7 +356,7 @@ void on_quit_signal(int signo)
         exit(1);
     }
     cyanrip_log(NULL, 0, "Trying to quit\n");
-    quit_now = 1;   
+    quit_now = 1;
 }
 
 int main(int argc, char **argv)
