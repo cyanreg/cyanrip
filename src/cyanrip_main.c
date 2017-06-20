@@ -278,9 +278,13 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
-    uint32_t samples, frames = 1, first_frame = 0;
+    uint32_t samples, last = 0, frames = 1, first_frame = 0;
 
     t->index = index;
+    if (t->index == ctx->drive->tracks) {
+        last = 1;
+        frames = 0;
+    }
 
     if (index < ctx->drive->tracks) {
         frames += cdio_get_track_last_lsn(ctx->cdio, t->index + 1);
@@ -297,7 +301,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
-    t->end_sector = first_frame + frames - 1;
+    t->end_sector = first_frame + frames - !last;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
@@ -331,6 +335,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
     t->nb_samples = samples;
+    t->nb_samples += last ? CDIO_CD_FRAMESIZE_RAW >> 2 : 0;
     cyanrip_crc_track(ctx, t);
 
     int enc_errs = ctx->errors_count;
