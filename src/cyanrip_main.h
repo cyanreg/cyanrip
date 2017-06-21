@@ -53,7 +53,7 @@ typedef struct cyanrip_settings {
     char *base_dst_folder;
     bool verbose;
     int speed;
-    int paranoia_mode;
+    int fast_mode;
     int frame_max_retries;
     int report_rate;
     int offset;

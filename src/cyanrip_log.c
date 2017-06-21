@@ -65,7 +65,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     else
         cyanrip_log(ctx, 0, "Speed:         default\n");
     cyanrip_log(ctx, 0, "Paranoia:      %s\n",
-                ctx->settings.paranoia_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
+                ctx->settings.fast_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
     cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "Outputs:       ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)

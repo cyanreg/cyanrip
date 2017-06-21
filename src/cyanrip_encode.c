@@ -36,20 +36,21 @@ typedef struct cyanrip_out_fmt {
     const char *ext;
     int resample;
     int coverart_supported;
+    int compression_level;
     int codec;
     int sfmt;
     int rate;
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 0, AV_CODEC_ID_FLAC,    AV_SAMPLE_FMT_S16,  44100 },
-    [CYANRIP_FORMAT_MP3]     = { "MP3",     "mp3",   1, 1, AV_CODEC_ID_MP3,     AV_SAMPLE_FMT_S16P, 44100 },
-    [CYANRIP_FORMAT_TTA]     = { "TTA",     "tta",   0, 0, AV_CODEC_ID_TTA,     AV_SAMPLE_FMT_S16,  44100 },
-    [CYANRIP_FORMAT_OPUS]    = { "OPUS",    "opus",  1, 0, AV_CODEC_ID_OPUS,    AV_SAMPLE_FMT_FLT,  48000 },
-    [CYANRIP_FORMAT_AAC]     = { "AAC",     "m4a",   1, 0, AV_CODEC_ID_AAC,     AV_SAMPLE_FMT_FLTP, 44100 },
-    [CYANRIP_FORMAT_WAVPACK] = { "WAVPACK", "wv",    1, 0, AV_CODEC_ID_WAVPACK, AV_SAMPLE_FMT_S16P, 44100 },
-    [CYANRIP_FORMAT_VORBIS]  = { "VORBIS",  "ogg",   1, 0, AV_CODEC_ID_VORBIS,  AV_SAMPLE_FMT_FLTP, 44100 },
-    [CYANRIP_FORMAT_ALAC]    = { "ALAC",    "m4a",   1, 0, AV_CODEC_ID_ALAC,    AV_SAMPLE_FMT_S16P, 44100 },
+    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 0, 11, AV_CODEC_ID_FLAC,    AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_MP3]     = { "MP3",     "mp3",   1, 1,  0, AV_CODEC_ID_MP3,     AV_SAMPLE_FMT_S16P, 44100 },
+    [CYANRIP_FORMAT_TTA]     = { "TTA",     "tta",   0, 0,  0, AV_CODEC_ID_TTA,     AV_SAMPLE_FMT_S16,  44100 },
+    [CYANRIP_FORMAT_OPUS]    = { "OPUS",    "opus",  1, 0, 10, AV_CODEC_ID_OPUS,    AV_SAMPLE_FMT_FLT,  48000 },
+    [CYANRIP_FORMAT_AAC]     = { "AAC",     "m4a",   1, 0,  0, AV_CODEC_ID_AAC,     AV_SAMPLE_FMT_FLTP, 44100 },
+    [CYANRIP_FORMAT_WAVPACK] = { "WAVPACK", "wv",    1, 0,  8, AV_CODEC_ID_WAVPACK, AV_SAMPLE_FMT_S16P, 44100 },
+    [CYANRIP_FORMAT_VORBIS]  = { "VORBIS",  "ogg",   1, 0,  0, AV_CODEC_ID_VORBIS,  AV_SAMPLE_FMT_FLTP, 44100 },
+    [CYANRIP_FORMAT_ALAC]    = { "ALAC",    "m4a",   1, 0,  2, AV_CODEC_ID_ALAC,    AV_SAMPLE_FMT_S16P, 44100 },
 };
 
 void cyanrip_print_codecs(void)
@@ -258,14 +259,17 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         goto fail;
     }
 
-    avctx->opaque         = ctx;
-    avctx->bit_rate       = lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt     = cfmt->sfmt;
-    avctx->channel_layout = AV_CH_LAYOUT_STEREO;
-    avctx->sample_rate    = cfmt->rate;
-    avctx->channels       = 2;
-    st->id                = 0;
-    st->time_base         = (AVRational){ 1, avctx->sample_rate };
+    avctx->opaque            = ctx;
+    avctx->bit_rate          = lrintf(ctx->settings.bitrate*1000.0f);
+    avctx->sample_fmt        = cfmt->sfmt;
+    avctx->channel_layout    = AV_CH_LAYOUT_STEREO;
+    avctx->compression_level = cfmt->compression_level;
+    avctx->sample_rate       = cfmt->rate;
+    avctx->channels          = 2;
+    st->id                   = 0;
+    st->time_base            = (AVRational){ 1, avctx->sample_rate };
+    if (ctx->settings.fast_mode)
+        avctx->compression_level = 0;
 
     if (avf->oformat->flags & AVFMT_GLOBALHEADER)
         avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;

@@ -94,7 +94,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    cdio_paranoia_modeset(ctx->paranoia, settings->paranoia_mode);
+    int mode = ctx->settings.fast_mode ? PARANOIA_MODE_FULL : PARANOIA_MODE_DISABLE;
+    cdio_paranoia_modeset(ctx->paranoia, mode);
 
     ctx->last_frame = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
     if (ctx->drive->tracks)
@@ -380,9 +381,9 @@ int main(int argc, char **argv)
     settings.cover_image_path = NULL;
     settings.verbose = 1;
     settings.speed = 0;
+    settings.fast_mode = 0;
     settings.frame_max_retries = 5;
     settings.over_under_read_frames = 0;
-    settings.paranoia_mode = PARANOIA_MODE_FULL;
     settings.report_rate = 20;
     settings.offset = 0;
     settings.disable_mb = 0;
@@ -470,7 +471,7 @@ int main(int argc, char **argv)
                 settings.dev_path = optarg;
                 break;
             case 'f':
-                settings.paranoia_mode = PARANOIA_MODE_DISABLE;
+                settings.fast_mode = 1;
                 break;
             case '?':
                 return 1;
