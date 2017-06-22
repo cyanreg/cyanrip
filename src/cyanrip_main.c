@@ -216,20 +216,28 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
     time_t t_c = time(NULL);
     ctx->disc_date = localtime(&t_c);
 
-    cyanrip_log(NULL, 0, "Reading disc data (could take a while)...\n");
-
     /* DiscID */
     ctx->discid_ctx = discid_new();
-    if (discid_read(ctx->discid_ctx, ctx->settings.dev_path) == 0)
-        cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
-    else
-        strcpy(ctx->discid, discid_get_id(ctx->discid_ctx));
+    if (!ctx->settings.fast_mode) {
+        cyanrip_log(NULL, 0, "Reading full disc metadata (could take a while)...\n");
+        if (!discid_read(ctx->discid_ctx, ctx->settings.dev_path)) {
+            cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
+            return 1;
+        } else {
+            strcpy(ctx->discid, discid_get_id(ctx->discid_ctx));
+            ctx->disc_mcn = discid_get_mcn(ctx->discid_ctx);
+        }
 
-    ctx->disc_mcn = discid_get_mcn(ctx->discid_ctx);
-
-    /* MusicBrainz */
-    if (!ctx->settings.disable_mb)
-        ret |= cyanrip_mb_metadata(ctx);
+        /* MusicBrainz */
+        if (!ctx->settings.disable_mb)
+            ret |= cyanrip_mb_metadata(ctx);
+    } else {
+        cyanrip_log(NULL, 0, "Extracting TOC...\n");
+        if (!discid_read_sparse(ctx->discid_ctx, ctx->settings.dev_path, 0)) {
+            cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
+            return 1;
+        }
+    }
 
     return ret;
 }
@@ -279,16 +287,12 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
-    uint32_t samples, last = 0, frames = 1, first_frame = 0;
+    uint32_t samples, frames, first_frame = 0;
 
     t->index = index;
-    if (t->index == ctx->drive->tracks) {
-        last = 1;
-        frames = 0;
-    }
 
     if (index < ctx->drive->tracks) {
-        frames += cdio_get_track_last_lsn(ctx->cdio, t->index + 1);
+        frames = cdio_get_track_last_lsn(ctx->cdio, t->index + 1) + 1;
         if (frames > ctx->last_frame) {
             cyanrip_log(ctx, 0, "Track last frame larger than last disc frame!\n");
             return 1;
@@ -300,9 +304,9 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
         return 1;
     }
 
-    samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
+    samples = (frames - 1)*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
-    t->end_sector = first_frame + frames - !last;
+    t->end_sector = first_frame;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
@@ -328,6 +332,10 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
     frames -= prezero;
 
+    /* For overreading */
+    if (overread && t->index == ctx->drive->tracks)
+        frames -= overread;
+
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
         if (!(i % ctx->settings.report_rate))
@@ -336,7 +344,6 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
     t->nb_samples = samples;
-    t->nb_samples += last ? CDIO_CD_FRAMESIZE_RAW >> 2 : 0;
     cyanrip_crc_track(ctx, t);
 
     int enc_errs = ctx->errors_count;
@@ -394,7 +401,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfRit:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnft:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);

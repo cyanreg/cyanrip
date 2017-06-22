@@ -64,8 +64,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
     else
         cyanrip_log(ctx, 0, "Speed:         default\n");
-    cyanrip_log(ctx, 0, "Paranoia:      %s\n",
-                ctx->settings.fast_mode == PARANOIA_MODE_DISABLE ? "fast" : "full");
+    cyanrip_log(ctx, 0, "Paranoia:      %s\n", ctx->settings.fast_mode ? "fast" : "full");
     cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "Outputs:       ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
@@ -82,7 +81,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     char duration[16];
     cyanrip_frames_to_duration(ctx->duration, duration);
     cyanrip_log(ctx, 0, "DiscID:        %s\n", ctx->discid);
-    cyanrip_log(ctx, 0, "Disc MCN:      %s\n", ctx->disc_mcn);
+    cyanrip_log(ctx, 0, "Disc MCN:      %s\n", ctx->disc_mcn ? ctx->disc_mcn : "");
     cyanrip_log(ctx, 0, "Album:         %s\n", ctx->disc_name);
     cyanrip_log(ctx, 0, "Artist:        %s\n", ctx->album_artist);
     cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
