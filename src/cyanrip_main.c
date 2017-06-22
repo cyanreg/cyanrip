@@ -333,7 +333,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     frames -= prezero;
 
     /* For overreading */
-    if (overread && t->index == ctx->drive->tracks)
+    if (overread && (t->index == ctx->drive->tracks))
         frames -= overread;
 
     for (int i = 0; i < frames; i++) {

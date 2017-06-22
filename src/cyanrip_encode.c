@@ -184,10 +184,12 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
     if (ctx->settings.base_dst_folder)
         sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->name);
-    else if (strlen(ctx->disc_name) && strcmp(ctx->disc_name, ""))
+    else if (strlen(ctx->disc_name))
         sprintf(dirname, "%s [%s]", sanitize_fn(disc_name), cfmt->name);
-    else
+    else if (strlen(ctx->discid))
         sprintf(dirname, "%s [%s]", ctx->discid, cfmt->name);
+    else
+        sprintf(dirname, "%s [%s]", "CR_Album", cfmt->name);
 
     if (strlen(t->name))
         sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1,
