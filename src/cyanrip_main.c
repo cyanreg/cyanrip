@@ -196,7 +196,8 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
             }
             mb5_metadata_delete(metadata);
         } else {
-            cyanrip_log(ctx, 0, "MusicBrainz lookup failed, try again later.\n");
+            cyanrip_log(ctx, 0, "MusicBrainz lookup failed, either server was busy "
+                                "or CD is missing from database, try again or disable with -n\n");
             ret = 1;
         }
         mb5_query_delete(query);
