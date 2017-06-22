@@ -332,8 +332,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
     frames -= prezero;
 
-    /* For overreading */
-    if (overread && (t->index == ctx->drive->tracks))
+    /* Don't overread into lead-out */
+    if ((first_frame + frames) > ctx->last_frame)
         frames -= overread;
 
     for (int i = 0; i < frames; i++) {
