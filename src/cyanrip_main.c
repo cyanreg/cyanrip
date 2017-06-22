@@ -223,20 +223,18 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
         cyanrip_log(NULL, 0, "Reading full disc metadata (could take a while)...\n");
         if (!discid_read(ctx->discid_ctx, ctx->settings.dev_path)) {
             cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
-            return 1;
         } else {
             strcpy(ctx->discid, discid_get_id(ctx->discid_ctx));
             ctx->disc_mcn = discid_get_mcn(ctx->discid_ctx);
-        }
 
-        /* MusicBrainz */
-        if (!ctx->settings.disable_mb)
-            ret |= cyanrip_mb_metadata(ctx);
+            /* MusicBrainz */
+            if (!ctx->settings.disable_mb)
+                ret |= cyanrip_mb_metadata(ctx);
+        }
     } else {
         cyanrip_log(NULL, 0, "Extracting TOC...\n");
         if (!discid_read_sparse(ctx->discid_ctx, ctx->settings.dev_path, 0)) {
             cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(ctx->discid_ctx));
-            return 1;
         }
     }
 
