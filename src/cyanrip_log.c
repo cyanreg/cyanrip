@@ -29,7 +29,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
     cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->index + 1);
     cyanrip_log(ctx, 0, "    Title:       %s\n", t->name);
-    cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc);
+    cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc ? t->isrc : "");
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
@@ -45,7 +45,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
     cyanrip_log(ctx, 0, "%s\n",                PROGRAM_STRING);
-    cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model);
+    cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model ? ctx->drive->drive_model : "");
     cyanrip_log(ctx, 0, "Offset:        %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
                 abs(ctx->settings.offset) == 1 ? "sample" : "samples");
     cyanrip_log(ctx, 0, "%s%c%i %s\n",
