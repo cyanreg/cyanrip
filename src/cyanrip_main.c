@@ -286,26 +286,27 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 {
-    uint32_t samples, frames, first_frame = 0;
+    uint32_t samples, frames, last_frame, first_frame = 0;
 
     t->index = index;
 
     if (index < ctx->drive->tracks) {
-        frames = cdio_get_track_last_lsn(ctx->cdio, t->index + 1) + 1;
-        if (frames > ctx->last_frame) {
+        /* last frame obtained from cdio is inclusive */
+        last_frame = cdio_get_track_last_lsn(ctx->cdio, t->index + 1);
+        if (last_frame > ctx->last_frame) {
             cyanrip_log(ctx, 0, "Track last frame larger than last disc frame!\n");
             return 1;
         }
         first_frame = cdio_get_track_lsn(ctx->cdio, t->index + 1);
-        frames -= first_frame;
+        frames = last_frame - first_frame + 1;
     } else {
         cyanrip_log(ctx, 0, "Invalid track index = %i\n", index);
         return 1;
     }
 
-    samples = (frames - 1)*(CDIO_CD_FRAMESIZE_RAW >> 1);
+    samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
-    t->end_sector = first_frame;
+    t->end_sector = last_frame;
     t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
