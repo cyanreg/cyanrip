@@ -156,6 +156,7 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
     ADD_TAG(&avf->metadata, "date",               t_disc_date,       0);
     ADD_TAG(&avf->metadata, "musicbrainz_discid", ctx->discid,       0);
     av_dict_set_int(&avf->metadata, "track",      t->index + 1,      0);
+    av_dict_set_int(&avf->metadata, "tracktotal", ctx->drive->tracks,0);
 }
 
 char *sanitize_fn(char *str)
