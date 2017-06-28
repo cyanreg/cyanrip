@@ -311,8 +311,11 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         }
     }
 
-    int swr_flush = 0;
+    float len_s = t->nb_samples/44100;
+    int samples_target = floor(len_s * avctx->sample_rate / (cfmt->resample + 1));
+
     int eof_met = 0;
+    int swr_flush = 0;
     int samples_done = 0;
     int samples_left = t->nb_samples;
     int16_t *src_samples = t->samples;
@@ -349,6 +352,8 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
             }
             src_samples  += frame->nb_samples*2;
             samples_left -= frame->nb_samples*2;
+            cyanrip_log(NULL, 0, "\rEncoding track %i, progress - %0.2f%%", t->index + 1,
+                        ((double)frame->pts/samples_target)*100.0f);
             if (samples_left <= 0 && swr && !swr_flush)
                 swr_flush = 1;
         }
@@ -386,6 +391,8 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     avio_closep(&avf->pb);
     avformat_free_context(avf);
     av_free(avctx);
+
+    cyanrip_log(NULL, 0, "\r\nTrack %i encoded!\n", t->index + 1);
 
     return 0;
 

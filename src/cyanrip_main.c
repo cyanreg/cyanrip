@@ -339,7 +339,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
         if (!(i % ctx->settings.report_rate))
-            cyanrip_log(NULL, 0, "\rTrack %i progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
+            cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
