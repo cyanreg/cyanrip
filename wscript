@@ -55,6 +55,10 @@ def configure(ctx):
     ctx.check_cfg(package='libmusicbrainz5', args=pkgcnf_args, uselib_store='MB')
     ctx.check_cc(msg='Checking for the new paranoia API', header_name='cdio/paranoia/paranoia.h', mandatory=False)
 
+    if ctx.env.DEST_OS == 'win32':
+        ctx.check_cc(msg='Checking for wmain() support', fragment='int wmain() {return 0;}\n',
+            cflags="-municode", linkflags="-municode", uselib_store='WMAIN', define_name='HAVE_WMAIN')
+
     if (VERSION):
         package_ver = VERSION
     else:
@@ -89,7 +93,7 @@ def build(ctx):
     )
     ctx(name='cyanrip',
         path=ctx.path,
-        uselib=['CDIO', 'PARA', 'MB', 'LAVC', 'LAVF', 'LSWR', 'LAVU', 'DISCID' ],
+        uselib=['CDIO', 'PARA', 'MB', 'LAVC', 'LAVF', 'LSWR', 'LAVU', 'DISCID', 'WMAIN' ],
         use=['in_file', 'cyanrip_encode', 'cyanrip_log'],
         target=APPNAME,
         source='src/cyanrip_main.c',

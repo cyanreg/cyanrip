@@ -23,7 +23,7 @@
 #include "cyanrip_log.h"
 #include "cyanrip_crc.h"
 #include "cyanrip_encode.h"
-#include "cyanrip_log.h"
+#include "os_compat.h"
 
 bool quit_now = 0;
 
@@ -521,3 +521,33 @@ int main(int argc, char **argv)
 
     return ret;
 }
+
+#ifdef HAVE_WMAIN
+int wmain(int argc, wchar_t *argv[])
+{
+    char** win32_argv_utf8 = NULL;
+    char *argstr_flat;
+    int i, ret, buffsize = 0, offset = 0;
+
+    /* determine the UTF-8 buffer size (including NULL-termination symbols) */
+    for (i = 0; i < argc; i++)
+        buffsize += WideCharToMultiByte(CP_UTF8, 0, argv[i], -1,
+                                        NULL, 0, NULL, NULL);
+
+    win32_argv_utf8 = av_mallocz(sizeof(char *) * (argc + 1) + buffsize);
+    argstr_flat     = (char *)win32_argv_utf8 + sizeof(char *) * (argc + 1);
+
+    for (i = 0; i < argc; i++) {
+        win32_argv_utf8[i] = &argstr_flat[offset];
+        offset += WideCharToMultiByte(CP_UTF8, 0, argv[i], -1,
+                                      &argstr_flat[offset],
+                                      buffsize - offset, NULL, NULL);
+    }
+    win32_argv_utf8[i] = NULL;
+
+    ret = main(argc, win32_argv_utf8);
+
+    av_free(win32_argv_utf8);
+    return ret;
+}
+#endif
