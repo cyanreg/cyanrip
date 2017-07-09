@@ -106,7 +106,9 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
     char logfile[260], disc_name[256];
     strcpy(disc_name, ctx->disc_name);
 
-    if (strlen(ctx->disc_name))
+    if (ctx->settings.base_dst_folder)
+        sprintf(logfile, "%s.%s", ctx->settings.base_dst_folder, "log");
+    else if (strlen(ctx->disc_name))
         sprintf(logfile, "%s.%s", cyanrip_sanitize_fn(disc_name), "log");
     else
         sprintf(logfile, "%s.%s", ctx->discid, "log");
