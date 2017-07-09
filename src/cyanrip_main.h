@@ -135,3 +135,17 @@ static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
     const int msec  = tot - sec;
     snprintf(str, 12, "%02i:%02i:%02i.%i", hr, min, sec, msec);
 }
+
+static inline char *cyanrip_sanitize_fn(char *str)
+{
+    char forbiddenchars[] = "<>:/\\|?*";
+    char *ret = str;
+    while(*str) {
+        if (*str == '"')
+            *str = '\'';
+        else if (strchr(forbiddenchars, *str))
+            *str = '_';
+        str++;
+    }
+    return ret;
+}

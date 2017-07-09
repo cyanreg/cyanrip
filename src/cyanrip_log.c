@@ -103,9 +103,11 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
-    char logfile[260];
+    char logfile[260], disc_name[256];
+    strcpy(disc_name, ctx->disc_name);
+
     if (strlen(ctx->disc_name))
-        sprintf(logfile, "%s.%s", ctx->disc_name, "log");
+        sprintf(logfile, "%s.%s", cyanrip_sanitize_fn(disc_name), "log");
     else
         sprintf(logfile, "%s.%s", ctx->discid, "log");
     ctx->logfile = av_fopen_utf8(logfile, "w");
