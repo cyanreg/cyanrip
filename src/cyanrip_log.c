@@ -19,6 +19,7 @@
 #include <stdarg.h>
 #include <time.h>
 
+#include <libavutil/avutil.h>
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
@@ -107,7 +108,7 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
         sprintf(logfile, "%s.%s", ctx->disc_name, "log");
     else
         sprintf(logfile, "%s.%s", ctx->discid, "log");
-    ctx->logfile = fopen(logfile, "w");
+    ctx->logfile = av_fopen_utf8(logfile, "w");
     if (!ctx->logfile) {
         cyanrip_log(ctx, 0, "Error opening log file to write to!\n");
         return 1;
