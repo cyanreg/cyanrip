@@ -476,7 +476,7 @@ int main(int argc, char **argv)
                 settings.base_dst_folder = optarg;
                 break;
             case 'V':
-                cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
+                cyanrip_log(ctx, 0, "%s version %s\n", PROGRAM_NAME, PROGRAM_VERSION);
                 return 0;
                 break;
             case 'd':
