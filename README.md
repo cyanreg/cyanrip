@@ -50,5 +50,6 @@ output to flac only, enables all cd-paranoia error checking and performs musicbr
 | -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
 | -r *int*    | Max retries to read a frame before considering it corrupt                  |
 | -f          | Disable CD paranoia error checking (for speed)                             |
+| -V          | Print program version                                                      |
 | -h          | List all arguments and their description (this)                            |
 | -n          | Disable Musicbrainz lookup                                                 |

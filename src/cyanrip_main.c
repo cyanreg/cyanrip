@@ -401,7 +401,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnft:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
@@ -415,6 +415,7 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
+                cyanrip_log(ctx, 0, "    -V           Print program version\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
                 cyanrip_log(ctx, 0, "    -n           Disable musicbrainz lookup\n");
                 return 0;
@@ -473,6 +474,10 @@ int main(int argc, char **argv)
                 break;
             case 'D':
                 settings.base_dst_folder = optarg;
+                break;
+            case 'V':
+                cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
+                return 0;
                 break;
             case 'd':
                 settings.dev_path = optarg;
