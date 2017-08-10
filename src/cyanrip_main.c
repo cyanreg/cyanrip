@@ -42,8 +42,13 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         cdio_paranoia_free(ctx->paranoia);
     if (ctx->drive)
         cdio_cddap_close_no_free_cdio(ctx->drive);
-    if (ctx->cdio)
-        cdio_destroy(ctx->cdio);
+    if (ctx->cdio) {
+        if (ctx->settings.eject_after &&
+            ctx->settings.rip_indices_count == -1)
+            cdio_eject_media(&ctx->cdio);
+        else
+            cdio_destroy(ctx->cdio);
+    }
     free(ctx->tracks);
     free(ctx);
     *s = NULL;
@@ -394,6 +399,7 @@ int main(int argc, char **argv)
     settings.report_rate = 20;
     settings.offset = 0;
     settings.disable_mb = 0;
+    settings.eject_after = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
@@ -401,7 +407,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnfVet:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
@@ -414,6 +420,7 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(ctx, 0, "    -e           Eject CD after ripping\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -V           Print program version\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
@@ -425,6 +432,9 @@ int main(int argc, char **argv)
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
+                break;
+            case 'e':
+                settings.eject_after = 1;
                 break;
             case 's':
                 settings.offset = strtol(optarg, NULL, 10);

@@ -59,6 +59,7 @@ typedef struct cyanrip_settings {
     int offset;
     int over_under_read_frames;
     int disable_mb;
+    int eject_after;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];
