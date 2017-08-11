@@ -44,7 +44,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         cdio_cddap_close_no_free_cdio(ctx->drive);
     if (ctx->cdio) {
         if (ctx->settings.eject_after &&
-            ctx->settings.rip_indices_count == -1)
+            ctx->settings.rip_indices_count != -1)
             cdio_eject_media(&ctx->cdio);
         else
             cdio_destroy(ctx->cdio);
