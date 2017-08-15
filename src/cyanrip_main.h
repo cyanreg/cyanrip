@@ -55,11 +55,9 @@ typedef struct cyanrip_settings {
     int speed;
     int fast_mode;
     int frame_max_retries;
-    int report_rate;
     int offset;
     int over_under_read_frames;
     int disable_mb;
-    int eject_after;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];

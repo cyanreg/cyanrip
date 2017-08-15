@@ -42,13 +42,8 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         cdio_paranoia_free(ctx->paranoia);
     if (ctx->drive)
         cdio_cddap_close_no_free_cdio(ctx->drive);
-    if (ctx->cdio) {
-        if (ctx->settings.eject_after &&
-            ctx->settings.rip_indices_count != -1)
-            cdio_eject_media(&ctx->cdio);
-        else
-            cdio_destroy(ctx->cdio);
-    }
+    if (ctx->cdio)
+        cdio_destroy(ctx->cdio);
     free(ctx->tracks);
     free(ctx);
     *s = NULL;
@@ -99,7 +94,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    int mode = ctx->settings.fast_mode ? PARANOIA_MODE_FULL : PARANOIA_MODE_DISABLE;
+    int mode = !ctx->settings.fast_mode ? PARANOIA_MODE_FULL : PARANOIA_MODE_DISABLE;
     cdio_paranoia_modeset(ctx->paranoia, mode);
 
     ctx->last_frame = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
@@ -343,8 +338,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     for (int i = 0; i < frames; i++) {
         cyanrip_read_frame(ctx, t);
-        if (!(i % ctx->settings.report_rate))
-            cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
+        cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%", t->index + 1, ((double)i/frames)*100.0f);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->index + 1);
 
@@ -396,10 +390,8 @@ int main(int argc, char **argv)
     settings.fast_mode = 0;
     settings.frame_max_retries = 5;
     settings.over_under_read_frames = 0;
-    settings.report_rate = 20;
     settings.offset = 0;
     settings.disable_mb = 0;
-    settings.eject_after = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
@@ -407,7 +399,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfVet:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
@@ -420,7 +412,6 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
-                cyanrip_log(ctx, 0, "    -e           Eject CD after ripping\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -V           Print program version\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
@@ -432,9 +423,6 @@ int main(int argc, char **argv)
                 break;
             case 'r':
                 settings.frame_max_retries = strtol(optarg, NULL, 10);
-                break;
-            case 'e':
-                settings.eject_after = 1;
                 break;
             case 's':
                 settings.offset = strtol(optarg, NULL, 10);
@@ -540,8 +528,7 @@ int main(int argc, char **argv)
 #ifdef HAVE_WMAIN
 int wmain(int argc, wchar_t *argv[])
 {
-    char** win32_argv_utf8 = NULL;
-    char *argstr_flat;
+    char *argstr_flat, **win32_argv_utf8 = NULL;
     int i, ret, buffsize = 0, offset = 0;
 
     /* determine the UTF-8 buffer size (including NULL-termination symbols) */
