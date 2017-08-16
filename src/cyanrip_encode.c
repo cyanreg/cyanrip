@@ -441,6 +441,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
 
         /* Convert */
         ret = swr_convert_frame(swr, out_frame, in_frame);
+        av_frame_free(&in_frame);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error resampling - %s!\n", av_err2str(ret));
             goto fail;
@@ -481,7 +482,6 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         }
 
         /* Free */
-        av_frame_free(&in_frame);
         av_frame_free(&out_frame);
     }
 
