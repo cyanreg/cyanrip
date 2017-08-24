@@ -111,7 +111,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     return 0;
 }
 
-void cyanrip_mb_credit(Mb5ArtistCredit credit, char *s, int len) {
+void cyanrip_mb_credit(Mb5ArtistCredit credit, char *s, int len)
+{
     Mb5NameCreditList namecredit_list = mb5_artistcredit_get_namecreditlist(credit);
     int c = 0;
     for (int i = 0; i < mb5_namecredit_list_size(namecredit_list); i++) {

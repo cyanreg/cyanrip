@@ -1,6 +1,6 @@
 cyanrip
 =======
-Rips and encodes standard audio CDs with the least effort required from user.
+Rips and encodes standard audio CDs with the least effort required from user. Cross platform.
 
 Features
 --------
@@ -21,7 +21,7 @@ Complete list of dependencies:
  * libdiscid
  * libmusicbrainz5
 
-All are available on any up-to-date Linux distribution's package repositories. To compile and install:
+All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
 `./bootstrap.py`
 
@@ -30,6 +30,8 @@ All are available on any up-to-date Linux distribution's package repositories. T
 `./waf build`
 
 `./waf install`
+
+cyanrip can be also built and ran under Windows using MinGW
 
 
 CLI
