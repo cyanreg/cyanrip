@@ -44,6 +44,8 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         cdio_cddap_close_no_free_cdio(ctx->drive);
     if (ctx->cdio)
         cdio_destroy(ctx->cdio);
+    if (!ctx->success && ctx->settings.eject && (ctx->mcap & CDIO_DRIVE_CAP_MISC_EJECT))
+        cdio_eject_media_drive(ctx->settings.dev_path);
     free(ctx->tracks);
     free(ctx);
     *s = NULL;
@@ -66,6 +68,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
+    cdio_get_drive_cap(ctx->cdio, &ctx->rcap, &ctx->wcap, &ctx->mcap);
+
     if (!(ctx->drive = cdio_cddap_identify_cdio(ctx->cdio, 1, &error))) {
         cyanrip_log(ctx, 0, "Unable to init cddap context");
         if (error)
@@ -85,7 +89,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    cdio_cddap_speed_set(ctx->drive, settings->speed);
+    if (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED)
+        cdio_cddap_speed_set(ctx->drive, settings->speed);
 
     ctx->paranoia = cdio_paranoia_init(ctx->drive);
     if (!ctx->paranoia) {
@@ -374,8 +379,6 @@ void on_quit_signal(int signo)
 
 int main(int argc, char **argv)
 {
-    int ret;
-
     cyanrip_ctx *ctx = NULL;
     cyanrip_settings settings;
 
@@ -388,6 +391,7 @@ int main(int argc, char **argv)
     settings.cover_image_path = NULL;
     settings.verbose = 1;
     settings.speed = 0;
+    settings.eject = 1;
     settings.fast_mode = 0;
     settings.frame_max_retries = 5;
     settings.over_under_read_frames = 0;
@@ -400,7 +404,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
+    while((c = getopt (argc, argv, "hnfVEt:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
@@ -413,6 +417,7 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(ctx, 0, "    -E           Do not eject when successfully done\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -V           Print program version\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
@@ -433,6 +438,9 @@ int main(int argc, char **argv)
                 break;
             case 'n':
                 settings.disable_mb = 1;
+                break;
+            case 'E':
+                settings.eject = 0;
                 break;
             case 'b':
                 settings.bitrate = strtof(optarg, NULL);
@@ -493,8 +501,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if ((ret = cyanrip_ctx_init(&ctx, &settings)))
-        return ret;
+    if (cyanrip_ctx_init(&ctx, &settings))
+        return 1;
 
     if (cyanrip_fill_metadata(ctx))
         return 1;
@@ -504,26 +512,26 @@ int main(int argc, char **argv)
     cyanrip_log_init(ctx);
     cyanrip_log_start_report(ctx);
 
-    ret = 0;
-
     if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->drive->tracks; i++)
-            ret |= cyanrip_rip_track(ctx, &ctx->tracks[i], i);
+            ctx->success |= cyanrip_rip_track(ctx, &ctx->tracks[i], i);
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             int index = ctx->settings.rip_indices[i] - 1;
             if (index < 0 || index >= ctx->drive->tracks)
                 continue;
-            ret |= cyanrip_rip_track(ctx, &ctx->tracks[index], index);
+            ctx->success |= cyanrip_rip_track(ctx, &ctx->tracks[index], index);
         }
     }
+
+    int ret = ctx->success;
 
     cyanrip_log_finish_report(ctx);
     cyanrip_log_end(ctx);
 
     cyanrip_ctx_end(&ctx);
 
-    return ret;
+    return ret;;
 }
 
 #ifdef HAVE_WMAIN

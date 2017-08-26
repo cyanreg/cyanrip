@@ -61,11 +61,14 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->settings.base_dst_folder ?
                                                ctx->settings.base_dst_folder :
                                                strlen(ctx->disc_name) ? ctx->disc_name : ctx->discid);
-    if (ctx->settings.speed)
+    if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
     else
-        cyanrip_log(ctx, 0, "Speed:         default\n");
+        cyanrip_log(ctx, 0, "Speed:         default (%s)\n",
+                    (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
     cyanrip_log(ctx, 0, "Paranoia:      %s\n", ctx->settings.fast_mode ? "fast" : "full");
+    cyanrip_log(ctx, 0, "C2 errors:     %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
+                "supported" : "unsupported");
     cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "Outputs:       ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)

@@ -53,11 +53,12 @@ typedef struct cyanrip_settings {
     char *base_dst_folder;
     bool verbose;
     int speed;
-    int fast_mode;
+    bool eject;
+    bool fast_mode;
     int frame_max_retries;
     int offset;
     int over_under_read_frames;
-    int disable_mb;
+    bool disable_mb;
     float bitrate;
     int rip_indices_count;
     int rip_indices[99];
@@ -95,6 +96,11 @@ typedef struct cyanrip_ctx {
     DiscId            *discid_ctx;
     FILE              *logfile;
 
+    /* Drive caps */
+    cdio_drive_read_cap_t rcap;
+    cdio_drive_read_cap_t wcap;
+    cdio_drive_read_cap_t mcap;
+
     /* Metadata */
     char album_artist[256];
     char disc_name[256];
@@ -106,6 +112,7 @@ typedef struct cyanrip_ctx {
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
     void *cover_image_params;
 
+    int success;
     int errors_count;
     lsn_t duration;
     lsn_t last_frame;
