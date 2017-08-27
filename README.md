@@ -37,7 +37,7 @@ cyanrip can be also built and ran under Windows using MinGW
 CLI
 ---
 
-All arguments are entirely optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs musicbrainz lookup and finally eject on success.
+All arguments are entirely optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
 
 |   Argument  | Description                                                                |
 |-------------|----------------------------------------------------------------------------|
@@ -50,7 +50,6 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 | -b *float*  | Bitrate of lossy files in kbps                                             |
 | -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
 | -r *int*    | Max retries to read a frame before considering it corrupt                  |
-| -E          | Do not eject CD drive after finishing a successful rip                     |
 | -f          | Disable CD paranoia error checking (for speed)                             |
 | -V          | Print program version                                                      |
 | -h          | List all arguments and their description (this)                            |
