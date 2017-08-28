@@ -106,8 +106,6 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     else
         ctx->duration = cdio_get_disc_last_lsn(ctx->cdio);
 
-    cyanrip_init_encoding(ctx);
-
     ctx->tracks = calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
     *s = ctx;
@@ -380,6 +378,8 @@ int main(int argc, char **argv)
     cyanrip_ctx *ctx = NULL;
     cyanrip_settings settings;
 
+    cyanrip_init_encoding();
+
     if (signal(SIGINT, on_quit_signal) == SIG_ERR)
         cyanrip_log(ctx, 0, "Can't init signal handler!\n");
 
@@ -453,7 +453,7 @@ int main(int argc, char **argv)
             case 'o':
                 settings.outputs_num = 0;
                 if (!strncmp("help", optarg, strlen("help"))) {
-                    cyanrip_log(ctx, 0, "Supported outputs:\n");
+                    cyanrip_log(ctx, 0, "Supported output codecs:\n");
                     cyanrip_print_codecs();
                     return 0;
                 }

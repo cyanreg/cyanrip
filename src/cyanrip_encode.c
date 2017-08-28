@@ -31,6 +31,7 @@
 
 typedef struct cyanrip_out_fmt {
     const char *name;
+    const char *folder_suffix;
     const char *ext;
     int coverart_supported;
     int compression_level;
@@ -38,14 +39,15 @@ typedef struct cyanrip_out_fmt {
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "FLAC",    "flac",  0, 11, AV_CODEC_ID_FLAC     },
-    [CYANRIP_FORMAT_MP3]     = { "MP3",     "mp3",   1,  0, AV_CODEC_ID_MP3      },
-    [CYANRIP_FORMAT_TTA]     = { "TTA",     "tta",   0,  0, AV_CODEC_ID_TTA      },
-    [CYANRIP_FORMAT_OPUS]    = { "OPUS",    "opus",  0, 10, AV_CODEC_ID_OPUS     },
-    [CYANRIP_FORMAT_AAC]     = { "AAC",     "m4a",   0,  0, AV_CODEC_ID_AAC,     },
-    [CYANRIP_FORMAT_WAVPACK] = { "WAVPACK", "wv",    0,  8, AV_CODEC_ID_WAVPACK, },
-    [CYANRIP_FORMAT_VORBIS]  = { "VORBIS",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,  },
-    [CYANRIP_FORMAT_ALAC]    = { "ALAC",    "m4a",   0,  2, AV_CODEC_ID_ALAC,    },
+    [CYANRIP_FORMAT_FLAC]    = { "flac",    "FLAC", "flac",  0, 11, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_MP3]     = { "mp3",     "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
+    [CYANRIP_FORMAT_TTA]     = { "tta",     "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
+    [CYANRIP_FORMAT_OPUS]    = { "opus",    "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_AAC]     = { "aac",     "M4A",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_WAVPACK] = { "wavpack", "WV",   "wv",    0,  8, AV_CODEC_ID_WAVPACK,   },
+    [CYANRIP_FORMAT_VORBIS]  = { "vorbis",  "OGG",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,    },
+    [CYANRIP_FORMAT_ALAC]    = { "alac",    "ALAC", "m4a",   0,  2, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]     = { "wav",     "WAV",  "wav",   0,  0, AV_CODEC_ID_PCM_S16LE, },
 };
 
 void cyanrip_print_codecs(void)
@@ -53,9 +55,8 @@ void cyanrip_print_codecs(void)
     cyanrip_init_encoding(NULL);
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        const AVCodecDescriptor *cd = avcodec_descriptor_get(cfmt->codec);
         if (avcodec_find_encoder(cfmt->codec))
-            cyanrip_log(NULL, 0, "    %s\n", cd->name);
+            cyanrip_log(NULL, 0, "    %s\n", cfmt->name);
     }
 }
 
@@ -63,8 +64,12 @@ int cyanrip_validate_fmt(const char *fmt)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        if (!strncasecmp(fmt, cfmt->name, strlen(cfmt->name)))
-            return i;
+        if (!strncasecmp(fmt, cfmt->name, strlen(cfmt->name))) {
+            if (avcodec_find_encoder(cfmt->codec))
+                return i;
+            cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
+            return -1;
+        }
     }
     return -1;
 }
@@ -74,7 +79,7 @@ const char *cyanrip_fmt_desc(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? fmt_map[format].name : NULL;
 }
 
-void cyanrip_init_encoding(cyanrip_ctx *ctx)
+void cyanrip_init_encoding()
 {
     av_register_all();
 }
@@ -292,13 +297,13 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     strcpy(track_name, t->name);
 
     if (ctx->settings.base_dst_folder)
-        sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->name);
+        sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->folder_suffix);
     else if (strlen(ctx->disc_name))
-        sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(disc_name), cfmt->name);
+        sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(disc_name), cfmt->folder_suffix);
     else if (strlen(ctx->discid))
-        sprintf(dirname, "%s [%s]", ctx->discid, cfmt->name);
+        sprintf(dirname, "%s [%s]", ctx->discid, cfmt->folder_suffix);
     else
-        sprintf(dirname, "%s [%s]", "CR_Album", cfmt->name);
+        sprintf(dirname, "%s [%s]", "CR_Album", cfmt->folder_suffix);
 
     if (strlen(t->name))
         sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1,

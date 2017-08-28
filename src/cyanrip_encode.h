@@ -24,7 +24,7 @@ void cyanrip_print_codecs(void);
 int cyanrip_validate_fmt(const char *fmt);
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format);
 
-void cyanrip_init_encoding(cyanrip_ctx *ctx);
+void cyanrip_init_encoding();
 void cyanrip_end_encoding(cyanrip_ctx *ctx);
 
 int cyanrip_setup_cover_image(cyanrip_ctx *ctx);
