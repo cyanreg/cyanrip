@@ -3,7 +3,7 @@ import sys, os, re
 from waflib.Build import BuildContext
 
 APPNAME='cyanrip'
-VERSION='0.1-rc2'
+VERSION=''
 
 top = '.'
 out = 'build'
