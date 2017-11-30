@@ -51,11 +51,10 @@ static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
         end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
 
     for (int i = 0; i < t->nb_samples; i++) {
-		if (mult >= start && mult <= end)
-			sum += mult * samples[i];
-
-		mult++;
-	}
+        if (mult >= start && mult <= end)
+            sum += mult * samples[i];
+        mult++;
+    }
 
     return sum;
 }
@@ -75,25 +74,24 @@ static inline uint32_t acurip_crc_v2(cyanrip_ctx *ctx, cyanrip_track *t)
         end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
 
     for (int i = 0; i < t->nb_samples >> 1; i++) {
-		if (mult >= start && mult <= end) {
-		    uint32_t val = samples[i];
-			uint64_t tmp = (uint64_t)val  * (uint64_t)mult;
+        if (mult >= start && mult <= end) {
+            uint32_t val = samples[i];
+            uint64_t tmp = (uint64_t)val  * (uint64_t)mult;
             uint32_t lo  = (uint32_t)(tmp & (uint64_t)0xFFFFFFFF);
             uint32_t hi  = (uint32_t)(tmp / (uint64_t)0x100000000);
             sum += hi;
             sum += lo;
-	    }
-
-		mult++;
-	}
+        }
+        mult++;
+    }
 
     return sum;
 }
 
 static inline int cyanrip_crc_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
-    t->ieee_crc_32 = ieee_crc_32(ctx, t);
-    t->eac_crc     = eac_crc_32(ctx, t);
+    t->ieee_crc_32   = ieee_crc_32(ctx, t);
+    t->eac_crc       = eac_crc_32(ctx, t);
     t->acurip_crc_v1 = acurip_crc_v1(ctx, t);
     t->acurip_crc_v2 = acurip_crc_v2(ctx, t);
 
