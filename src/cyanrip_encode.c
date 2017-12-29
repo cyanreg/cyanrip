@@ -194,14 +194,14 @@ static int get_codec_sample_rate(AVCodec *codec)
     int i = 0;
     if (!codec->supported_samplerates)
         return 44100;
-    while (1) {
-        if (!codec->supported_samplerates[i])
-            break;
-        if (codec->supported_samplerates[i] >= 44100)
-            return codec->supported_samplerates[i];
-        i++;
-    }
-    return codec->supported_samplerates[0];
+
+    /* Go to the array terminator (0) */
+    while (codec->supported_samplerates[++i] > 0);
+
+    /* Get the lowest one above 44100 */
+    while (codec->supported_samplerates[--i] < 44100);
+
+    return codec->supported_samplerates[i];
 }
 
 static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
