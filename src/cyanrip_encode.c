@@ -189,19 +189,36 @@ static enum AVSampleFormat get_codec_sample_fmt(AVCodec *codec)
     return codec->sample_fmts[0];
 }
 
+static int cmp_samperates(const void *a, const void *b)
+{
+    return *((int *)a) < *((int *)b);
+}
+
 static int get_codec_sample_rate(AVCodec *codec)
 {
-    int i = 0;
+    int i = 0, ret;
     if (!codec->supported_samplerates)
         return 44100;
 
+    /* Pick the first supported one in case nothing suitable is found */
+    ret = codec->supported_samplerates[0];
     /* Go to the array terminator (0) */
     while (codec->supported_samplerates[++i] > 0);
+    /* Alloc, copy and sort array */
+    int *tmp = av_malloc(i*sizeof(int));
+    memcpy(tmp, codec->supported_samplerates, i*sizeof(int));
+    qsort(tmp, i, sizeof(int), cmp_samperates);
 
     /* Get the lowest one above 44100 */
-    while (codec->supported_samplerates[--i] < 44100);
+    for (; i >= 0; i--) {
+        if (tmp[--i] >= 44100) {
+            ret = tmp[i];
+            break;
+        }
+    }
+    av_free(tmp);
 
-    return codec->supported_samplerates[i];
+    return ret;
 }
 
 static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
