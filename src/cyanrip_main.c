@@ -33,7 +33,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     if (!s || !*s)
         return;
     ctx = *s;
-    cyanrip_end_encoding(ctx);
+    cyanrip_free_cover_image(ctx);
     for (int i = 0; i < ctx->drive->tracks; i++)
         free(ctx->tracks[i].base_data);
     if (ctx->discid_ctx)
@@ -378,8 +378,6 @@ int main(int argc, char **argv)
     cyanrip_ctx *ctx = NULL;
     cyanrip_settings settings;
 
-    cyanrip_init_encoding();
-
     if (signal(SIGINT, on_quit_signal) == SIG_ERR)
         cyanrip_log(ctx, 0, "Can't init signal handler!\n");
 
@@ -500,7 +498,7 @@ int main(int argc, char **argv)
     if (cyanrip_fill_metadata(ctx))
         return 1;
 
-    cyanrip_setup_cover_image(ctx);
+    cyanrip_read_cover_image(ctx);
 
     cyanrip_log_init(ctx);
     cyanrip_log_start_report(ctx);
@@ -524,7 +522,7 @@ int main(int argc, char **argv)
 
     cyanrip_ctx_end(&ctx);
 
-    return ret;;
+    return ret;
 }
 
 #ifdef HAVE_WMAIN

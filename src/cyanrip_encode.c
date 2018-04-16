@@ -39,7 +39,7 @@ typedef struct cyanrip_out_fmt {
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "flac",    "FLAC", "flac",  0, 11, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_FLAC]    = { "flac",    "FLAC", "flac",  1, 11, AV_CODEC_ID_FLAC,      },
     [CYANRIP_FORMAT_MP3]     = { "mp3",     "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
     [CYANRIP_FORMAT_TTA]     = { "tta",     "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
     [CYANRIP_FORMAT_OPUS]    = { "opus",    "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
@@ -52,7 +52,6 @@ cyanrip_out_fmt fmt_map[] = {
 
 void cyanrip_print_codecs(void)
 {
-    cyanrip_init_encoding(NULL);
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
         if (avcodec_find_encoder(cfmt->codec))
@@ -79,18 +78,13 @@ const char *cyanrip_fmt_desc(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? fmt_map[format].name : NULL;
 }
 
-void cyanrip_init_encoding()
-{
-    av_register_all();
-}
-
-void cyanrip_end_encoding(cyanrip_ctx *ctx)
+void cyanrip_free_cover_image(cyanrip_ctx *ctx)
 {
     av_free(ctx->cover_image_pkt);
     av_free(ctx->cover_image_params);
 }
 
-int cyanrip_setup_cover_image(cyanrip_ctx *ctx)
+int cyanrip_read_cover_image(cyanrip_ctx *ctx)
 {
     if (!ctx->settings.cover_image_path) {
         ctx->cover_image_pkt = NULL;
