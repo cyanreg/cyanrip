@@ -23,14 +23,9 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include "config.h"
+#include "../config.h"
 
-#ifdef HAVE_CDIO_PARANOIA_PARANOIA_H
 #include <cdio/paranoia/paranoia.h>
-#else
-#include <cdio/paranoia.h>
-#endif
-
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 

@@ -18,6 +18,7 @@
 
 #include <time.h>
 #include <stdarg.h>
+#include <strings.h>
 #include <sys/stat.h>
 
 #include <libavcodec/avcodec.h>

@@ -45,7 +45,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
-    cyanrip_log(ctx, 0, "%s\n",                PROGRAM_STRING);
+    cyanrip_log(ctx, 0, "cyanrip %s\n", CYANRIP_VERSION_STRING);
     cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model ? ctx->drive->drive_model : "");
     cyanrip_log(ctx, 0, "Offset:        %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
                 abs(ctx->settings.offset) == 1 ? "sample" : "samples");

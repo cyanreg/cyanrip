@@ -1,5 +1,2 @@
-.waf*
-.lock*
-waf
 build
 *.log

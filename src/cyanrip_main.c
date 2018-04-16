@@ -402,7 +402,7 @@ int main(int argc, char **argv)
     while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
-                cyanrip_log(ctx, 0, "%s help:\n", PROGRAM_STRING);
+                cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
                 cyanrip_log(ctx, 0, "    -d <path>    Set device path\n");
                 cyanrip_log(ctx, 0, "    -D <path>    Folder to rip disc to\n");
                 cyanrip_log(ctx, 0, "    -c <path>    Set cover image path\n");
@@ -474,7 +474,7 @@ int main(int argc, char **argv)
                 settings.base_dst_folder = optarg;
                 break;
             case 'V':
-                cyanrip_log(ctx, 0, "%s version %s\n", PROGRAM_NAME, PROGRAM_VERSION);
+                cyanrip_log(ctx, 0, "cyanrip %s\n", CYANRIP_VERSION_STRING);
                 return 0;
                 break;
             case 'd':
