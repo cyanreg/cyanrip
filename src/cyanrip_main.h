@@ -39,6 +39,7 @@ enum cyanrip_output_formats {
     CYANRIP_FORMAT_MP3,
     CYANRIP_FORMAT_VORBIS,
     CYANRIP_FORMAT_WAV,
+    CYANRIP_FORMAT_AAC_MP4,
 
     CYANRIP_FORMATS_NB,
 };

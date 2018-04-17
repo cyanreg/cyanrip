@@ -44,7 +44,8 @@ cyanrip_out_fmt fmt_map[] = {
     [CYANRIP_FORMAT_MP3]     = { "mp3",     "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
     [CYANRIP_FORMAT_TTA]     = { "tta",     "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
     [CYANRIP_FORMAT_OPUS]    = { "opus",    "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_AAC]     = { "aac",     "M4A",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC]     = { "aac",     "AAC",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC_MP4] = { "aac_mp4", "AAC",  "mp4",   1,  0, AV_CODEC_ID_AAC,       },
     [CYANRIP_FORMAT_WAVPACK] = { "wavpack", "WV",   "wv",    0,  8, AV_CODEC_ID_WAVPACK,   },
     [CYANRIP_FORMAT_VORBIS]  = { "vorbis",  "OGG",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,    },
     [CYANRIP_FORMAT_ALAC]    = { "alac",    "ALAC", "m4a",   0,  2, AV_CODEC_ID_ALAC,      },
@@ -55,8 +56,10 @@ void cyanrip_print_codecs(void)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        if (avcodec_find_encoder(cfmt->codec))
-            cyanrip_log(NULL, 0, "    %s\n", cfmt->name);
+        if (avcodec_find_encoder(cfmt->codec)) {
+            const char *str = cfmt->coverart_supported ? "\t(supports cover art)" : "";
+            cyanrip_log(NULL, 0, "\t%s\tfolder: [%s]\textension: %s%s\n", cfmt->name, cfmt->folder_suffix, cfmt->ext, str);
+        }
     }
 }
 
@@ -64,7 +67,7 @@ int cyanrip_validate_fmt(const char *fmt)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        if (!strncasecmp(fmt, cfmt->name, strlen(cfmt->name))) {
+        if (!strncasecmp(fmt, cfmt->name, strlen(fmt))) {
             if (avcodec_find_encoder(cfmt->codec))
                 return i;
             cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
