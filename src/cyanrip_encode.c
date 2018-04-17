@@ -40,16 +40,17 @@ typedef struct cyanrip_out_fmt {
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]    = { "flac",    "FLAC", "flac",  1, 11, AV_CODEC_ID_FLAC,      },
-    [CYANRIP_FORMAT_MP3]     = { "mp3",     "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
-    [CYANRIP_FORMAT_TTA]     = { "tta",     "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
-    [CYANRIP_FORMAT_OPUS]    = { "opus",    "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_AAC]     = { "aac",     "AAC",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_AAC_MP4] = { "aac_mp4", "AAC",  "mp4",   1,  0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_WAVPACK] = { "wavpack", "WV",   "wv",    0,  8, AV_CODEC_ID_WAVPACK,   },
-    [CYANRIP_FORMAT_VORBIS]  = { "vorbis",  "OGG",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]    = { "alac",    "ALAC", "m4a",   0,  2, AV_CODEC_ID_ALAC,      },
-    [CYANRIP_FORMAT_WAV]     = { "wav",     "WAV",  "wav",   0,  0, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  1, 11, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
+    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
+    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   1,  0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    0,  8, AV_CODEC_ID_WAVPACK,   },
+    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,    },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   0,  2, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   0,  0, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   1, 10, AV_CODEC_ID_OPUS,      },
 };
 
 void cyanrip_print_codecs(void)
@@ -362,6 +363,12 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         goto fail;
     }
     avf->oformat->audio_codec = out_codec->id;
+
+    if (format == CYANRIP_FORMAT_OPUS_MP4) {
+        cyanrip_log(ctx, 0, "Opus mapping in MP4 is experimental, "
+                    "use at your own risk.\n");
+        avf->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+    }
 
     /* Output avctx */
     out_avctx = setup_out_avctx(ctx, avf, out_codec, cfmt);
