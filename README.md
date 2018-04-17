@@ -8,7 +8,7 @@ Features
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation, error recovery via cd-paranoia
  * Able to encode to multiple formats simultaneously
- * Able to mux in cover images to mp3, flac and aac (mp4)
+ * Able to mux in cover images to mp3, flac and aac, opus (both in mp4)
  * Provides IEEE CRC32, EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
