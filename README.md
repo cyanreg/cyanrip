@@ -8,7 +8,7 @@ Features
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation, error recovery via cd-paranoia
  * Able to encode to multiple formats simultaneously
- * Able to mux in cover images to mp3 and flac (soon in latest ffmpeg git) files
+ * Able to mux in cover images to mp3, flac and aac (mp4)
  * Provides IEEE CRC32, EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
@@ -16,7 +16,7 @@ Compiling
 ---------
 Complete list of dependencies:
 
- * FFmpeg (latest git master recommended)
+ * FFmpeg (4.0)
  * libcdio-paranoia
  * libdiscid
  * libmusicbrainz5
