@@ -13,9 +13,9 @@ version = majorver + '.' + minorver + '.' + microver
 
 conf.set_quoted('CYANRIP_VERSION_STRING', version)
 
+subdir('src')
+
 configure_file(
     output: 'config.h',
     configuration: conf,
 )
-
-subdir('src')
