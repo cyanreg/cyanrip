@@ -68,7 +68,8 @@ int cyanrip_validate_fmt(const char *fmt)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        if (!strncasecmp(fmt, cfmt->name, strlen(fmt))) {
+        if ((!strncasecmp(fmt, cfmt->name, strlen(fmt))) &&
+            (strlen(fmt) == strlen(cfmt->name))) {
             if (avcodec_find_encoder(cfmt->codec))
                 return i;
             cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
@@ -138,24 +139,27 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
     struct tm *t_l = localtime(&t_c);
     strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
 
-    strftime(t_disc_date, sizeof(t_disc_date), "%Y-%m-%dT%H:%M:%S", ctx->disc_date);
-
 #define ADD_TAG(dict, name, source, flags)          \
     do {                                            \
         if (strlen(source))                         \
             av_dict_set(dict, name, source, flags); \
     } while (0)
 
-    ADD_TAG(&avf->metadata, "comment",            "cyanrip",         0);
+    ADD_TAG(&avf->metadata, "comment", "cyanrip "CYANRIP_VERSION_STRING, 0);
+
     ADD_TAG(&avf->metadata, "title",              t->name,           0);
     ADD_TAG(&avf->metadata, "author",             t->artist,         0);
     ADD_TAG(&avf->metadata, "creation_time",      t_s,               0);
-    ADD_TAG(&avf->metadata, "album",              ctx->disc_name,    0);
+    ADD_TAG(&avf->metadata, "album",              ctx->album_name,   0);
     ADD_TAG(&avf->metadata, "album_artist",       ctx->album_artist, 0);
-    ADD_TAG(&avf->metadata, "date",               t_disc_date,       0);
     ADD_TAG(&avf->metadata, "musicbrainz_discid", ctx->discid,       0);
     av_dict_set_int(&avf->metadata, "track",      t->index + 1,      0);
     av_dict_set_int(&avf->metadata, "tracktotal", ctx->drive->tracks,0);
+
+    if (ctx->disc_date) {
+        strftime(t_disc_date, sizeof(t_disc_date), "%Y-%m-%d", ctx->disc_date);
+        ADD_TAG(&avf->metadata, "date", t_disc_date, 0);
+    }
 }
 
 static const uint64_t get_codec_channel_layout(AVCodec *codec)
@@ -308,14 +312,14 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     AVCodec *out_codec = NULL;
     AVCodecContext *out_avctx = NULL;
 
-    char dirname[259], filename[1024], disc_name[256], track_name[256];
-    strcpy(disc_name, ctx->disc_name);
+    char dirname[259], filename[1024], album_name[256], track_name[256];
+    strcpy(album_name, ctx->album_name);
     strcpy(track_name, t->name);
 
     if (ctx->settings.base_dst_folder)
         sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->folder_suffix);
-    else if (strlen(ctx->disc_name))
-        sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(disc_name), cfmt->folder_suffix);
+    else if (strlen(ctx->album_name))
+        sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(album_name), cfmt->folder_suffix);
     else if (strlen(ctx->discid))
         sprintf(dirname, "%s [%s]", ctx->discid, cfmt->folder_suffix);
     else

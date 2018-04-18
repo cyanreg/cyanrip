@@ -28,6 +28,8 @@
 #include <cdio/paranoia/paranoia.h>
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
+#include <libavutil/mem.h>
+#include <libavutil/avstring.h>
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
@@ -100,7 +102,7 @@ typedef struct cyanrip_ctx {
 
     /* Metadata */
     char album_artist[256];
-    char disc_name[256];
+    char album_name[256];
     char *disc_mcn;
     struct tm *disc_date;
     char discid[64];
@@ -119,7 +121,7 @@ static inline void cyanrip_frames_to_duration(uint32_t sectors, char *str)
 {
     if (!str)
         return;
-    const double tot = sectors/75.0f; /* 75 frames per second */
+    const double tot = sectors/75.0; /* 75 frames per second */
     const int hr    = tot/3600.0f;
     const int min   = (tot/60.0f) - (hr * 60);
     const int sec   = tot - ((hr * 3600) + min * 60);

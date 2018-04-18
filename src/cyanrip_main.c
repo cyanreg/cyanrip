@@ -35,7 +35,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     ctx = *s;
     cyanrip_free_cover_image(ctx);
     for (int i = 0; i < ctx->drive->tracks; i++)
-        free(ctx->tracks[i].base_data);
+        av_freep(&ctx->tracks[i].base_data);
     if (ctx->discid_ctx)
         discid_free(ctx->discid_ctx);
     if (ctx->paranoia)
@@ -44,8 +44,9 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         cdio_cddap_close_no_free_cdio(ctx->drive);
     if (ctx->cdio)
         cdio_destroy(ctx->cdio);
-    free(ctx->tracks);
-    free(ctx);
+    av_freep(&ctx->disc_date);
+    av_freep(&ctx->tracks);
+    av_freep(&ctx);
     *s = NULL;
 }
 
@@ -54,7 +55,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     int rval;
     char *error = NULL;
 
-    cyanrip_ctx *ctx = calloc(1, sizeof(cyanrip_ctx));
+    cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
 
     ctx->settings = *settings;
 
@@ -106,7 +107,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     else
         ctx->duration = cdio_get_disc_last_lsn(ctx->cdio);
 
-    ctx->tracks = calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
+    ctx->tracks = av_calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
     *s = ctx;
     return 0;
@@ -180,12 +181,12 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
                 if (release_list) {
                     Mb5Release release = mb5_release_list_item(release_list, 0);
                     if (release) {
-                        mb5_release_get_title(release, ctx->disc_name, 255);
+                        mb5_release_get_title(release, ctx->album_name, 255);
                         Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
                         if (artistcredit)
                             cyanrip_mb_credit(artistcredit, ctx->album_artist, 255);
                         cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
-                                    ctx->disc_name, ctx->album_artist);
+                                    ctx->album_name, ctx->album_artist);
                         cyanrip_mb_tracks(ctx, release);
                     } else {
                         cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
@@ -214,10 +215,6 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
 int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     int ret = 0;
-
-    /* Album time */
-    time_t t_c = time(NULL);
-    ctx->disc_date = localtime(&t_c);
 
     /* DiscID */
     ctx->discid_ctx = discid_new();
@@ -327,7 +324,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
 
     t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->index + 1);
 
-    t->base_data = calloc(frames*CDIO_CD_FRAMESIZE_RAW, 1);
+    t->base_data = av_mallocz(frames*CDIO_CD_FRAMESIZE_RAW);
     int offset = underread*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
     t->samples = (int16_t *)(t->base_data + offset);
 
@@ -374,6 +371,62 @@ void on_quit_signal(int signo)
     quit_now = 1;
 }
 
+static int parse_metadata(cyanrip_ctx *ctx, char *optarg)
+{
+    char *save;
+    char *p = av_strtok(optarg, ":", &save);
+    while (p != NULL) {
+        char *base = av_strdup(p), *base_save, *base_free;
+
+        base_free = base;
+
+        char *key = av_strtok(base, "=", &base_save);
+        char *val = av_strtok(NULL, "=", &base_save);
+        if (!val) {
+            cyanrip_log(ctx, 0, "Empty argument to key \"%s\"!\n", p);
+            return 1;
+        }
+        if (!strncmp("album", key, strlen(key))) {
+            strncpy(ctx->album_name, val, FFMIN(strlen(val),
+                    sizeof(ctx->album_name)));
+        } else if (!strncmp("album_artist", key, strlen(key))) {
+            strncpy(ctx->album_artist, val, FFMIN(strlen(val),
+                    sizeof(ctx->album_artist)));
+        } else if (!strncmp("date", key, strlen(key))) {
+            char *date_s  = av_strdup(val), *date_save, *date_free;
+
+            date_free = date_s;
+
+            char *year_s  = av_strtok(date_s, "-", &date_save);
+            char *month_s = av_strtok(NULL,   "-", &date_save);
+            char *day_s   = av_strtok(NULL,   "-", &date_save);
+            if (!ctx->disc_date)
+                ctx->disc_date = av_mallocz(sizeof(*ctx->disc_date));
+            if (year_s)
+                ctx->disc_date->tm_year = strtol(year_s,  NULL, 10) - 1900;
+            if (month_s)
+                ctx->disc_date->tm_mon  = strtol(month_s, NULL, 10) - 1;
+            if (day_s)
+                ctx->disc_date->tm_mday = strtol(day_s,   NULL, 10);
+            av_free(date_free);
+        } else if (!strncmp("track_", key, strlen("track_"))) {
+            int index = strtol(key + strlen("track_"), NULL, 10) - 1;
+            if ((index < 0) || (index >= ctx->drive->tracks)) {
+                cyanrip_log(ctx, 0, "Track index %i invalid!\n", index);
+                return 1;
+            }
+            strncpy(ctx->tracks[index].name, val, FFMIN(strlen(val),
+                    sizeof(ctx->tracks[index].name)));
+        } else {
+            cyanrip_log(ctx, 0, "Invalid metadata key=value: \"%s\"\n", p);
+            return 1;
+        }
+        av_free(base_free);
+        p = av_strtok(NULL, ":", &save);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     cyanrip_ctx *ctx = NULL;
@@ -400,7 +453,8 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
-    while((c = getopt (argc, argv, "hnfVt:b:c:r:d:o:s:S:D:")) != -1) {
+    char *metadata_ptr = NULL;
+    while((c = getopt (argc, argv, "hnfVm:t:b:c:r:d:o:s:S:D:")) != -1) {
         switch (c) {
             case 'h':
                 cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
@@ -413,6 +467,7 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "    -b <kbps>    Bitrate of lossy files in kbps\n");
                 cyanrip_log(ctx, 0, "    -t <list>    Select which tracks to rip\n");
                 cyanrip_log(ctx, 0, "    -r <int>     Maximum number of retries to read a frame\n");
+                cyanrip_log(ctx, 0, "    -m <string>  Metadata, in case disc info is unavailable, \"help\" to list\n");
                 cyanrip_log(ctx, 0, "    -f           Disable all error checking\n");
                 cyanrip_log(ctx, 0, "    -V           Print program version\n");
                 cyanrip_log(ctx, 0, "    -h           Print options help\n");
@@ -457,7 +512,7 @@ int main(int argc, char **argv)
                     return 0;
                 }
                 p = strtok(optarg, ",");
-                while(p != NULL) {
+                while (p != NULL) {
                     int res = cyanrip_validate_fmt(p);
                     if (res != -1) {
                         settings.outputs[settings.outputs_num++] = res;
@@ -487,6 +542,18 @@ int main(int argc, char **argv)
             case '?':
                 return 1;
                 break;
+            case 'm':
+                if (!strncmp("help", optarg, strlen("help"))) {
+                    cyanrip_log(ctx, 0, "Metadata format help:\n");
+                    cyanrip_log(ctx, 0, "\talbum=<string>\n");
+                    cyanrip_log(ctx, 0, "\talbum_artist=<string>\n");
+                    cyanrip_log(ctx, 0, "\tdate=<YYYY-MM-DD>\n");
+                    cyanrip_log(ctx, 0, "\ttrack_<number>=<name>\n");
+                    cyanrip_log(ctx, 0, "Separate each key=value pair with \":\"\n");
+                    return 0;
+                }
+                metadata_ptr = optarg;
+                break;
             default:
                 abort();
                 break;
@@ -494,6 +561,9 @@ int main(int argc, char **argv)
     }
 
     if (cyanrip_ctx_init(&ctx, &settings))
+        return 1;
+
+    if (parse_metadata(ctx, metadata_ptr))
         return 1;
 
     if (cyanrip_fill_metadata(ctx))
