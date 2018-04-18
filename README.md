@@ -23,13 +23,11 @@ Complete list of dependencies:
 
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
-`./bootstrap.py`
+`meson build`
 
-`./waf configure`
+`ninja -C build`
 
-`./waf build`
-
-`./waf install`
+`sudo ninja -C build install`
 
 cyanrip can be also built and ran under Windows using MinGW
 
