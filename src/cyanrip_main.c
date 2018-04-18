@@ -309,7 +309,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t, int index)
     samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
     t->start_sector = first_frame;
     t->end_sector = last_frame;
-    t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
+    if (!(ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
+        t->isrc = discid_get_track_isrc(ctx->discid_ctx, t->index + 1);
 
     frames += abs(ctx->settings.over_under_read_frames);
 
