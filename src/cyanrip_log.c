@@ -29,7 +29,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_samples_to_duration(t->nb_samples >> 1, length);
 
     cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->index + 1);
-    cyanrip_log(ctx, 0, "    Title:       %s\n", t->name);
+    cyanrip_log(ctx, 0, "    Title:       %s\n", t->title);
     cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc ? t->isrc : "");
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
@@ -60,7 +60,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "Album Art:     %s\n", ctx->settings.cover_image_path);
     cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->settings.base_dst_folder ?
                                                ctx->settings.base_dst_folder :
-                                               strlen(ctx->album_name) ? ctx->album_name : ctx->discid);
+                                               strlen(ctx->album) ? ctx->album : ctx->discid);
     if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
     else
@@ -73,7 +73,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "Outputs:       ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
-    cyanrip_log(ctx, 0, " (lossy bitrate: %.02fkbps)\n", ctx->settings.bitrate);
+    cyanrip_log(ctx, 0, "\n");
     cyanrip_log(ctx, 0, "Disc tracks:   %i\n", ctx->drive->tracks);
     cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
@@ -86,7 +86,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_frames_to_duration(ctx->duration, duration);
     cyanrip_log(ctx, 0, "DiscID:        %s\n", ctx->discid);
     cyanrip_log(ctx, 0, "Disc MCN:      %s\n", ctx->disc_mcn ? ctx->disc_mcn : "");
-    cyanrip_log(ctx, 0, "Album:         %s\n", ctx->album_name);
+    cyanrip_log(ctx, 0, "Album:         %s\n", ctx->album);
     cyanrip_log(ctx, 0, "Artist:        %s\n", ctx->album_artist);
     cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
 
@@ -107,11 +107,11 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
     char logfile[260], album_name[256];
-    strcpy(album_name, ctx->album_name);
+    strcpy(album_name, ctx->album);
 
     if (ctx->settings.base_dst_folder)
         sprintf(logfile, "%s.%s", ctx->settings.base_dst_folder, "log");
-    else if (strlen(ctx->album_name))
+    else if (strlen(ctx->album))
         sprintf(logfile, "%s.%s", cyanrip_sanitize_fn(album_name), "log");
     else
         sprintf(logfile, "%s.%s", ctx->discid, "log");

@@ -48,6 +48,7 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 | -b *float*  | Bitrate of lossy files in kbps                                             |
 | -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
 | -r *int*    | Max retries to read a frame before considering it corrupt                  |
+| -m *string* | Metadata, in case disc info is unavailable, "help" to print syntax info    |
 | -f          | Disable CD paranoia error checking (for speed)                             |
 | -V          | Print program version                                                      |
 | -h          | List all arguments and their description (this)                            |

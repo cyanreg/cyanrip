@@ -147,10 +147,12 @@ static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *av
 
     ADD_TAG(&avf->metadata, "comment", "cyanrip "CYANRIP_VERSION_STRING, 0);
 
-    ADD_TAG(&avf->metadata, "title",              t->name,           0);
+    ADD_TAG(&avf->metadata, "title",              t->title,          0);
     ADD_TAG(&avf->metadata, "author",             t->artist,         0);
+    ADD_TAG(&avf->metadata, "performer",          t->performer,      0);
+    ADD_TAG(&avf->metadata, "lyrics",             t->lyrics,         0);
     ADD_TAG(&avf->metadata, "creation_time",      t_s,               0);
-    ADD_TAG(&avf->metadata, "album",              ctx->album_name,   0);
+    ADD_TAG(&avf->metadata, "album",              ctx->album,        0);
     ADD_TAG(&avf->metadata, "album_artist",       ctx->album_artist, 0);
     ADD_TAG(&avf->metadata, "musicbrainz_discid", ctx->discid,       0);
     av_dict_set_int(&avf->metadata, "track",      t->index + 1,      0);
@@ -313,19 +315,19 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     AVCodecContext *out_avctx = NULL;
 
     char dirname[259], filename[1024], album_name[256], track_name[256];
-    strcpy(album_name, ctx->album_name);
-    strcpy(track_name, t->name);
+    strcpy(album_name, ctx->album);
+    strcpy(track_name, t->title);
 
     if (ctx->settings.base_dst_folder)
         sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->folder_suffix);
-    else if (strlen(ctx->album_name))
+    else if (strlen(ctx->album))
         sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(album_name), cfmt->folder_suffix);
     else if (strlen(ctx->discid))
         sprintf(dirname, "%s [%s]", ctx->discid, cfmt->folder_suffix);
     else
         sprintf(dirname, "%s [%s]", "CR_Album", cfmt->folder_suffix);
 
-    if (strlen(t->name))
+    if (strlen(t->title))
         sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1,
                 cyanrip_sanitize_fn(track_name), cfmt->ext);
     else

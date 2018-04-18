@@ -69,8 +69,10 @@ typedef struct cyanrip_settings {
 typedef struct cyanrip_track {
     /* Metadata */
     int index;
-    char name[256];
-    char artist[256];
+    char title[4096];
+    char artist[4096];
+    char performer[4096];
+    char lyrics[4096];
     char *isrc;
     int preemphasis;
     size_t nb_samples;
@@ -101,8 +103,8 @@ typedef struct cyanrip_ctx {
     cdio_drive_read_cap_t mcap;
 
     /* Metadata */
-    char album_artist[256];
-    char album_name[256];
+    char album_artist[4096];
+    char album[4096];
     char *disc_mcn;
     struct tm *disc_date;
     char discid[64];
