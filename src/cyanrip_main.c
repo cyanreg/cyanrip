@@ -565,9 +565,9 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "\tAlbum name:      album=<string>\n");
                 cyanrip_log(ctx, 0, "\tAlbum artist:    album_artist=<string>\n");
                 cyanrip_log(ctx, 0, "\tDate:            date=<YYYY-MM-DD>\n");
-                cyanrip_log(ctx, 0, "\tTrack title:     title<number>=<name>\n");
-                cyanrip_log(ctx, 0, "\tTrack performer: performer<number>=<name>\n");
-                cyanrip_log(ctx, 0, "\tLyrics author:   lyrics<number>=<name>\n");
+                cyanrip_log(ctx, 0, "\tTrack title:     title<number>=<string>\n");
+                cyanrip_log(ctx, 0, "\tTrack performer: performer<number>=<string>\n");
+                cyanrip_log(ctx, 0, "\tLyrics author:   lyrics<number>=<string>\n");
                 cyanrip_log(ctx, 0, "Separate each key=value pair with \":\"\n");
                 return 0;
             }
