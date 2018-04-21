@@ -397,6 +397,9 @@ void on_quit_signal(int signo)
 
 static int parse_metadata(cyanrip_ctx *ctx, char *optarg)
 {
+    if (!optarg || !strlen(optarg))
+        return 0;
+
     char *save;
     char *p = av_strtok(optarg, ":", &save);
     while (p != NULL) {
