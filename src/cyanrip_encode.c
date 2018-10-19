@@ -130,40 +130,6 @@ fail:
     return 1;
 }
 
-static void set_metadata(cyanrip_ctx *ctx, cyanrip_track *t, AVFormatContext *avf)
-{
-    char t_s[64];
-    char t_disc_date[64];
-
-    time_t t_c = time(NULL);
-    struct tm *t_l = localtime(&t_c);
-    strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
-
-#define ADD_TAG(dict, name, source, flags)          \
-    do {                                            \
-        if (strlen(source))                         \
-            av_dict_set(dict, name, source, flags); \
-    } while (0)
-
-    ADD_TAG(&avf->metadata, "comment", "cyanrip "CYANRIP_VERSION_STRING, 0);
-
-    ADD_TAG(&avf->metadata, "title",              t->title,          0);
-    ADD_TAG(&avf->metadata, "author",             t->artist,         0);
-    ADD_TAG(&avf->metadata, "performer",          t->performer,      0);
-    ADD_TAG(&avf->metadata, "lyrics",             t->lyrics,         0);
-    ADD_TAG(&avf->metadata, "creation_time",      t_s,               0);
-    ADD_TAG(&avf->metadata, "album",              ctx->album,        0);
-    ADD_TAG(&avf->metadata, "album_artist",       ctx->album_artist, 0);
-    ADD_TAG(&avf->metadata, "musicbrainz_discid", ctx->discid,       0);
-    av_dict_set_int(&avf->metadata, "track",      t->index + 1,      0);
-    av_dict_set_int(&avf->metadata, "tracktotal", ctx->drive->tracks,0);
-
-    if (ctx->disc_date) {
-        strftime(t_disc_date, sizeof(t_disc_date), "%Y-%m-%d", ctx->disc_date);
-        ADD_TAG(&avf->metadata, "date", t_disc_date, 0);
-    }
-}
-
 static const uint64_t get_codec_channel_layout(AVCodec *codec)
 {
     int i = 0;
@@ -314,24 +280,16 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     AVCodec *out_codec = NULL;
     AVCodecContext *out_avctx = NULL;
 
-    char dirname[259], filename[1024], album_name[256], track_name[256];
-    strcpy(album_name, ctx->album);
-    strcpy(track_name, t->title);
+    char *dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
+                                cfmt->folder_suffix);
 
-    if (ctx->settings.base_dst_folder)
-        sprintf(dirname, "%s [%s]", ctx->settings.base_dst_folder, cfmt->folder_suffix);
-    else if (strlen(ctx->album))
-        sprintf(dirname, "%s [%s]", cyanrip_sanitize_fn(album_name), cfmt->folder_suffix);
-    else if (strlen(ctx->discid))
-        sprintf(dirname, "%s [%s]", ctx->discid, cfmt->folder_suffix);
+    char *filename;
+    if (dict_get(t->meta, "title"))
+        filename = av_asprintf("%s/%02i - %s.%s", dirname, t->number,
+                               cyanrip_sanitize_fn(dict_get(t->meta, "title")),
+                               cfmt->ext);
     else
-        sprintf(dirname, "%s [%s]", "CR_Album", cfmt->folder_suffix);
-
-    if (strlen(t->title))
-        sprintf(filename, "%s/%02i - %s.%s", dirname, t->index + 1,
-                cyanrip_sanitize_fn(track_name), cfmt->ext);
-    else
-        sprintf(filename, "%s/%02i.%s", dirname, t->index + 1, cfmt->ext);
+        filename = av_asprintf("%s/%02i.%s", dirname, t->number, cfmt->ext);
 
     struct stat st_req = { 0 };
     if (stat(dirname, &st_req) == -1)
@@ -385,8 +343,8 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     st->id        = 0;
     st->time_base = (AVRational){ 1, out_avctx->sample_rate };
 
-    /* Encode metadata */
-    set_metadata(ctx, t, avf);
+    /* Add metadata */
+    av_dict_copy(&avf->metadata, t->meta, 0);
 
     /* Open encoder */
     if (avcodec_open2(out_avctx, out_codec, NULL) < 0) {
@@ -469,7 +427,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         av_frame_get_buffer(out_frame, 0);
         out_frame->extended_data  = out_frame->data;
 
-        cyanrip_log(NULL, 0, "\rEncoding track %i, progress - %0.2f%%", t->index + 1,
+        cyanrip_log(NULL, 0, "\rEncoding track %i, progress - %0.2f%%", t->number,
                     8820000.0f*(float)out_frame->pts/(t->nb_samples*out_frame->sample_rate));
 
         /* Convert */
@@ -523,7 +481,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
         goto fail;
     }
 
-    cyanrip_log(NULL, 0, "\r\nTrack %i encoded!\n", t->index + 1);
+    cyanrip_log(NULL, 0, "\r\nTrack %i encoded!\n", t->number);
 
     status = 0;
 
@@ -537,6 +495,8 @@ fail:
     avio_closep(&avf->pb);
     avformat_free_context(avf);
 
+    av_free(dirname);
+    av_free(filename);
     av_free(in_avctx);
     av_free(out_avctx);
 

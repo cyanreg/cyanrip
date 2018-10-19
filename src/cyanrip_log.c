@@ -23,14 +23,20 @@
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
+#define CLOG(FORMAT, DICT, TAG)                                                \
+    if (dict_get(DICT, TAG))                                                   \
+        cyanrip_log(ctx, 0, FORMAT, dict_get(DICT, TAG));                      \
+
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
     cyanrip_samples_to_duration(t->nb_samples >> 1, length);
 
-    cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->index + 1);
-    cyanrip_log(ctx, 0, "    Title:       %s\n", t->title);
-    cyanrip_log(ctx, 0, "    ISRC:        %s\n", t->isrc ? t->isrc : "");
+    cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->number);
+    CLOG("    Title:       %s\n", t->meta, "title")
+    CLOG("    Artist:      %s\n", t->meta, "artist")
+    CLOG("    ISRC:        %s\n", t->meta, "isrc")
+
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
@@ -58,9 +64,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
     if (ctx->settings.cover_image_path)
         cyanrip_log(ctx, 0, "Album Art:     %s\n", ctx->settings.cover_image_path);
-    cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->settings.base_dst_folder ?
-                                               ctx->settings.base_dst_folder :
-                                               strlen(ctx->album) ? ctx->album : ctx->discid);
+    cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->base_dst_folder);
     if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
     else
@@ -84,10 +88,12 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
 
     char duration[16];
     cyanrip_frames_to_duration(ctx->duration, duration);
-    cyanrip_log(ctx, 0, "DiscID:        %s\n", ctx->discid);
-    cyanrip_log(ctx, 0, "Disc MCN:      %s\n", ctx->disc_mcn ? ctx->disc_mcn : "");
-    cyanrip_log(ctx, 0, "Album:         %s\n", ctx->album);
-    cyanrip_log(ctx, 0, "Artist:        %s\n", ctx->album_artist);
+
+    CLOG("DiscID:        %s\n", ctx->meta, "discid")
+    CLOG("Disc MCN:      %s\n", ctx->meta, "disc_mcn")
+    CLOG("Album:         %s\n", ctx->meta, "album")
+    CLOG("Album artist:  %s\n", ctx->meta, "album_artist")
+
     cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
 
     cyanrip_log(ctx, 0, "\n\n");
@@ -106,16 +112,15 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
-    char logfile[260], album_name[256];
-    strcpy(album_name, ctx->album);
+    int len = strlen(ctx->base_dst_folder) + strlen("/.log");
+    char *logfile = av_malloc(len);
 
-    if (ctx->settings.base_dst_folder)
-        sprintf(logfile, "%s.%s", ctx->settings.base_dst_folder, "log");
-    else if (strlen(ctx->album))
-        sprintf(logfile, "%s.%s", cyanrip_sanitize_fn(album_name), "log");
-    else
-        sprintf(logfile, "%s.%s", ctx->discid, "log");
+    sprintf(logfile, "%s.log", ctx->base_dst_folder);
+
     ctx->logfile = av_fopen_utf8(logfile, "w");
+
+    av_free(logfile);
+
     if (!ctx->logfile) {
         cyanrip_log(ctx, 0, "Error opening log file to write to!\n");
         return 1;

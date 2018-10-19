@@ -29,6 +29,7 @@
 #include <discid/discid.h>
 #include <musicbrainz5/mb5_c.h>
 #include <libavutil/mem.h>
+#include <libavutil/dict.h>
 #include <libavutil/avstring.h>
 
 enum cyanrip_output_formats {
@@ -67,13 +68,8 @@ typedef struct cyanrip_settings {
 } cyanrip_settings;
 
 typedef struct cyanrip_track {
-    /* Metadata */
-    int index;
-    char title[4096];
-    char artist[4096];
-    char performer[4096];
-    char lyrics[4096];
-    char *isrc;
+    int number;
+    AVDictionary *meta; /* Disc's AVDictionary gets copied here */
     int preemphasis;
     size_t nb_samples;
     uint32_t ieee_crc_32;
@@ -82,7 +78,6 @@ typedef struct cyanrip_track {
     int end_sector;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;
-    /* Metadata */
 
     int16_t *samples;       /* Actual compensated track data with length nb_samples */
     uint8_t *base_data;   /* Data without CD drive offset or underread compensation */
@@ -94,7 +89,6 @@ typedef struct cyanrip_ctx {
     cyanrip_settings   settings;
     cyanrip_track     *tracks;
     CdIo_t            *cdio;
-    DiscId            *discid_ctx;
     FILE              *logfile;
 
     /* Drive caps */
@@ -103,12 +97,10 @@ typedef struct cyanrip_ctx {
     cdio_drive_read_cap_t mcap;
 
     /* Metadata */
-    char album_artist[4096];
-    char album[4096];
-    char *disc_mcn;
-    struct tm *disc_date;
-    char discid[64];
-    /* Metadata */
+    AVDictionary *meta;
+
+    /* Destination folder */
+    const char *base_dst_folder;
 
     void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
     void *cover_image_params;
@@ -118,6 +110,12 @@ typedef struct cyanrip_ctx {
     lsn_t duration;
     lsn_t last_frame;
 } cyanrip_ctx;
+
+static inline const char *dict_get(AVDictionary *dict, const char *key)
+{
+    AVDictionaryEntry *e = av_dict_get(dict, key, NULL, 0);
+    return e ? e->value : NULL;
+}
 
 static inline void cyanrip_frames_to_duration(uint32_t sectors, char *str)
 {
@@ -143,8 +141,9 @@ static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
     snprintf(str, 12, "%02i:%02i:%02i.%i", hr, min, sec, msec);
 }
 
-static inline char *cyanrip_sanitize_fn(char *str)
+static inline char *cyanrip_sanitize_fn(const char *src)
 {
+    char *str = av_strdup(src);
     char forbiddenchars[] = "<>:/\\|?*";
     char *ret = str;
     while(*str) {

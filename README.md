@@ -46,7 +46,7 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 | -S *int*    | Set the drive speed (0 for default/auto)                                   |
 | -o *string* | Comma separated list of output formats (e.g. flac,opus or help to list all)|
 | -b *float*  | Bitrate of lossy files in kbps                                             |
-| -t *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
+| -l *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
 | -r *int*    | Max retries to read a frame before considering it corrupt                  |
 | -m *string* | Metadata, in case disc info is unavailable                                 |
 | -f          | Disable CD paranoia error checking (for speed)                             |
@@ -58,15 +58,12 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 Metadata
 --------
 
-In case the Musicbrainz database doesn't contain the disc information, you can manually add metadata via the -m argument. The following fields are currently accepted:
+In case the Musicbrainz database doesn't contain the disc information, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
 
-|        Key       |   Value  | Description                                       |
-|------------------|----------|---------------------------------------------------|
-| album            | *string* | Sets the album name                               |
-| album_artist     | *string* | Sets the album artist name                        |
-| date             | *string* | Sets the date, the format is "YYYY-MM-DD"         |
-| title<*int*>     | *string* | Sets the title for a track with a given index     |
-| performer<*int*> | *string* | Sets the performer for a track with a given index |
-| lyrics<*int*>    | *string* | Sets the lyricist for a track with a given index  |
+-a album="Name":album_artist="Artist":date="2018":random_tag="Value"
 
-All key=value pairs must be separated by *:*, for example: album="Name":album_artist="Name":date="2018-04-21":title1="Name":title12="Name for track 12":lyrics3="Lyricist for track 3".
+-t 1=artist="Track Artist":lyrics="Name":random_tag="Value"
+
+All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
+
+The precedence of tags goes Track tags > Album tags > Musicbrainz tags.

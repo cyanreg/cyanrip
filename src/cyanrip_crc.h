@@ -45,9 +45,9 @@ static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
 
     uint32_t sum = 0;
 
-    if (!t->index)
+    if (t->number == 1)
         start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
-    else if (t->index == ctx->drive->tracks - 1)
+    else if (t->number == ctx->drive->tracks)
         end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
 
     for (int i = 0; i < t->nb_samples; i++) {
@@ -68,9 +68,9 @@ static inline uint32_t acurip_crc_v2(cyanrip_ctx *ctx, cyanrip_track *t)
 
     uint32_t sum = 0;
 
-    if (!t->index)
+    if (t->number == 1)
         start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
-    else if (t->index == ctx->drive->tracks - 1)
+    else if (t->number == ctx->drive->tracks)
         end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
 
     for (int i = 0; i < t->nb_samples >> 1; i++) {
