@@ -37,22 +37,23 @@ CLI
 
 All arguments are entirely optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
 
-|   Argument  | Description                                                                |
-|-------------|----------------------------------------------------------------------------|
-| -d *path*   | Optional device path (e.g. /dev/sr0)                                       |
-| -D *path*   | Optional path to use as base folder name to rip into                       |
-| -c *path*   | Path to cover image to attach to files                                     |
-| -s *int*    | CD Drive offset in samples                                                 |
-| -S *int*    | Set the drive speed (0 for default/auto)                                   |
-| -o *string* | Comma separated list of output formats (e.g. flac,opus or help to list all)|
-| -b *float*  | Bitrate of lossy files in kbps                                             |
-| -l *list*   | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
-| -r *int*    | Max retries to read a frame before considering it corrupt                  |
-| -m *string* | Metadata, in case disc info is unavailable                                 |
-| -f          | Disable CD paranoia error checking (for speed)                             |
-| -V          | Print program version                                                      |
-| -h          | List all arguments and their description (this)                            |
-| -n          | Disable Musicbrainz lookup                                                 |
+| Argument             | Description                                                                |
+|----------------------|----------------------------------------------------------------------------|
+| -d *path*            | Optional device path (e.g. /dev/sr0)                                       |
+| -D *path*            | Optional path to use as base folder name to rip into                       |
+| -c *path*            | Path to cover image to attach to files                                     |
+| -s *int*             | CD Drive offset in samples                                                 |
+| -S *int*             | Set the drive speed (0 for default/auto)                                   |
+| -o *string*          | Comma separated list of output formats (e.g. flac,opus or help to list all)|
+| -b *float*           | Bitrate of lossy files in kbps                                             |
+| -l *list*            | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
+| -r *int*             | Max retries to read a frame before considering it corrupt                  |
+| -a *string*          | Album metadata, in case disc info is unavailable                           |
+| -t *number*=*string* | Track metadata, in case unavailable or incomplete                          |
+| -f                   | Disable CD paranoia error checking (for speed)                             |
+| -V                   | Print program version                                                      |
+| -h                   | List all arguments and their description (this)                            |
+| -n                   | Disable Musicbrainz lookup                                                 |
 
 
 Metadata
