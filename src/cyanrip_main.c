@@ -295,9 +295,10 @@ static void cyanrip_copy_album_to_track_meta(cyanrip_ctx *ctx)
     }
 }
 
-void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
+bool cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 {
-    char *err = NULL, error_status = 0;
+    char *err = NULL;
+    bool is_error = 0;
     int retries = ctx->settings.frame_max_retries;
 
     int16_t *samples = NULL;
@@ -308,34 +309,33 @@ void cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
         exit(1);
     }
 
-    if (!retries)
-        samples = cdio_paranoia_read(ctx->paranoia, NULL);
-    else
-        samples = cdio_paranoia_read_limited(ctx->paranoia, NULL, retries);
+    samples = cdio_paranoia_read_limited(ctx->paranoia, NULL, retries);
 
     if ((err = cdio_cddap_errors(ctx->drive))) {
         cyanrip_log(ctx, 0, "%s\n", err);
         free(err);
         err = NULL;
-        error_status = 1;
+        is_error = 1;
     }
 
     if ((err = cdio_cddap_messages(ctx->drive))) {
         cyanrip_log(ctx, 0, "%s\n", err);
         free(err);
         err = NULL;
-        error_status = 1;
+        is_error = 1;
     }
 
     if (!samples) {
         cyanrip_log(ctx, 0, "Frame read failed!\n");
-        error_status = 1;
+        is_error = 1;
     } else {
         memcpy(t->base_data + t->nb_samples*2, samples, CDIO_CD_FRAMESIZE_RAW);
     }
 
-    ctx->errors_count += error_status;
+    ctx->errors_count += is_error;
     t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
+
+    return is_error;
 }
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -380,9 +380,10 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     if ((first_frame + frames) > ctx->last_frame)
         frames -= overread;
 
+    int errors = 0;
     for (int i = 0; i < frames; i++) {
-        cyanrip_read_frame(ctx, t);
-        cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%", t->number, ((double)i/frames)*100.0f);
+        errors += cyanrip_read_frame(ctx, t);
+        cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%, errors - %i", t->number, ((double)i/frames)*100.0f, errors);
     }
     cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->number);
 
