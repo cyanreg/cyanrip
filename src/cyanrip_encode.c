@@ -342,6 +342,7 @@ int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
     }
     st->id        = 0;
     st->time_base = (AVRational){ 1, out_avctx->sample_rate };
+    st->duration = 0; /* TODO: Set */
 
     /* Add metadata */
     av_dict_copy(&avf->metadata, t->meta, 0);
