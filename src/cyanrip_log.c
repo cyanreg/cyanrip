@@ -69,7 +69,6 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     else
         cyanrip_log(ctx, 0, "Speed:         default (%s)\n",
                     (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
-    cyanrip_log(ctx, 0, "Paranoia:      %s\n", ctx->settings.fast_mode ? "fast" : "full");
     cyanrip_log(ctx, 0, "C2 errors:     %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
     cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);

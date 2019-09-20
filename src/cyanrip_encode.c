@@ -48,21 +48,22 @@ typedef struct cyanrip_out_fmt {
     const char *ext;
     int coverart_supported;
     int compression_level;
+    int lossless;
     int codec;
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  1, 11, AV_CODEC_ID_FLAC,      },
-    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   1,  0, AV_CODEC_ID_MP3,       },
-    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   0,  0, AV_CODEC_ID_TTA,       },
-    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  0, 10, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   0,  0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   1,  0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    0,  8, AV_CODEC_ID_WAVPACK,   },
-    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   0,  0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   0,  2, AV_CODEC_ID_ALAC,      },
-    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   0,  0, AV_CODEC_ID_PCM_S16LE, },
-    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   1, 10, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
+    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
+    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  0, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   0,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
+    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   0,  2, 1, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
 };
 
 void cyanrip_print_codecs(void)
@@ -205,15 +206,13 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
         return NULL;
 
     avctx->opaque            = ctx;
-    avctx->bit_rate          = lrintf(ctx->settings.bitrate*1000.0f);
+    avctx->bit_rate          = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
     avctx->sample_fmt        = get_codec_sample_fmt(codec);
     avctx->channel_layout    = get_codec_channel_layout(codec);
     avctx->compression_level = cfmt->compression_level;
     avctx->sample_rate       = get_codec_sample_rate(codec);
     avctx->time_base         = (AVRational){ 1, avctx->sample_rate };
     avctx->channels          = av_get_channel_layout_nb_channels(avctx->channel_layout);
-    if (ctx->settings.fast_mode)
-        avctx->compression_level = 0;
 
     if (avf->oformat->flags & AVFMT_GLOBALHEADER)
         avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;

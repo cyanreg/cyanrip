@@ -7,7 +7,7 @@ conf = configuration_data()
 
 majorver = '0'
 minorver = '3'
-microver = '0-rc'
+microver = '0'
 
 version = majorver + '.' + minorver + '.' + microver
 

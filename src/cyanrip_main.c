@@ -44,7 +44,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     if (ctx->drive)
         cdio_cddap_close_no_free_cdio(ctx->drive);
     if (ctx->settings.eject_on_success_rip && !ctx->total_error_count &&
-        (ctx->mcap & CDIO_DRIVE_CAP_MISC_EJECT) && ctx->cdio)
+        (ctx->mcap & CDIO_DRIVE_CAP_MISC_EJECT) && ctx->cdio && !quit_now)
         cdio_eject_media(&ctx->cdio);
     else if (ctx->cdio)
         cdio_destroy(ctx->cdio);
@@ -112,8 +112,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    int mode = !ctx->settings.fast_mode ? PARANOIA_MODE_FULL : PARANOIA_MODE_DISABLE;
-    cdio_paranoia_modeset(ctx->paranoia, mode);
+    cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
 
     ctx->first_frame = cdio_get_track_lsn(ctx->cdio, 1);
     ctx->last_frame = cdio_get_disc_last_lsn(ctx->cdio) - 1;
@@ -270,6 +269,9 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
         }
     }
 
+    if (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE)
+        return 0;
+
     /* Get discid */
     DiscId *discid = discid_new();
     if (!discid_read_sparse(discid, ctx->settings.dev_path, 0)) {
@@ -345,7 +347,6 @@ const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
-    const int ouf = ctx->settings.over_under_read_frames;
 
     /* last frame obtained from cdio is inclusive */
     int64_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
@@ -360,12 +361,13 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
 
     /* Move the seek position coarsely */
-    int sign = FFSIGN(ouf);
-    first_frame += sign*FFMAX(FFABS(ouf) - 1, 0);
-    last_frame += sign*FFMAX(FFABS(ouf) - 1, 0);
+    const int extra_frames = ctx->settings.over_under_read_frames;
+    int sign = FFSIGN(extra_frames);
+    first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
+    last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
 
     /* Bump the lower/higher frame in the offset direction */
-    if (ouf) {
+    if (extra_frames) {
         first_frame -= sign < 0;
         last_frame += sign > 0;
     }
@@ -401,7 +403,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
     /* Last/first frame partial offset */
     int offs = ctx->settings.offset*4;
-    offs -= sign*FFMAX(FFABS(ouf) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
+    offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
 
     cyanrip_dec_ctx *dec_ctx;
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB];
@@ -543,7 +545,6 @@ int main(int argc, char **argv)
     settings.cover_image_path = NULL;
     settings.verbose = 1;
     settings.speed = 0;
-    settings.fast_mode = 0;
     settings.frame_max_retries = 25;
     settings.over_under_read_frames = 0;
     settings.offset = 0;
@@ -561,7 +562,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnfVEl:a:t:b:c:r:d:o:s:S:D:F:")) != -1) {
+    while ((c = getopt(argc, argv, "hnVEl:a:t:b:c:r:d:o:s:S:D:F:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
@@ -577,8 +578,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -a <string>          Album metadata, key=value:key=value\n");
             cyanrip_log(ctx, 0, "    -t <number>=<string> Track metadata, can be specified multiple times\n");
             cyanrip_log(ctx, 0, "    -F <int>             Encoding FIFO queue size\n");
-            cyanrip_log(ctx, 0, "    -E                   Don't eject tray (if that was possible) once done\n");
-            cyanrip_log(ctx, 0, "    -f                   Disable all error checking and discid reading\n");
+            cyanrip_log(ctx, 0, "    -E                   Don't eject tray once done\n");
             cyanrip_log(ctx, 0, "    -V                   Print program version\n");
             cyanrip_log(ctx, 0, "    -h                   Print options help\n");
             cyanrip_log(ctx, 0, "    -n                   Disable musicbrainz lookup\n");
@@ -673,9 +673,6 @@ int main(int argc, char **argv)
             return 0;
         case 'd':
             settings.dev_path = optarg;
-            break;
-        case 'f':
-            settings.fast_mode = 1;
             break;
         case '?':
             return 1;

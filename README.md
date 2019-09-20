@@ -6,24 +6,24 @@ Features
 --------
  * Automatic tag lookup from the musicbrainz database
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
- * Drive offset compensation, error recovery via cd-paranoia
- * Able to encode to multiple formats simultaneously
+ * Drive offset compensation and error recovery via cd-paranoia
+ * Able to encode to multiple formats simultaneously in parallel
  * Able to mux in cover images to mp3, flac and aac, opus (both in mp4)
- * Provides IEEE CRC32, EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
+ * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
 Compiling
 ---------
 Complete list of dependencies:
 
- * FFmpeg (4.0)
+ * FFmpeg (at least 4.0, libavcodec, libswresample, libavutil, libavformat)
  * libcdio-paranoia
  * libdiscid
  * libmusicbrainz5
 
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
-`meson build`
+`meson build --buildtype release`
 
 `ninja -C build`
 
@@ -42,15 +42,15 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 | -d *path*            | Optional device path (e.g. /dev/sr0)                                       |
 | -D *path*            | Optional path to use as base folder name to rip into                       |
 | -c *path*            | Path to cover image to attach to files                                     |
-| -s *int*             | CD Drive offset in samples                                                 |
+| -s *int*             | CD Drive offset in samples (stereo samples, same as accurip)               |
 | -S *int*             | Set the drive speed (0 for default/auto)                                   |
 | -o *string*          | Comma separated list of output formats (e.g. flac,opus or help to list all)|
 | -b *float*           | Bitrate of lossy files in kbps                                             |
 | -l *list*            | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
-| -r *int*             | Max retries to read a frame before considering it corrupt                  |
+| -r *int*             | Max retries to read a frame before considering it corrupt (default: 25)    |
 | -a *string*          | Album metadata, in case disc info is unavailable                           |
 | -t *number*=*string* | Track metadata, in case unavailable or incomplete                          |
-| -f                   | Disable CD paranoia error checking (for speed)                             |
+| -E                   | Don't eject drive tray once done successfully and without interruptions    |
 | -V                   | Print program version                                                      |
 | -h                   | List all arguments and their description (this)                            |
 | -n                   | Disable Musicbrainz lookup                                                 |
@@ -67,4 +67,4 @@ In case the Musicbrainz database doesn't contain the disc information, you can m
 
 All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
 
-The precedence of tags goes Track tags > Album tags > Musicbrainz tags.
+The precedence of tags is Track tags > Album tags > Musicbrainz tags.
