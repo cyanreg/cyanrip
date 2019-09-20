@@ -32,7 +32,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     char length[16];
     cyanrip_samples_to_duration(t->nb_samples >> 1, length);
 
-    cyanrip_log(ctx, 0, "Track %i completed successfully!\n", t->number);
+    cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
     CLOG("    Title:       %s\n", t->meta, "title")
     CLOG("    Artist:      %s\n", t->meta, "artist")
     CLOG("    ISRC:        %s\n", t->meta, "isrc")
@@ -42,7 +42,6 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
     cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_sector);
     cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_sector);
-    cyanrip_log(ctx, 0, "    IEEE CRC 32: 0x%08x\n", t->ieee_crc_32);
     cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
     cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
     cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
@@ -96,7 +95,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
 
     cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
 
-    cyanrip_log(ctx, 0, "\n\n");
+    cyanrip_log(ctx, 0, "\n");
 }
 
 void cyanrip_log_finish_report(cyanrip_ctx *ctx)
@@ -106,7 +105,41 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     struct tm *t_l = localtime(&t_c);
     strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
 
-    cyanrip_log(ctx, 0, "Ripping errors: %i\n", ctx->errors_count);
+    cyanrip_log(ctx, 0, "Paranoia status counts:\n");
+    if (paranoia_status[PARANOIA_CB_READ])
+        cyanrip_log(ctx, 0, "    READ:          %lu\n", paranoia_status[PARANOIA_CB_READ]);
+    if (paranoia_status[PARANOIA_CB_VERIFY])
+        cyanrip_log(ctx, 0, "    VERIFY:        %lu\n", paranoia_status[PARANOIA_CB_VERIFY]);
+    if (paranoia_status[PARANOIA_CB_FIXUP_EDGE])
+        cyanrip_log(ctx, 0, "    FIXUP_EDGE:    %lu\n", paranoia_status[PARANOIA_CB_FIXUP_EDGE]);
+    if (paranoia_status[PARANOIA_CB_FIXUP_ATOM])
+        cyanrip_log(ctx, 0, "    FIXUP_ATOM:    %lu\n", paranoia_status[PARANOIA_CB_FIXUP_ATOM]);
+    if (paranoia_status[PARANOIA_CB_SCRATCH])
+        cyanrip_log(ctx, 0, "    SCRATCH:       %lu\n", paranoia_status[PARANOIA_CB_SCRATCH]);
+    if (paranoia_status[PARANOIA_CB_REPAIR])
+        cyanrip_log(ctx, 0, "    REPAIR:        %lu\n", paranoia_status[PARANOIA_CB_REPAIR]);
+    if (paranoia_status[PARANOIA_CB_SKIP])
+        cyanrip_log(ctx, 0, "    SKIP:          %lu\n", paranoia_status[PARANOIA_CB_SKIP]);
+    if (paranoia_status[PARANOIA_CB_DRIFT])
+        cyanrip_log(ctx, 0, "    DRIFT:         %lu\n", paranoia_status[PARANOIA_CB_DRIFT]);
+    if (paranoia_status[PARANOIA_CB_BACKOFF])
+        cyanrip_log(ctx, 0, "    BACKOFF:       %lu\n", paranoia_status[PARANOIA_CB_BACKOFF]);
+    if (paranoia_status[PARANOIA_CB_OVERLAP])
+        cyanrip_log(ctx, 0, "    OVERLAP:       %lu\n", paranoia_status[PARANOIA_CB_OVERLAP]);
+    if (paranoia_status[PARANOIA_CB_FIXUP_DROPPED])
+        cyanrip_log(ctx, 0, "    FIXUP_DROPPED: %lu\n", paranoia_status[PARANOIA_CB_FIXUP_DROPPED]);
+    if (paranoia_status[PARANOIA_CB_FIXUP_DUPED])
+        cyanrip_log(ctx, 0, "    FIXUP_DUPED:   %lu\n", paranoia_status[PARANOIA_CB_FIXUP_DUPED]);
+    if (paranoia_status[PARANOIA_CB_READERR])
+        cyanrip_log(ctx, 0, "    READERR:       %lu\n", paranoia_status[PARANOIA_CB_READERR]);
+    if (paranoia_status[PARANOIA_CB_CACHEERR])
+        cyanrip_log(ctx, 0, "    CACHEERR:      %lu\n", paranoia_status[PARANOIA_CB_CACHEERR]);
+    if (paranoia_status[PARANOIA_CB_WROTE])
+        cyanrip_log(ctx, 0, "    WROTE:         %lu\n", paranoia_status[PARANOIA_CB_WROTE]);
+    if (paranoia_status[PARANOIA_CB_FINISHED])
+        cyanrip_log(ctx, 0, "    FINISHED:      %lu\n", paranoia_status[PARANOIA_CB_FINISHED]);
+
+    cyanrip_log(ctx, 0, "Ripping errors: %i\n", ctx->total_error_count);
     cyanrip_log(ctx, 0, "Ripping finished at %s\n", t_s);
 }
 
@@ -135,7 +168,7 @@ void cyanrip_log_end(cyanrip_ctx *ctx)
     fclose(ctx->logfile);
 }
 
-void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
+int cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
 {
     va_list args;
     if (ctx && ctx->logfile) {
@@ -144,8 +177,9 @@ void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
         va_end(args);
     }
     if (ctx && !ctx->settings.verbose && verbose)
-        return;
+        return 0;
     va_start(args, format);
-    vprintf(format, args);
+    int num = vprintf(format, args);
     va_end(args);
+    return num;
 }

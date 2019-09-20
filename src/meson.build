@@ -23,6 +23,7 @@ dependencies = [
     dependency('libavformat', version: '>= 58.13.100'),
     dependency('libswresample', version: '>= 3.2.100'),
     dependency('libavutil', version: '>= 56.15.100'),
+    dependency('threads'),
 ]
 
 # Check for wmain support (Windows/MinGW)

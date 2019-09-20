@@ -20,6 +20,9 @@
 
 #include "cyanrip_main.h"
 
+typedef struct cyanrip_dec_ctx cyanrip_dec_ctx;
+typedef struct cyanrip_enc_ctx cyanrip_enc_ctx;
+
 void cyanrip_print_codecs(void);
 int cyanrip_validate_fmt(const char *fmt);
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format);
@@ -27,5 +30,12 @@ const char *cyanrip_fmt_desc(enum cyanrip_output_formats format);
 int cyanrip_read_cover_image(cyanrip_ctx *ctx);
 void cyanrip_free_cover_image(cyanrip_ctx *ctx);
 
-int cyanrip_encode_track(cyanrip_ctx *ctx, cyanrip_track *t,
-                         enum cyanrip_output_formats format);
+int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s);
+int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
+                                cyanrip_dec_ctx *dec_ctx, cyanrip_track *t,
+                                enum cyanrip_output_formats format);
+int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
+                                 int num_enc, cyanrip_dec_ctx *dec_ctx,
+                                 const uint8_t *data, int bytes);
+int cyanrip_end_track_encoding(cyanrip_enc_ctx **s);
+void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s);

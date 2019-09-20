@@ -31,6 +31,7 @@
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
+#include <libavutil/intreadwrite.h>
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC,
@@ -60,6 +61,8 @@ typedef struct cyanrip_settings {
     int over_under_read_frames;
     bool disable_mb;
     float bitrate;
+    int enc_fifo_size;
+    bool eject_on_success_rip;
     int rip_indices_count;
     int rip_indices[99];
 
@@ -72,15 +75,11 @@ typedef struct cyanrip_track {
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
     int preemphasis;
     size_t nb_samples;
-    uint32_t ieee_crc_32;
-    uint32_t eac_crc;
     int start_sector;
     int end_sector;
+    uint32_t eac_crc;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;
-
-    int16_t *samples;       /* Actual compensated track data with length nb_samples */
-    uint8_t *base_data;   /* Data without CD drive offset or underread compensation */
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {
@@ -106,10 +105,13 @@ typedef struct cyanrip_ctx {
     void *cover_image_params;
 
     int success;
-    int errors_count;
+    int total_error_count;
     lsn_t duration;
+    lsn_t first_frame;
     lsn_t last_frame;
 } cyanrip_ctx;
+
+extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
 
 static inline const char *dict_get(AVDictionary *dict, const char *key)
 {
@@ -139,6 +141,11 @@ static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
     const int sec   = tot - ((hr * 3600) + min * 60);
     const int msec  = tot - sec;
     snprintf(str, 12, "%02i:%02i:%02i.%i", hr, min, sec, msec);
+}
+
+static inline int cmp_numbers(const void *a, const void *b)
+{
+    return *((int *)a) > *((int *)b);
 }
 
 static inline char *cyanrip_sanitize_fn(const char *src)

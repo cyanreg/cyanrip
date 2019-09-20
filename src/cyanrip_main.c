@@ -33,29 +33,32 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     if (!s || !*s)
         return;
     ctx = *s;
+
     cyanrip_free_cover_image(ctx);
-    for (int i = 0; i < ctx->drive->tracks; i++) {
+
+    for (int i = 0; i < ctx->drive->tracks; i++)
         av_dict_free(&ctx->tracks[i].meta);
-        av_freep(&ctx->tracks[i].base_data);
-    }
+
     if (ctx->paranoia)
         cdio_paranoia_free(ctx->paranoia);
     if (ctx->drive)
         cdio_cddap_close_no_free_cdio(ctx->drive);
-    if (ctx->cdio)
+    if (ctx->settings.eject_on_success_rip && !ctx->total_error_count &&
+        (ctx->mcap & CDIO_DRIVE_CAP_MISC_EJECT) && ctx->cdio)
+        cdio_eject_media(&ctx->cdio);
+    else if (ctx->cdio)
         cdio_destroy(ctx->cdio);
+
     av_dict_free(&ctx->meta);
     av_freep(&ctx->base_dst_folder);
     av_freep(&ctx->tracks);
     av_freep(&ctx);
+
     *s = NULL;
 }
 
 int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 {
-    int rval;
-    char *error = NULL;
-
     cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
 
     ctx->settings = *settings;
@@ -70,27 +73,37 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_get_drive_cap(ctx->cdio, &ctx->rcap, &ctx->wcap, &ctx->mcap);
 
-    if (!(ctx->drive = cdio_cddap_identify_cdio(ctx->cdio, 1, &error))) {
-        cyanrip_log(ctx, 0, "Unable to init cddap context");
-        if (error)
-            cyanrip_log(ctx, 0, " - \"%s\"\n", error);
-        else
-            cyanrip_log(ctx, 0, "!\n");
+    char *msg = NULL;
+    if (!(ctx->drive = cdio_cddap_identify_cdio(ctx->cdio, CDDA_MESSAGE_LOGIT, &msg))) {
+        cyanrip_log(ctx, 0, "Unable to init cddap context!\n");
+        if (msg) {
+            cyanrip_log(ctx, 0, "cdio: \"%s\"\n", msg);
+            cdio_cddap_free_messages(msg);
+        }
         return 1;
     }
 
-    cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_FORGETIT, CDDA_MESSAGE_FORGETIT);
+    if (msg) {
+        cyanrip_log(ctx, 0, "%s\n", msg);
+        cdio_cddap_free_messages(msg);
+    }
+
+    cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_LOGIT, CDDA_MESSAGE_FORGETIT);
 
     cyanrip_log(ctx, 0, "Opening drive...\n");
-    rval = cdio_cddap_open(ctx->drive);
-    if (rval < 0) {
+    int ret = cdio_cddap_open(ctx->drive);
+    if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to open device!\n");
         cyanrip_ctx_end(&ctx);
         return 1;
     }
 
-    if (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED)
+    if (settings->speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
         cdio_cddap_speed_set(ctx->drive, settings->speed);
+
+    /* Drives are very slow and burst-y so don't block by default */
+    if (!settings->enc_fifo_size && (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
+        settings->enc_fifo_size = 16;
 
     ctx->paranoia = cdio_paranoia_init(ctx->drive);
     if (!ctx->paranoia) {
@@ -102,9 +115,10 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     int mode = !ctx->settings.fast_mode ? PARANOIA_MODE_FULL : PARANOIA_MODE_DISABLE;
     cdio_paranoia_modeset(ctx->paranoia, mode);
 
-    ctx->last_frame = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
+    ctx->first_frame = cdio_get_track_lsn(ctx->cdio, 1);
+    ctx->last_frame = cdio_get_disc_last_lsn(ctx->cdio) - 1;
     if (ctx->drive->tracks)
-        ctx->duration = cdio_get_track_last_lsn(ctx->cdio, ctx->drive->tracks) - cdio_get_track_last_lsn(ctx->cdio, 0);
+        ctx->duration = cdio_get_track_last_lsn(ctx->cdio, ctx->drive->tracks) - ctx->first_frame + 1;
     else
         ctx->duration = cdio_get_disc_last_lsn(ctx->cdio);
 
@@ -246,35 +260,30 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 {
     int ret = 0;
 
+    /* Get disc MCN */
+    if (ctx->rcap & CDIO_DRIVE_CAP_READ_MCN) {
+        const char *mcn = cdio_get_mcn(ctx->cdio);
+        if (mcn) {
+            if (strlen(mcn))
+                av_dict_set(&ctx->meta, "disc_mcn", mcn, 0);
+            cdio_free((void *)mcn);
+        }
+    }
+
+    /* Get discid */
     DiscId *discid = discid_new();
-    if (!ctx->settings.fast_mode) {
-        cyanrip_log(NULL, 0, "Reading full disc metadata (could take a while)...\n");
-        if (!discid_read(discid, ctx->settings.dev_path)) {
-            cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(discid));
-        } else {
-            av_dict_set(&ctx->meta, "discid", discid_get_id(discid), 0);
-            av_dict_set(&ctx->meta, "disc_mcn", discid_get_mcn(discid), 0);
-
-            /* MusicBrainz */
-            if (!ctx->settings.disable_mb)
-                ret |= cyanrip_mb_metadata(ctx);
-        }
-    } else {
-        cyanrip_log(NULL, 0, "Extracting TOC...\n");
-        if (!discid_read_sparse(discid, ctx->settings.dev_path, 0))
-            cyanrip_log(ctx, 0, "DiscID error: %s\n", discid_get_error_msg(discid));
+    if (!discid_read_sparse(discid, ctx->settings.dev_path, 0)) {
+        cyanrip_log(ctx, 0, "Error reading discid!\n");
+        return 1;
     }
 
-    for (int i = 0; i < ctx->drive->tracks; i++) {
-        if (discid && !(ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE)) {
-            const char *isrc = discid_get_track_isrc(discid, ctx->tracks[i].number);
-            if (strlen(isrc))
-                av_dict_set(&ctx->tracks[i].meta, "isrc", isrc, 0);
-        }
-    }
+    const char *disc_id_str = discid_get_id(discid);
+    av_dict_set(&ctx->meta, "discid", disc_id_str, 0);
+    discid_free(discid);
 
-    if (discid)
-        discid_free(discid);
+    /* Get musicbrainz tags */
+    if (!ctx->settings.disable_mb)
+        ret |= cyanrip_mb_metadata(ctx);
 
     return ret;
 }
@@ -295,115 +304,219 @@ static void cyanrip_copy_album_to_track_meta(cyanrip_ctx *ctx)
     }
 }
 
-bool cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
+static const uint8_t silent_frame[CDIO_CD_FRAMESIZE_RAW] = { 0 };
+
+uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1] = { 0 };
+
+void status_cb(long int n, paranoia_cb_mode_t status)
 {
-    char *err = NULL;
-    bool is_error = 0;
-    int retries = ctx->settings.frame_max_retries;
+    if (status >= PARANOIA_CB_READ && status <= PARANOIA_CB_FINISHED)
+        paranoia_status[status]++;
+}
 
-    int16_t *samples = NULL;
+const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    int err = 0;
+    char *msg = NULL;
 
-    if (quit_now) {
-        cyanrip_log(ctx, 0, "Quitting now!\n");
-        cyanrip_ctx_end(&ctx);
-        exit(1);
+    const uint8_t *data;
+    data = (void *)cdio_paranoia_read_limited(ctx->paranoia, &status_cb,
+                                              ctx->settings.frame_max_retries);
+
+    msg = cdio_cddap_errors(ctx->drive);
+    if (msg) {
+        cyanrip_log(ctx, 0, "cdio error: %s\n", msg);
+        cdio_cddap_free_messages(msg);
+        msg = NULL;
+        err = 1;
     }
 
-    samples = cdio_paranoia_read_limited(ctx->paranoia, NULL, retries);
-
-    if ((err = cdio_cddap_errors(ctx->drive))) {
-        cyanrip_log(ctx, 0, "%s\n", err);
-        free(err);
-        err = NULL;
-        is_error = 1;
-    }
-
-    if ((err = cdio_cddap_messages(ctx->drive))) {
-        cyanrip_log(ctx, 0, "%s\n", err);
-        free(err);
-        err = NULL;
-        is_error = 1;
-    }
-
-    if (!samples) {
+    if (!data) {
         cyanrip_log(ctx, 0, "Frame read failed!\n");
-        is_error = 1;
-    } else {
-        memcpy(t->base_data + t->nb_samples*2, samples, CDIO_CD_FRAMESIZE_RAW);
+        data = silent_frame;
+        err = 1;
     }
 
-    ctx->errors_count += is_error;
-    t->nb_samples += CDIO_CD_FRAMESIZE_RAW >> 1;
+    ctx->total_error_count += err;
 
-    return is_error;
+    return data;
 }
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
+    int ret = 0;
+    const int ouf = ctx->settings.over_under_read_frames;
+
     /* last frame obtained from cdio is inclusive */
-    uint32_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
+    int64_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
     if (last_frame > ctx->last_frame) {
         cyanrip_log(ctx, 0, "Track last frame larger than last disc frame!\n");
         return 1;
     }
-    uint32_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
-    uint32_t frames = last_frame - first_frame + 1;
-    uint32_t samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
 
-    t->start_sector = first_frame;
-    t->end_sector = last_frame;
+    /* Duration doesn't depend on adjustments we make to frames */
+    int64_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
+    int frames = last_frame - first_frame + 1;
+    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
 
-    frames += abs(ctx->settings.over_under_read_frames);
+    /* Move the seek position coarsely */
+    int sign = FFSIGN(ouf);
+    first_frame += sign*FFMAX(FFABS(ouf) - 1, 0);
+    last_frame += sign*FFMAX(FFABS(ouf) - 1, 0);
 
-    int underread = ctx->settings.over_under_read_frames;
-    underread = underread < 0 ? abs(underread) : 0;
-
-    int overread = ctx->settings.over_under_read_frames;
-    overread = overread > 0 ? overread : 0;
-
-    lsn_t seek_dest = first_frame - underread;
-    lsn_t prezero = seek_dest < 0 ? abs(seek_dest) : 0;
-    seek_dest = seek_dest < 0 ? 0 : seek_dest;
-    cdio_paranoia_seek(ctx->paranoia, seek_dest, SEEK_SET);
-
-    t->preemphasis = cdio_get_track_preemphasis(ctx->cdio, t->number);
-
-    t->base_data = av_mallocz(frames*CDIO_CD_FRAMESIZE_RAW);
-    int offset = underread*CDIO_CD_FRAMESIZE_RAW + ctx->settings.offset*4;
-    t->samples = (int16_t *)(t->base_data + offset);
-
-    /* For underreading */
-    t->nb_samples = (prezero*CDIO_CD_FRAMESIZE_RAW) >> 1;
-    frames -= prezero;
-
-    /* Don't overread into lead-out */
-    if ((first_frame + frames) > ctx->last_frame)
-        frames -= overread;
-
-    int errors = 0;
-    for (int i = 0; i < frames; i++) {
-        errors += cyanrip_read_frame(ctx, t);
-        cyanrip_log(NULL, 0, "\rRipping track %i, progress - %0.2f%%, errors - %i", t->number, ((double)i/frames)*100.0f, errors);
+    /* Bump the lower/higher frame in the offset direction */
+    if (ouf) {
+        first_frame -= sign < 0;
+        last_frame += sign > 0;
     }
-    cyanrip_log(NULL, 0, "\r\nTrack %i ripped!\n", t->number);
 
-    t->nb_samples = samples;
-    cyanrip_crc_track(ctx, t);
+    /* Don't read into the lead in/out */
+    int frames_before_disc_start = FFMAX(ctx->first_frame - first_frame, 0);
+    int frames_after_disc_end = FFMAX(last_frame - ctx->last_frame, 0);
 
-    int enc_errs = ctx->errors_count;
+    first_frame += frames_before_disc_start;
+    last_frame -= frames_after_disc_end;
 
-    for (int i = 0; i < ctx->settings.outputs_num; i++)
-        ctx->errors_count += cyanrip_encode_track(ctx, t, ctx->settings.outputs[i]);
-
-    enc_errs = ctx->errors_count - enc_errs;
-    if (enc_errs) {
-        cyanrip_log(ctx, 0, "Failed to encode track %i!\n", t->number);
+    if (last_frame < first_frame) {
+        cyanrip_log(ctx, 0, "Invalid track start/end: %i %i!\n", first_frame, last_frame);
         return 1;
     }
 
+    /* Offset accounted start/end sectors */
+    t->start_sector = first_frame;
+    t->end_sector = last_frame;
+    frames = last_frame - first_frame + 1;
+
+    /* Try reading the ISRC now, to hopefully reduce seek distance */
+    if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
+        const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->number);
+        if (isrc_str) {
+            if (strlen(isrc_str))
+                av_dict_set(&t->meta, "isrc", isrc_str, 0);
+            cdio_free((void *)isrc_str);
+        }
+    }
+
+    cdio_paranoia_seek(ctx->paranoia, first_frame, SEEK_SET);
+
+    /* Last/first frame partial offset */
+    int offs = ctx->settings.offset*4;
+    offs -= sign*FFMAX(FFABS(ouf) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
+
+    cyanrip_dec_ctx *dec_ctx;
+    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB];
+    cyanrip_create_dec_ctx(ctx, &dec_ctx);
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
+                                    ctx->settings.outputs[i]);
+    }
+
+    int start_err = ctx->total_error_count;
+
+    /* Checksum */
+    cyanrip_crc_ctx crc_ctx;
+    init_crc_ctx(ctx, &crc_ctx, t);
+
+    /* Fill with silence to maintain track length */
+    for (int i = 0; i < frames_before_disc_start; i++) {
+        int bytes = CDIO_CD_FRAMESIZE_RAW;
+        const uint8_t *data = silent_frame;
+
+        if (!i && offs) {
+            data += CDIO_CD_FRAMESIZE_RAW + offs;
+            bytes = -offs;
+        }
+
+        process_crc(&crc_ctx, data, bytes);
+        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                           dec_ctx, data, bytes);
+        if (ret) {
+            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+            break;
+        }
+    }
+
+    /* Read the actual CD data */
+    for (int i = 0; i < frames; i++) {
+        int bytes = CDIO_CD_FRAMESIZE_RAW;
+        const uint8_t *data = cyanrip_read_frame(ctx, t);
+
+        /* Account for partial frames caused by the offset */
+        if (offs > 0) {
+            if (!i) {
+                data  += offs;
+                bytes -= offs;
+            } else if ((i == (frames - 1)) && !frames_after_disc_end) {
+                bytes = offs;
+            }
+        } else if (offs < 0) {
+            if (!i && !frames_before_disc_start) {
+                data += CDIO_CD_FRAMESIZE_RAW + offs;
+                bytes = -offs;
+            } else if (i == (frames - 1)) {
+                bytes += offs;
+            }
+        }
+
+        /* For "oh no I forgot to specify outputs" situations */
+        if (quit_now)
+            break;
+
+        /* Update CRCs */
+        process_crc(&crc_ctx, data, bytes);
+
+        /* Decode and encode */
+        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                           dec_ctx, data, bytes);
+        if (ret) {
+            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+            break;
+        }
+
+        /* Report progress */
+        cyanrip_log(NULL, 0, "\rRipping and encoding track %i, progress - %0.2f%%, errors - %i",
+                    t->number, ((double)(i + 1)/frames)*100.0f, ctx->total_error_count - start_err);
+    }
+
+    /* Fill with silence to maintain track length */
+    for (int i = 0; i < frames_after_disc_end; i++) {
+        int bytes = CDIO_CD_FRAMESIZE_RAW;
+        const uint8_t *data = silent_frame;
+
+        if ((i == (frames_after_disc_end - 1)) && offs)
+            bytes = offs;
+
+        process_crc(&crc_ctx, data, bytes);
+        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                           dec_ctx, data, bytes);
+        if (ret) {
+            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+            break;
+        }
+    }
+
+    finalize_crc(&crc_ctx, t);
+
+    cyanrip_log(NULL, 0, "\nFlushing encoders...\n");
+
+    /* Flush encoders */
+    cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                 dec_ctx, NULL, 0);
+    if (ret)
+        cyanrip_log(ctx, 0, "Error sending flush signal to encoders!\n");
+
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        ret = cyanrip_end_track_encoding(&enc_ctx[i]);
+        if (ret) {
+            cyanrip_log(ctx, 0, "Error in encoding!\n");
+            ctx->total_error_count++;
+        }
+    }
+    cyanrip_free_dec_ctx(&dec_ctx);
+
     cyanrip_log_track_end(ctx, t);
 
-    return 0;
+    return ret;
 }
 
 void on_quit_signal(int signo)
@@ -412,7 +525,7 @@ void on_quit_signal(int signo)
         cyanrip_log(NULL, 0, "Force quitting\n");
         exit(1);
     }
-    cyanrip_log(NULL, 0, "Trying to quit\n");
+    cyanrip_log(NULL, 0, "\r\nTrying to quit\n");
     quit_now = 1;
 }
 
@@ -431,12 +544,14 @@ int main(int argc, char **argv)
     settings.verbose = 1;
     settings.speed = 0;
     settings.fast_mode = 0;
-    settings.frame_max_retries = 5;
+    settings.frame_max_retries = 25;
     settings.over_under_read_frames = 0;
     settings.offset = 0;
     settings.disable_mb = 0;
     settings.bitrate = 128.0f;
     settings.rip_indices_count = -1;
+    settings.enc_fifo_size = 0;
+    settings.eject_on_success_rip = 1;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
 
@@ -446,7 +561,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnfVl:a:t:b:c:r:d:o:s:S:D:")) != -1) {
+    while ((c = getopt(argc, argv, "hnfVEl:a:t:b:c:r:d:o:s:S:D:F:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
@@ -461,7 +576,9 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -r <int>             Maximum number of retries to read a frame\n");
             cyanrip_log(ctx, 0, "    -a <string>          Album metadata, key=value:key=value\n");
             cyanrip_log(ctx, 0, "    -t <number>=<string> Track metadata, can be specified multiple times\n");
-            cyanrip_log(ctx, 0, "    -f                   Disable all error checking\n");
+            cyanrip_log(ctx, 0, "    -F <int>             Encoding FIFO queue size\n");
+            cyanrip_log(ctx, 0, "    -E                   Don't eject tray (if that was possible) once done\n");
+            cyanrip_log(ctx, 0, "    -f                   Disable all error checking and discid reading\n");
             cyanrip_log(ctx, 0, "    -V                   Print program version\n");
             cyanrip_log(ctx, 0, "    -h                   Print options help\n");
             cyanrip_log(ctx, 0, "    -n                   Disable musicbrainz lookup\n");
@@ -469,9 +586,17 @@ int main(int argc, char **argv)
             break;
         case 'S':
             settings.speed = abs((int)strtol(optarg, NULL, 10));
+            if (settings.speed < 0) {
+                cyanrip_log(ctx, 0, "Invalid drive speed!\n");
+                return 1;
+            }
             break;
         case 'r':
             settings.frame_max_retries = strtol(optarg, NULL, 10);
+            if (settings.frame_max_retries < 0) {
+                cyanrip_log(ctx, 0, "Invalid retries amount!\n");
+                return 1;
+            }
             break;
         case 's':
             settings.offset = strtol(optarg, NULL, 10);
@@ -489,13 +614,18 @@ int main(int argc, char **argv)
             settings.rip_indices_count = 0;
             p = strtok(optarg, ",");
             while(p != NULL) {
-                settings.rip_indices[settings.rip_indices_count++] = strtol(p, NULL, 10);
-                if (!settings.rip_indices[settings.rip_indices_count - 1]) {
-                    settings.rip_indices_count = 0;
-                    break;
+                int idx = strtol(p, NULL, 10);
+                for (int i = 0; i < settings.rip_indices_count; i++) {
+                    if (settings.rip_indices[i] == idx) {
+                        cyanrip_log(ctx, 0, "Duplicated rip idx %i\n", idx);
+                        return 1;
+                    }
                 }
+                settings.rip_indices[settings.rip_indices_count++] = idx;
                 p = strtok(NULL, ",");
             }
+            qsort(settings.rip_indices, settings.rip_indices_count,
+                  sizeof(int), cmp_numbers);
             break;
         case 'o':
             settings.outputs_num = 0;
@@ -507,6 +637,12 @@ int main(int argc, char **argv)
             p = strtok(optarg, ",");
             while (p != NULL) {
                 int res = cyanrip_validate_fmt(p);
+                for (int i = 0; i < settings.outputs_num; i++) {
+                    if (settings.outputs[i] == res) {
+                        cyanrip_log(ctx, 0, "Duplicated format \"%s\"\n", p);
+                        return 1;
+                    }
+                }
                 if (res != -1) {
                     settings.outputs[settings.outputs_num++] = res;
                 } else {
@@ -516,8 +652,18 @@ int main(int argc, char **argv)
                 p = strtok(NULL, ",");
             }
             break;
+        case 'F':
+            settings.enc_fifo_size = strtol(optarg, NULL, 10);
+            if (settings.enc_fifo_size < 0) {
+                cyanrip_log(ctx, 0, "Invalid FIFO queue size!\n");
+                return 1;
+            }
+             break;
         case 'c':
             settings.cover_image_path = optarg;
+            break;
+        case 'E':
+            settings.eject_on_success_rip = 0;
             break;
         case 'D':
             settings.base_dst_folder = optarg;
@@ -601,25 +747,38 @@ int main(int argc, char **argv)
     cyanrip_log_start_report(ctx);
 
     if (ctx->settings.rip_indices_count == -1) {
-        for (int i = 0; i < ctx->drive->tracks; i++)
-            ctx->success |= cyanrip_rip_track(ctx, &ctx->tracks[i]);
+        for (int i = 0; i < ctx->drive->tracks; i++) {
+            cyanrip_rip_track(ctx, &ctx->tracks[i]);
+            if (quit_now)
+                break;
+        }
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             int index = ctx->settings.rip_indices[i] - 1;
-            if (index < 0 || index >= ctx->drive->tracks)
-                continue;
-            ctx->success |= cyanrip_rip_track(ctx, &ctx->tracks[index]);
+            if (index < 0 || index >= ctx->drive->tracks) {
+                cyanrip_log(ctx, 0, "Invalid rip index %i, disc has %i tracks!\n",
+                            index + 1, ctx->drive->tracks);
+                ctx->total_error_count++;
+                goto end;
+            }
+        }
+        for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
+            int index = ctx->settings.rip_indices[i] - 1;
+            cyanrip_rip_track(ctx, &ctx->tracks[index]);
+            if (quit_now)
+                break;
         }
     }
 
-    int ret = ctx->success;
-
     cyanrip_log_finish_report(ctx);
+end:
     cyanrip_log_end(ctx);
+
+    int err_cnt = ctx->total_error_count;
 
     cyanrip_ctx_end(&ctx);
 
-    return ret;
+    return !!err_cnt;
 }
 
 #ifdef HAVE_WMAIN

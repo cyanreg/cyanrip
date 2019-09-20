@@ -27,4 +27,4 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx);
 void cyanrip_log_finish_report(cyanrip_ctx *ctx);
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t);
 
-void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...);
+int cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...);

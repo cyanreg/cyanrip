@@ -21,79 +21,56 @@
 #include "cyanrip_main.h"
 #include "libavutil/crc.h"
 
-static inline uint32_t ieee_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
-{
-    const AVCRC *avcrc = av_crc_get_table(AV_CRC_32_IEEE);
-    return av_crc(avcrc, 0, (uint8_t *)t->samples, t->nb_samples << 1);
-}
+typedef struct cyanrip_crc_ctx {
+    const AVCRC *eac_ctx;
+    uint32_t eac_crc;
+    uint32_t acu_start;
+    uint32_t acu_end;
+    uint32_t acu_mult;
+    uint32_t acu_sum_1;
+    uint32_t acu_sum_2;
+} cyanrip_crc_ctx;
 
-static inline uint32_t eac_crc_32(cyanrip_ctx *ctx, cyanrip_track *t)
+static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_track *t)
 {
-    const AVCRC *avcrc = av_crc_get_table(AV_CRC_32_IEEE_LE);
-    uint32_t crc = 0xFFFFFFFF;
-    crc = av_crc(avcrc, crc, (uint8_t *)t->samples, t->nb_samples << 1);
-    crc ^= 0xFFFFFFFF;
-    return crc;
-}
-
-static inline uint32_t acurip_crc_v1(cyanrip_ctx *ctx, cyanrip_track *t)
-{
-    int mult = 1;
-    int start = 0;
-    int end   = t->nb_samples/2;
-    uint32_t *samples = (uint32_t *)t->samples;
-
-    uint32_t sum = 0;
+    s->eac_ctx   = av_crc_get_table(AV_CRC_32_IEEE_LE);
+    s->eac_crc   = UINT32_MAX;
+    s->acu_start = 0;
+    s->acu_end   = t->nb_samples >> 1;
+    s->acu_mult  = 1;
+    s->acu_sum_1 = 0x0;
+    s->acu_sum_2 = 0x0;
 
     if (t->number == 1)
-        start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
+        s->acu_start += (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
     else if (t->number == ctx->drive->tracks)
-        end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
-
-    for (int i = 0; i < t->nb_samples; i++) {
-        if (mult >= start && mult <= end)
-            sum += mult * samples[i];
-        mult++;
-    }
-
-    return sum;
+        s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
 }
 
-static inline uint32_t acurip_crc_v2(cyanrip_ctx *ctx, cyanrip_track *t)
+static inline void process_crc(cyanrip_crc_ctx *s, const uint8_t *data, int bytes)
 {
-    int mult = 1;
-    int start = 0;
-    int end   = t->nb_samples/2;
-    uint32_t *samples = (uint32_t *)t->samples;
+    if (!bytes)
+        return;
 
-    uint32_t sum = 0;
+    s->eac_crc = av_crc(s->eac_ctx, s->eac_crc, data, bytes);
 
-    if (t->number == 1)
-        start += (CDIO_CD_FRAMESIZE_RAW*5)/4;
-    else if (t->number == ctx->drive->tracks)
-        end   -= (CDIO_CD_FRAMESIZE_RAW*5)/4;
-
-    for (int i = 0; i < t->nb_samples >> 1; i++) {
-        if (mult >= start && mult <= end) {
-            uint32_t val = samples[i];
-            uint64_t tmp = (uint64_t)val  * (uint64_t)mult;
-            uint32_t lo  = (uint32_t)(tmp & (uint64_t)0xFFFFFFFF);
+    for (int j = 0; j < (bytes >> 2); j++) {
+        if (s->acu_mult >= s->acu_start && s->acu_mult <= s->acu_end) {
+            uint32_t val = AV_RL32(&data[j*4]);
+            uint64_t tmp = (uint64_t)val  * (uint64_t)s->acu_mult;
+            uint32_t lo  = (uint32_t)(tmp & (uint64_t)UINT32_MAX);
             uint32_t hi  = (uint32_t)(tmp / (uint64_t)0x100000000);
-            sum += hi;
-            sum += lo;
+            s->acu_sum_1 += s->acu_mult * val;
+            s->acu_sum_2 += hi;
+            s->acu_sum_2 += lo;
         }
-        mult++;
+        s->acu_mult++;
     }
-
-    return sum;
 }
 
-static inline int cyanrip_crc_track(cyanrip_ctx *ctx, cyanrip_track *t)
+static inline void finalize_crc(cyanrip_crc_ctx *s, cyanrip_track *t)
 {
-    t->ieee_crc_32   = ieee_crc_32(ctx, t);
-    t->eac_crc       = eac_crc_32(ctx, t);
-    t->acurip_crc_v1 = acurip_crc_v1(ctx, t);
-    t->acurip_crc_v2 = acurip_crc_v2(ctx, t);
-
-    return 0;
+    t->eac_crc = s->eac_crc ^ UINT32_MAX;
+    t->acurip_crc_v1 = s->acu_sum_1;
+    t->acurip_crc_v2 = s->acu_sum_2;
 }
