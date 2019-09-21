@@ -50,7 +50,7 @@ typedef struct cyanrip_out_fmt {
     int coverart_supported;
     int compression_level;
     int lossless;
-    int codec;
+    enum AVCodecID codec;
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
