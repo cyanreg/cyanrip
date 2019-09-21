@@ -65,7 +65,7 @@ cyanrip_out_fmt fmt_map[] = {
     [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "alac",  0,  2, 1, AV_CODEC_ID_ALAC,      },
     [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
     [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 1,  0, 0, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
 };
 
 void cyanrip_print_codecs(void)
