@@ -91,9 +91,9 @@ typedef struct cyanrip_ctx {
     FILE              *logfile;
 
     /* Drive caps */
-    cdio_drive_read_cap_t rcap;
-    cdio_drive_read_cap_t wcap;
-    cdio_drive_read_cap_t mcap;
+    cdio_drive_read_cap_t  rcap;
+    cdio_drive_write_cap_t wcap;
+    cdio_drive_misc_cap_t  mcap;
 
     /* Metadata */
     AVDictionary *meta;
