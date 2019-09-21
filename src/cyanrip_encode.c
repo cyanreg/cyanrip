@@ -46,6 +46,7 @@ typedef struct cyanrip_out_fmt {
     const char *name;
     const char *folder_suffix;
     const char *ext;
+    const char *lavf_name;
     int coverart_supported;
     int compression_level;
     int lossless;
@@ -53,17 +54,18 @@ typedef struct cyanrip_out_fmt {
 } cyanrip_out_fmt;
 
 cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
-    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
-    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
-    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  0, 10, 0, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   0,  0, 0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
-    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   0,  2, 1, AV_CODEC_ID_ALAC,      },
-    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
-    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
+    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
+    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  "ogg",   0, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   "adts",  0,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
+    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "alac",  0,  2, 1, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 1,  0, 0, AV_CODEC_ID_PCM_S16LE, },
 };
 
 void cyanrip_print_codecs(void)
@@ -524,7 +526,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     av_free(dirname);
 
     /* lavf init */
-    ret = avformat_alloc_output_context2(&s->avf, NULL, NULL, filename);
+    ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context: %s!\n", av_err2str(ret));
         goto fail;
