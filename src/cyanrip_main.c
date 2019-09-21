@@ -102,8 +102,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         cdio_cddap_speed_set(ctx->drive, settings->speed);
 
     /* Drives are very slow and burst-y so don't block by default */
-    if (!settings->enc_fifo_size && (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
-        settings->enc_fifo_size = 16;
+    if (!ctx->settings.enc_fifo_size && (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
+        ctx->settings.enc_fifo_size = 16;
 
     ctx->paranoia = cdio_paranoia_init(ctx->drive);
     if (!ctx->paranoia) {
