@@ -126,6 +126,9 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     for (int i = 0; i < ctx->drive->tracks; i++)
         ctx->tracks[i].number = i + 1;
 
+    /* For hot removal detection - init this so we can detect changes */
+    cdio_get_media_changed(ctx->cdio);
+
     *s = ctx;
     return 0;
 }
@@ -327,14 +330,14 @@ const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 
     msg = cdio_cddap_errors(ctx->drive);
     if (msg) {
-        cyanrip_log(ctx, 0, "cdio error: %s\n", msg);
+        cyanrip_log(ctx, 0, "\ncdio error: %s\n", msg);
         cdio_cddap_free_messages(msg);
         msg = NULL;
         err = 1;
     }
 
     if (!data) {
-        cyanrip_log(ctx, 0, "Frame read failed!\n");
+        cyanrip_log(ctx, 0, "\nFrame read failed!\n");
         data = silent_frame;
         err = 1;
     }
@@ -471,7 +474,16 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
         if (ret) {
-            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+            cyanrip_log(ctx, 0, "\nError in decoding/sending frame!\n");
+            break;
+        }
+
+        /* Detect disc removals */
+        if (cdio_get_media_changed(ctx->cdio)) {
+            cyanrip_log(ctx, 0, "\nDrive media changed, stopping!\n");
+            ctx->total_error_count++;
+            ret = AVERROR(EINVAL);
+            quit_now = 1;
             break;
         }
 
@@ -502,8 +514,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_log(NULL, 0, "\nFlushing encoders...\n");
 
     /* Flush encoders */
-    cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                 dec_ctx, NULL, 0);
+    ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                       dec_ctx, NULL, 0);
     if (ret)
         cyanrip_log(ctx, 0, "Error sending flush signal to encoders!\n");
 
@@ -516,7 +528,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
     cyanrip_free_dec_ctx(&dec_ctx);
 
-    cyanrip_log_track_end(ctx, t);
+    if (!ret)
+        cyanrip_log_track_end(ctx, t);
 
     return ret;
 }
@@ -745,7 +758,8 @@ int main(int argc, char **argv)
 
     if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->drive->tracks; i++) {
-            cyanrip_rip_track(ctx, &ctx->tracks[i]);
+            if (cyanrip_rip_track(ctx, &ctx->tracks[i]))
+                break;
             if (quit_now)
                 break;
         }
@@ -761,7 +775,8 @@ int main(int argc, char **argv)
         }
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             int index = ctx->settings.rip_indices[i] - 1;
-            cyanrip_rip_track(ctx, &ctx->tracks[index]);
+            if (cyanrip_rip_track(ctx, &ctx->tracks[index]))
+                break;
             if (quit_now)
                 break;
         }
