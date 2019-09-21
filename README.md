@@ -46,7 +46,7 @@ All arguments are entirely optional. By default cyanrip will rip all tracks from
 | -S *int*             | Set the drive speed (0 for default/auto)                                   |
 | -o *string*          | Comma separated list of output formats (e.g. flac,opus or help to list all)|
 | -b *float*           | Bitrate of lossy files in kbps                                             |
-| -l *list*            | Numbers of tracks to rip (e.g. 2,8,4,2 or 0 to print CD info only)         |
+| -l *list*            | Indices of tracks to rip (e.g. 2,8,4)                                      |
 | -r *int*             | Max retries to read a frame before considering it corrupt (default: 25)    |
 | -a *string*          | Album metadata, in case disc info is unavailable                           |
 | -t *number*=*string* | Track metadata, in case unavailable or incomplete                          |
