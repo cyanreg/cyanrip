@@ -258,6 +258,24 @@ void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
     avcodec_free_context((AVCodecContext **)s);
 }
 
+static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
+                              int num_enc, AVFrame **frame)
+{
+    int ret;
+
+    for (int i = 0; i < num_enc; i++) {
+        ret = push_to_fifo(&enc_ctx[i]->fifo, *frame ? av_frame_clone(*frame) : NULL);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
+            return ret;
+        }
+    }
+
+    av_frame_free(frame);
+
+    return 0;
+}
+
 int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                  int num_enc, cyanrip_dec_ctx *dec_ctx,
                                  const uint8_t *data, int bytes)
@@ -306,24 +324,49 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     ret = avcodec_receive_frame(in_avctx, dec_frame);
-    if (ret < 0) {
+    if (ret == AVERROR(EAGAIN)) {
+        av_frame_free(&dec_frame);
+        return 0;
+    } if (ret < 0) {
         cyanrip_log(ctx, 0, "Error decoding PCM: %s!\n", av_err2str(ret));
         av_frame_free(&dec_frame);
         goto fail;
     }
 
 send:
-    for (int i = 0; i < num_enc; i++) {
-        ret = push_to_fifo(&enc_ctx[i]->fifo, dec_frame ? av_frame_clone(dec_frame) : NULL);
+    if (dec_frame == NULL) {
+        ret = avcodec_send_packet(in_avctx, NULL);
         if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
-            break;
+            cyanrip_log(ctx, 0, "Error sending flush pkt: %s!\n", av_err2str(ret));
+            goto fail;
         }
+
+        while (1) {
+            dec_frame = av_frame_alloc();
+            if (!dec_frame) {
+                cyanrip_log(ctx, 0, "Error allocating!\n");
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+
+            ret = avcodec_receive_frame(in_avctx, dec_frame);
+            if (ret == AVERROR_EOF) {
+                av_frame_free(&dec_frame);
+            } else if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error decoding PCM: %s!\n", av_err2str(ret));
+                av_frame_free(&dec_frame);
+                goto fail;
+            }
+
+            ret = push_frame_to_encs(ctx, enc_ctx, num_enc, &dec_frame);
+            if (ret < 0 || !dec_frame)
+                break;
+        }
+    } else {
+        ret = push_frame_to_encs(ctx, enc_ctx, num_enc, &dec_frame);
     }
 
-    av_frame_free(&dec_frame);
-
-    return 0;
+    return ret;
 
 fail:
     return ret;
