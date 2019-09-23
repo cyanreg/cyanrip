@@ -73,9 +73,14 @@ typedef struct cyanrip_track {
     int number;
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
     int preemphasis;
-    size_t nb_samples;
+    size_t nb_samples; /* Track duration in samples */
+    int frames_before_disc_start;
+    lsn_t frames; /* Actual number of frames to read, != samples */
+    lsn_t pregap_frames; /* Frames before start_lsn, if available */
+    int frames_after_disc_end;
     lsn_t start_lsn;
     lsn_t end_lsn;
+    ptrdiff_t partial_frame_byte_offs;
     uint32_t eac_crc;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;

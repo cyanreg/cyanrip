@@ -55,6 +55,49 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     *s = NULL;
 }
 
+static void setup_track_lsn(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    /* Duration doesn't depend on adjustments we make to frames */
+    lsn_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
+    lsn_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
+    int frames = last_frame - first_frame + 1;
+
+    lsn_t pregap = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
+    t->pregap_frames = CDIO_INVALID_LSN;
+    if (pregap != CDIO_INVALID_LSN)
+        t->pregap_frames = first_frame - pregap;
+
+    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
+
+    /* Move the seek position coarsely */
+    const int extra_frames = ctx->settings.over_under_read_frames;
+    int sign = (extra_frames < 0) ? -1 : ((extra_frames > 0) ? +1 : 0);
+    first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
+    last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
+
+    /* Bump the lower/higher frame in the offset direction */
+    first_frame -= sign < 0;
+    last_frame  += sign > 0;
+
+    /* Don't read into the lead in/out */
+    t->frames_before_disc_start = FFMAX(ctx->start_lsn - first_frame, 0);
+    t->frames_after_disc_end = FFMAX(last_frame - ctx->end_lsn, 0);
+
+    first_frame += t->frames_before_disc_start;
+    last_frame  -= t->frames_after_disc_end;
+
+    /* Offset accounted start/end sectors */
+    t->start_lsn = first_frame;
+    t->end_lsn = last_frame;
+    t->frames = last_frame - first_frame + 1;
+
+    /* Last/first frame partial offset */
+    ptrdiff_t offs = ctx->settings.offset*4;
+    offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
+
+    t->partial_frame_byte_offs = offs;
+}
+
 int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 {
     cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
@@ -124,8 +167,10 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     ctx->tracks = av_calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
-    for (int i = 0; i < ctx->drive->tracks; i++)
+    for (int i = 0; i < ctx->drive->tracks; i++) {
         ctx->tracks[i].number = i + 1;
+        setup_track_lsn(ctx, &ctx->tracks[i]);
+    }
 
     /* For hot removal detection - init this so we can detect changes */
     cdio_get_media_changed(ctx->cdio);
@@ -352,38 +397,10 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
 
-    /* Duration doesn't depend on adjustments we make to frames */
-    int64_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
-    int64_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
-    int frames = last_frame - first_frame + 1;
-    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
-
-    /* Move the seek position coarsely */
-    const int extra_frames = ctx->settings.over_under_read_frames;
-    int sign = (extra_frames < 0) ? -1 : ((extra_frames > 0) ? +1 : 0);
-    first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
-    last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
-
-    /* Bump the lower/higher frame in the offset direction */
-    first_frame -= sign < 0;
-    last_frame += sign > 0;
-
-    /* Don't read into the lead in/out */
-    int frames_before_disc_start = FFMAX(ctx->start_lsn - first_frame, 0);
-    int frames_after_disc_end = FFMAX(last_frame - ctx->end_lsn, 0);
-
-    first_frame += frames_before_disc_start;
-    last_frame -= frames_after_disc_end;
-
-    if (last_frame < first_frame) {
-        cyanrip_log(ctx, 0, "Invalid track start/end: %i %i!\n", first_frame, last_frame);
-        return 1;
-    }
-
-    /* Offset accounted start/end sectors */
-    t->start_lsn = first_frame;
-    t->end_lsn = last_frame;
-    frames = last_frame - first_frame + 1;
+    const int frames_before_disc_start = t->frames_before_disc_start;
+    const int frames = t->frames;
+    const int frames_after_disc_end = t->frames_after_disc_end;
+    const ptrdiff_t offs = t->partial_frame_byte_offs;
 
     /* Try reading the ISRC now, to hopefully reduce seek distance */
     if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
@@ -395,11 +412,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         }
     }
 
-    cdio_paranoia_seek(ctx->paranoia, first_frame, SEEK_SET);
-
-    /* Last/first frame partial offset */
-    int offs = ctx->settings.offset*4;
-    offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
+    cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
 
     cyanrip_dec_ctx *dec_ctx = { NULL };
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };

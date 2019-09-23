@@ -39,6 +39,12 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
+    if (t->pregap_frames != CDIO_INVALID_LSN) {
+        int pregap_samples = t->pregap_frames * (CDIO_CD_FRAMESIZE_RAW >> 1);
+        char pregap_len[16];
+        cyanrip_samples_to_duration(pregap_samples >> 1, pregap_len);
+        cyanrip_log(ctx, 0, "    Pregap:      unmerged, %s\n", pregap_len);
+    }
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
     cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_lsn);
     cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_lsn);
