@@ -115,12 +115,12 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     else
         cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
 
-    ctx->first_frame = cdio_get_track_lsn(ctx->cdio, 1);
-    ctx->last_frame = cdio_get_disc_last_lsn(ctx->cdio) - 1;
-    if (ctx->drive->tracks)
-        ctx->duration = cdio_get_track_last_lsn(ctx->cdio, ctx->drive->tracks) - ctx->first_frame + 1;
-    else
-        ctx->duration = cdio_get_disc_last_lsn(ctx->cdio);
+    ctx->start_lsn = cdio_get_track_pregap_lsn(ctx->cdio, 1);
+    if (ctx->start_lsn == CDIO_INVALID_LSN)
+        ctx->start_lsn = cdio_get_track_lsn(ctx->cdio, 1);
+
+    ctx->end_lsn = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK) - 1;
+    ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
 
     ctx->tracks = av_calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
 
@@ -352,15 +352,9 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
 
-    /* last frame obtained from cdio is inclusive */
-    int64_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
-    if (last_frame > ctx->last_frame) {
-        cyanrip_log(ctx, 0, "Track last frame larger than last disc frame!\n");
-        return 1;
-    }
-
     /* Duration doesn't depend on adjustments we make to frames */
     int64_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
+    int64_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
     int frames = last_frame - first_frame + 1;
     t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
 
@@ -375,8 +369,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     last_frame += sign > 0;
 
     /* Don't read into the lead in/out */
-    int frames_before_disc_start = FFMAX(ctx->first_frame - first_frame, 0);
-    int frames_after_disc_end = FFMAX(last_frame - ctx->last_frame, 0);
+    int frames_before_disc_start = FFMAX(ctx->start_lsn - first_frame, 0);
+    int frames_after_disc_end = FFMAX(last_frame - ctx->end_lsn, 0);
 
     first_frame += frames_before_disc_start;
     last_frame -= frames_after_disc_end;
@@ -387,8 +381,8 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     /* Offset accounted start/end sectors */
-    t->start_sector = first_frame;
-    t->end_sector = last_frame;
+    t->start_lsn = first_frame;
+    t->end_lsn = last_frame;
     frames = last_frame - first_frame + 1;
 
     /* Try reading the ISRC now, to hopefully reduce seek distance */

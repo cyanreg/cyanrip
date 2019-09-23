@@ -74,8 +74,8 @@ typedef struct cyanrip_track {
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
     int preemphasis;
     size_t nb_samples;
-    int start_sector;
-    int end_sector;
+    lsn_t start_lsn;
+    lsn_t end_lsn;
     uint32_t eac_crc;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;
@@ -102,9 +102,9 @@ typedef struct cyanrip_ctx {
 
     int success;
     int total_error_count;
-    lsn_t duration;
-    lsn_t first_frame;
-    lsn_t last_frame;
+    lsn_t start_lsn;
+    lsn_t end_lsn;
+    lsn_t duration_frames;
 } cyanrip_ctx;
 
 extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];

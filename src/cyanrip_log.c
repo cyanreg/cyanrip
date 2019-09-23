@@ -40,8 +40,8 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
-    cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_sector);
-    cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_sector);
+    cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_lsn);
+    cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_lsn);
     cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
     cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
     cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
@@ -84,7 +84,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "\n");
 
     char duration[16];
-    cyanrip_frames_to_duration(ctx->duration, duration);
+    cyanrip_frames_to_duration(ctx->duration_frames, duration);
 
     CLOG("DiscID:        %s\n", ctx->meta, "discid")
     CLOG("Disc MCN:      %s\n", ctx->meta, "disc_mcn")
