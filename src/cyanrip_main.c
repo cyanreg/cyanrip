@@ -188,7 +188,7 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
         if (recording) {
             READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title");
             credit = mb5_recording_get_artistcredit(recording);
-          } else {
+        } else {
             READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title");
             credit = mb5_track_get_artistcredit(track);
         }
@@ -365,15 +365,13 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
     /* Move the seek position coarsely */
     const int extra_frames = ctx->settings.over_under_read_frames;
-    int sign = FFSIGN(extra_frames);
+    int sign = (extra_frames < 0) ? -1 : ((extra_frames > 0) ? +1 : 0);
     first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
     last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
 
     /* Bump the lower/higher frame in the offset direction */
-    if (extra_frames) {
-        first_frame -= sign < 0;
-        last_frame += sign > 0;
-    }
+    first_frame -= sign < 0;
+    last_frame += sign > 0;
 
     /* Don't read into the lead in/out */
     int frames_before_disc_start = FFMAX(ctx->first_frame - first_frame, 0);
