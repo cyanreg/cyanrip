@@ -112,7 +112,10 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
+    if (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE)
+        cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_DISABLE);
+    else
+        cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
 
     ctx->first_frame = cdio_get_track_lsn(ctx->cdio, 1);
     ctx->last_frame = cdio_get_disc_last_lsn(ctx->cdio) - 1;
