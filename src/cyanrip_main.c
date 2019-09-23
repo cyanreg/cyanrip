@@ -34,8 +34,6 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         return;
     ctx = *s;
 
-    cyanrip_free_cover_image(ctx);
-
     for (int i = 0; i < ctx->drive->tracks; i++)
         av_dict_free(&ctx->tracks[i].meta);
 
@@ -411,7 +409,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
     cyanrip_dec_ctx *dec_ctx = { NULL };
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
-    ret = cyanrip_create_dec_ctx(ctx, &dec_ctx);
+    ret = cyanrip_create_dec_ctx(ctx, &dec_ctx, t);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Error initting decoder!\n");
         goto fail;
@@ -565,7 +563,6 @@ int main(int argc, char **argv)
     /* Default settings */
     settings.dev_path = NULL;
     settings.base_dst_folder = NULL;
-    settings.cover_image_path = NULL;
     settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 25;
@@ -581,6 +578,7 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
+    char *cover_image_path = NULL;
     char *album_metadata_ptr = NULL;
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
@@ -683,7 +681,7 @@ int main(int argc, char **argv)
             }
              break;
         case 'c':
-            settings.cover_image_path = optarg;
+            cover_image_path = optarg;
             break;
         case 'E':
             settings.eject_on_success_rip = 0;
@@ -717,6 +715,9 @@ int main(int argc, char **argv)
 
     if (cyanrip_fill_metadata(ctx))
         return 1;
+
+    if (cover_image_path)
+        av_dict_set(&ctx->meta, "cover_art", cover_image_path, 0);
 
     /* Read user album metadata */
     if (album_metadata_ptr) {
@@ -760,8 +761,6 @@ int main(int argc, char **argv)
         ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "discid"));
     else
         ctx->base_dst_folder = av_strdup("Untitled CD");
-
-    cyanrip_read_cover_image(ctx);
 
     cyanrip_log_init(ctx);
     cyanrip_log_start_report(ctx);

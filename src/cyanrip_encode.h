@@ -27,10 +27,8 @@ void cyanrip_print_codecs(void);
 int cyanrip_validate_fmt(const char *fmt);
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format);
 
-int cyanrip_read_cover_image(cyanrip_ctx *ctx);
-void cyanrip_free_cover_image(cyanrip_ctx *ctx);
-
-int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s);
+int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
+                           cyanrip_track *t);
 int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 cyanrip_dec_ctx *dec_ctx, cyanrip_track *t,
                                 enum cyanrip_output_formats format);

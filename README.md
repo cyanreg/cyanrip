@@ -68,3 +68,15 @@ In case the Musicbrainz database doesn't contain the disc information, you can m
 All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
 
 The precedence of tags is Track tags > Album tags > Musicbrainz tags.
+
+
+Cover art embedding
+-------------------
+
+cyanrip supports embedding album and track cover art, in either jpeg or png formats.
+
+To embed cover art for the whole album, either specify it with the -c *path* parameter, or add the cover_art=*path* tag to the album metadata.
+
+To specify the cover art for a single track, specify it with the cover_art=*path* tag in the track's metadata. Metadata precedence is as specified above.
+
+The cover_art tag containing the path will not be encoded.

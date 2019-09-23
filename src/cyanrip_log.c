@@ -61,8 +61,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                 abs(ctx->settings.over_under_read_frames) == 1 ? "frame" : "frames");
 
     cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
-    if (ctx->settings.cover_image_path)
-        cyanrip_log(ctx, 0, "Album Art:     %s\n", ctx->settings.cover_image_path);
+    CLOG("Album Art:     %s\n", ctx->meta, "cover_art")
     cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->base_dst_folder);
     if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
         cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);

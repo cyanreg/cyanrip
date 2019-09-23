@@ -52,7 +52,6 @@ enum cyanrip_output_formats {
 
 typedef struct cyanrip_settings {
     char *dev_path;
-    char *cover_image_path;
     char *base_dst_folder;
     bool verbose;
     int speed;
@@ -100,9 +99,6 @@ typedef struct cyanrip_ctx {
 
     /* Destination folder */
     const char *base_dst_folder;
-
-    void *cover_image_pkt; /* Cover image, init using cyanrip_setup_cover_image() */
-    void *cover_image_params;
 
     int success;
     int total_error_count;
