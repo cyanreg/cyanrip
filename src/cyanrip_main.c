@@ -406,12 +406,20 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     int offs = ctx->settings.offset*4;
     offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
 
-    cyanrip_dec_ctx *dec_ctx;
-    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB];
-    cyanrip_create_dec_ctx(ctx, &dec_ctx);
+    cyanrip_dec_ctx *dec_ctx = { NULL };
+    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
+    ret = cyanrip_create_dec_ctx(ctx, &dec_ctx);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error initting decoder!\n");
+        goto fail;
+    }
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
-                                    ctx->settings.outputs[i]);
+        ret = cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
+                                          ctx->settings.outputs[i]);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error initting encoder!\n");
+            goto fail;
+        }
     }
 
     int start_err = ctx->total_error_count;
@@ -435,7 +443,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
                                            dec_ctx, data, bytes);
         if (ret) {
             cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
-            break;
+            goto fail;
         }
     }
 
@@ -471,18 +479,16 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         /* Decode and encode */
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
-        if (ret) {
+        if (ret < 0) {
             cyanrip_log(ctx, 0, "\nError in decoding/sending frame!\n");
-            break;
+            goto fail;
         }
 
         /* Detect disc removals */
         if (cdio_get_media_changed(ctx->cdio)) {
             cyanrip_log(ctx, 0, "\nDrive media changed, stopping!\n");
-            ctx->total_error_count++;
             ret = AVERROR(EINVAL);
-            quit_now = 1;
-            break;
+            goto fail;
         }
 
         /* Report progress */
@@ -503,7 +509,7 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
                                            dec_ctx, data, bytes);
         if (ret) {
             cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
-            break;
+            goto fail;
         }
     }
 
@@ -517,17 +523,20 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     if (ret)
         cyanrip_log(ctx, 0, "Error sending flush signal to encoders!\n");
 
+fail:
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        ret = cyanrip_end_track_encoding(&enc_ctx[i]);
-        if (ret) {
+        int err = cyanrip_end_track_encoding(&enc_ctx[i]);
+        if (err) {
             cyanrip_log(ctx, 0, "Error in encoding!\n");
-            ctx->total_error_count++;
+            ret = err;
         }
     }
     cyanrip_free_dec_ctx(&dec_ctx);
 
     if (!ret)
         cyanrip_log_track_end(ctx, t);
+    else
+        ctx->total_error_count++;
 
     return ret;
 }

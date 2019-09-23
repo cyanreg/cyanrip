@@ -250,7 +250,7 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
 
     *s = (cyanrip_dec_ctx *)avctx;
 
-    return 0;
+    return AVERROR(ENOMEM);
 }
 
 void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
@@ -259,19 +259,17 @@ void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
 }
 
 static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
-                              int num_enc, AVFrame **frame)
+                              int num_enc, AVFrame *frame)
 {
     int ret;
 
     for (int i = 0; i < num_enc; i++) {
-        ret = push_to_fifo(&enc_ctx[i]->fifo, *frame ? av_frame_clone(*frame) : NULL);
+        ret = push_to_fifo(&enc_ctx[i]->fifo, frame ? av_frame_clone(frame) : NULL);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
             return ret;
         }
     }
-
-    av_frame_free(frame);
 
     return 0;
 }
@@ -358,12 +356,13 @@ send:
                 goto fail;
             }
 
-            ret = push_frame_to_encs(ctx, enc_ctx, num_enc, &dec_frame);
+            ret = push_frame_to_encs(ctx, enc_ctx, num_enc, dec_frame);
+            av_frame_free(&dec_frame);
             if (ret < 0 || !dec_frame)
                 break;
         }
     } else {
-        ret = push_frame_to_encs(ctx, enc_ctx, num_enc, &dec_frame);
+        ret = push_frame_to_encs(ctx, enc_ctx, num_enc, dec_frame);
     }
 
     return ret;
@@ -406,9 +405,7 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     ctx = *s;
 
-    void *dump;
-
-    pthread_join(ctx->thread, &dump);
+    pthread_join(ctx->thread, NULL);
 
     swr_free(&ctx->swr);
 
@@ -515,6 +512,7 @@ void *cyanrip_track_encoding(void *ctx)
             }
 
             out_pkt.stream_index = 0;
+
             ret = av_interleaved_write_frame(s->avf, &out_pkt);
             av_packet_unref(&out_pkt);
             if (ret < 0) {
