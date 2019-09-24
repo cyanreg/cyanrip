@@ -41,6 +41,8 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
     s->acu_sum_1 = 0x0;
     s->acu_sum_2 = 0x0;
 
+    t->computed_crcs = 0;
+
     if (t->number == 1)
         s->acu_start += (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
     else if (t->number == ctx->drive->tracks)
@@ -70,6 +72,7 @@ static inline void process_crc(cyanrip_crc_ctx *s, const uint8_t *data, int byte
 
 static inline void finalize_crc(cyanrip_crc_ctx *s, cyanrip_track *t)
 {
+    t->computed_crcs = 1;
     t->eac_crc = s->eac_crc ^ UINT32_MAX;
     t->acurip_crc_v1 = s->acu_sum_1;
     t->acurip_crc_v2 = s->acu_sum_2;

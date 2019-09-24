@@ -50,18 +50,28 @@ enum cyanrip_output_formats {
     CYANRIP_FORMATS_NB,
 };
 
+enum cyanrip_pregap_action {
+    CYANRIP_PREGAP_DEFAULT = 0,
+    CYANRIP_PREGAP_DROP,
+    CYANRIP_PREGAP_MERGE,
+    CYANRIP_PREGAP_TRACK,
+};
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *base_dst_folder;
-    bool verbose;
+    int verbose;
     int speed;
     int frame_max_retries;
     int offset;
     int over_under_read_frames;
-    bool disable_mb;
+    int print_info_only;
+    int disable_mb;
     float bitrate;
     int enc_fifo_size;
-    bool eject_on_success_rip;
+    int overread_leadinout;
+    int eject_on_success_rip;
+    enum cyanrip_pregap_action pregap_action[99];
     int rip_indices_count;
     int rip_indices[99];
 
@@ -72,15 +82,23 @@ typedef struct cyanrip_settings {
 typedef struct cyanrip_track {
     int number;
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
+
+    int track_is_data;
     int preemphasis;
+
     size_t nb_samples; /* Track duration in samples */
+
     int frames_before_disc_start;
     lsn_t frames; /* Actual number of frames to read, != samples */
-    lsn_t pregap_frames; /* Frames before start_lsn, if available */
     int frames_after_disc_end;
+
+    lsn_t pregap_lsn;
     lsn_t start_lsn;
     lsn_t end_lsn;
+
     ptrdiff_t partial_frame_byte_offs;
+
+    int computed_crcs;
     uint32_t eac_crc;
     uint32_t acurip_crc_v1;
     uint32_t acurip_crc_v2;
@@ -89,10 +107,12 @@ typedef struct cyanrip_track {
 typedef struct cyanrip_ctx {
     cdrom_drive_t     *drive;
     cdrom_paranoia_t  *paranoia;
-    cyanrip_settings   settings;
-    cyanrip_track     *tracks;
     CdIo_t            *cdio;
     FILE              *logfile;
+    cyanrip_settings   settings;
+
+    cyanrip_track tracks[99];
+    int nb_tracks;
 
     /* Drive caps */
     cdio_drive_read_cap_t  rcap;
@@ -120,11 +140,11 @@ static inline const char *dict_get(AVDictionary *dict, const char *key)
     return e ? e->value : NULL;
 }
 
-static inline void cyanrip_frames_to_duration(uint32_t sectors, char *str)
+static inline void cyanrip_frames_to_duration(uint32_t frames, char *str)
 {
     if (!str)
         return;
-    const double tot = sectors/75.0; /* 75 frames per second */
+    const double tot = frames/75.0; /* 75 frames per second */
     const int hr    = tot/3600.0f;
     const int min   = (tot/60.0f) - (hr * 60);
     const int sec   = tot - ((hr * 3600) + min * 60);

@@ -1,14 +1,15 @@
 cyanrip
 =======
-Rips and encodes standard audio CDs with the least effort required from user. Cross platform.
+Rips and encodes standard audio CDs with the least effort required from user. Cross platform and very accurate.
 
 Features
 --------
  * Automatic tag lookup from the musicbrainz database
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation and error recovery via cd-paranoia
- * Able to encode to multiple formats simultaneously in parallel
- * Able to mux in cover images to mp3, flac and aac, opus (both in mp4)
+ * Full pregap handling
+ * Able to encode to multiple formats in parallel
+ * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
  * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
@@ -35,25 +36,32 @@ cyanrip can be also built and ran under Windows using MinGW
 CLI
 ---
 
-All arguments are entirely optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
+Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
 
-| Argument             | Description                                                                |
-|----------------------|----------------------------------------------------------------------------|
-| -d *path*            | Optional device path (e.g. /dev/sr0)                                       |
-| -D *path*            | Optional path to use as base folder name to rip into                       |
-| -c *path*            | Path to cover image to attach to files                                     |
-| -s *int*             | CD Drive offset in samples (stereo samples, same as accurip)               |
-| -S *int*             | Set the drive speed (0 for default/auto)                                   |
-| -o *string*          | Comma separated list of output formats (e.g. flac,opus or help to list all)|
-| -b *float*           | Bitrate of lossy files in kbps                                             |
-| -l *list*            | Indices of tracks to rip (e.g. 2,8,4)                                      |
-| -r *int*             | Max retries to read a frame before considering it corrupt (default: 25)    |
-| -a *string*          | Album metadata, in case disc info is unavailable                           |
-| -t *number*=*string* | Track metadata, in case unavailable or incomplete                          |
-| -E                   | Don't eject drive tray once done successfully and without interruptions    |
-| -V                   | Print program version                                                      |
-| -h                   | List all arguments and their description (this)                            |
-| -n                   | Disable Musicbrainz lookup                                                 |
+| Argument             | Description                                                                      |
+|----------------------|----------------------------------------------------------------------------------|
+|                      | **Ripping options**                                                              |
+| -d *string*          | The path or name for a specific device, otherwise uses the default device        |
+| -s *int*             | Specifies the CD drive offset in samples (same as EAC, default is 0)             |
+| -r *int*             | Specifies how many times to retry reading a frame if it fails, (default is 25)   |
+| -S *int*             | Sets the drive speed if possible (default is unset, usually maximum)             |
+| -p *number*=*string* | Specifies what to do with the pregap, sytax is described below                   |
+| -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping |
+|                      | **Metadata options**                                                             |
+| -I                   | Only print CD metadata and information, will not rip or eject the CD             |
+| -a *string*          | Album metadata, syntax is described below                                        |
+| -t *number*=*string* | Track metadata, syntax is described below                                        |
+| -c *path*            | Sets cover image to embed into each track, syntax is described below             |
+| -n                   | Disable MusicBrainz lookup, needs to be set for unknown discs                    |
+|                      | **Output options**                                                               |
+| -l *list*            | Comma separated list of track numbers to rip, (default is it rips all)           |
+| -D *string*          | Base folder name to which to rip into, default is the album name                 |
+| -o *list*            | Comma separated list of output formats, "help" to list all, default is flac      |
+| -b *int*             | Bitrate in kbps for lossy formats                                                |
+|                      | **Misc. options**                                                                |
+| -E                   | Eject CD tray if ripping has been successfully completed                         |
+| -V                   | Print version                                                                    |
+| -h                   | Print usage (this)                                                               |
 
 
 Metadata
@@ -68,6 +76,25 @@ In case the Musicbrainz database doesn't contain the disc information, you can m
 All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
 
 The precedence of tags is Track tags > Album tags > Musicbrainz tags.
+
+
+Pregap handling
+---------------
+
+By default, track 1 pregap is ignored, while any other track's pregap is merged into the previous track. This is identical to EAC's default behaviour.
+
+You can override what's done with each pregap on a per-track basis using the -p *number*=*action* argument. This argument must be specified separately for each track.
+
+| *action* | Description                                |
+|----------|--------------------------------------------|
+| default  | Merge into previous track, drop on track 1 |
+| drop     | Drop the pregap entirely                   |
+| merge    | Merge into current track                   |
+| track    | Split into a new track before the current  |
+
+If the pregap offset isn't available for a given track, this argument will do nothing.
+
+cyanrip guarantees that there will be no discontinuities between tracks, unless the drop action is used to delete a pregap.
 
 
 Cover art embedding

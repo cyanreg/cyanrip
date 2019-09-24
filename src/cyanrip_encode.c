@@ -18,6 +18,7 @@
 
 #include <time.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <strings.h>
 #include <sys/stat.h>
 
@@ -37,13 +38,11 @@ struct cyanrip_enc_ctx {
     pthread_t thread;
     AVFormatContext *avf;
     SwrContext *swr;
-    AVCodecContext *in_avctx;
     AVCodecContext *out_avctx;
-    int status;
+    atomic_int status;
 };
 
 struct cyanrip_dec_ctx {
-    AVCodecContext *in_avctx;
     AVPacket *cover_image_pkt;
     AVCodecParameters *cover_image_params;
 };
@@ -189,7 +188,6 @@ void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
 
     cyanrip_dec_ctx *dec_ctx = *s;
 
-    avcodec_free_context(&dec_ctx->in_avctx);
     av_packet_free(&dec_ctx->cover_image_pkt);
     av_freep(&dec_ctx->cover_image_params);
     av_freep(s);
@@ -260,32 +258,7 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
 
     ret = cyanrip_read_cover_image(ctx, dec_ctx, t);
     if (ret < 0)
-        return ret;
-
-    AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_PCM_S16LE);
-    if (!codec) {
-        cyanrip_log(ctx, 0, "Could not find input codec!\n");
-        ret = AVERROR(EINVAL);
         goto fail;
-    }
-
-    dec_ctx->in_avctx = avcodec_alloc_context3(codec);
-    if (!dec_ctx->in_avctx) {
-        cyanrip_log(ctx, 0, "Could not alloc input codec context!\n");
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    dec_ctx->in_avctx->channel_layout    = AV_CH_LAYOUT_STEREO;
-    dec_ctx->in_avctx->sample_rate       = 44100;
-    dec_ctx->in_avctx->channels          = 2;
-    dec_ctx->in_avctx->time_base         = (AVRational){ 1, 44100 };
-
-    ret = avcodec_open2(dec_ctx->in_avctx, codec, NULL);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Could not open output codec context: %s!\n", av_err2str(ret));
-        goto fail;
-    }
 
     *s = dec_ctx;
 
@@ -302,6 +275,10 @@ static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     int ret;
 
     for (int i = 0; i < num_enc; i++) {
+        int status = atomic_load(&enc_ctx[i]->status);
+        if (status < 0)
+            return status;
+
         ret = push_to_fifo(&enc_ctx[i]->fifo, frame ? av_frame_clone(frame) : NULL);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
@@ -317,101 +294,41 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                  const uint8_t *data, int bytes)
 {
     int ret = 0;
-    AVCodecContext *in_avctx = dec_ctx->in_avctx;
-    AVFrame *dec_frame = NULL;
+    AVFrame *frame = NULL;
 
     if (!data && !bytes)
         goto send;
     else if (!bytes)
         return 0;
 
-    uint8_t *new_data = av_malloc(bytes + AV_INPUT_BUFFER_PADDING_SIZE);
-    if (!new_data) {
-        cyanrip_log(ctx, 0, "Error allocating!\n");
-        return AVERROR(ENOMEM);
-    }
-
-    /* libcdio has interesting ideas about data lifetime, and its not padded
-     * nor of course refcounted so we have to do this */
-    memcpy(new_data, data, bytes);
-    memset(new_data + bytes, 0, AV_INPUT_BUFFER_PADDING_SIZE);
-
-    AVPacket in_pkt;
-    av_init_packet(&in_pkt);
-    ret = av_packet_from_data(&in_pkt, new_data, bytes);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error allocating packet: %s!\n", av_err2str(ret));
-        av_free(new_data);
-        return AVERROR(ENOMEM);
-    }
-
-    ret = avcodec_send_packet(in_avctx, &in_pkt);
-    av_packet_unref(&in_pkt);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error sending packet: %s!\n", av_err2str(ret));
-        goto fail;
-    }
-
-    dec_frame = av_frame_alloc();
-    if (!dec_frame) {
-        cyanrip_log(ctx, 0, "Error allocating!\n");
+    frame = av_frame_alloc();
+    if (!frame) {
+        cyanrip_log(ctx, 0, "Error allocating frame!\n");
         ret = AVERROR(ENOMEM);
         goto fail;
     }
 
-    ret = avcodec_receive_frame(in_avctx, dec_frame);
-    if (ret == AVERROR(EAGAIN)) {
-        av_frame_free(&dec_frame);
-        return 0;
-    } if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error decoding PCM: %s!\n", av_err2str(ret));
-        av_frame_free(&dec_frame);
+    frame->sample_rate = 44100;
+    frame->nb_samples = bytes >> 2;
+    frame->channel_layout = AV_CH_LAYOUT_STEREO;
+    frame->format = AV_SAMPLE_FMT_S16;
+
+    ret = av_frame_get_buffer(frame, 0);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error allocating frame: %s!\n", av_err2str(ret));
         goto fail;
     }
 
+    memcpy(frame->data[0], data, bytes);
+
 send:
-    if (dec_frame == NULL) {
-        ret = avcodec_send_packet(in_avctx, NULL);
-        if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error sending flush pkt: %s!\n", av_err2str(ret));
-            goto fail;
-        }
-
-        while (1) {
-            dec_frame = av_frame_alloc();
-            if (!dec_frame) {
-                cyanrip_log(ctx, 0, "Error allocating!\n");
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-
-            ret = avcodec_receive_frame(in_avctx, dec_frame);
-            if (ret == AVERROR_EOF) {
-                av_frame_free(&dec_frame);
-            } else if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error decoding PCM: %s!\n", av_err2str(ret));
-                av_frame_free(&dec_frame);
-                goto fail;
-            }
-
-            ret = push_frame_to_encs(ctx, enc_ctx, num_enc, dec_frame);
-            av_frame_free(&dec_frame);
-            if (ret < 0 || !dec_frame)
-                break;
-        }
-    } else {
-        ret = push_frame_to_encs(ctx, enc_ctx, num_enc, dec_frame);
-        av_frame_free(&dec_frame);
-    }
-
-    return ret;
-
+    ret = push_frame_to_encs(ctx, enc_ctx, num_enc, frame);
 fail:
+    av_frame_free(&frame);
     return ret;
 }
 
-static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *in_avctx,
-                                  AVCodecContext *out_avctx)
+static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx)
 {
     SwrContext *swr = swr_alloc();
     if (!swr) {
@@ -419,9 +336,9 @@ static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *in_avctx,
         return NULL;
     }
 
-    av_opt_set_int           (swr, "in_sample_rate",     in_avctx->sample_rate,     0);
-    av_opt_set_channel_layout(swr, "in_channel_layout",  in_avctx->channel_layout,  0);
-    av_opt_set_sample_fmt    (swr, "in_sample_fmt",      in_avctx->sample_fmt,      0);
+    av_opt_set_int           (swr, "in_sample_rate",     44100,                     0);
+    av_opt_set_channel_layout(swr, "in_channel_layout",  AV_CH_LAYOUT_STEREO,       0);
+    av_opt_set_sample_fmt    (swr, "in_sample_fmt",      AV_SAMPLE_FMT_S16,         0);
 
     av_opt_set_int           (swr, "out_sample_rate",    out_avctx->sample_rate,    0);
     av_opt_set_channel_layout(swr, "out_channel_layout", out_avctx->channel_layout, 0);
@@ -504,7 +421,7 @@ void *cyanrip_track_encoding(void *ctx)
             out_frame->sample_rate    = s->out_avctx->sample_rate;
             out_frame->nb_samples     = codec_frame_size;
             out_frame->pts            = ROUNDED_DIV(swr_next_pts(s->swr, INT64_MIN),
-                                                    s->in_avctx->sample_rate);
+                                                    44100);
 
             /* Get frame buffer */
             ret = av_frame_get_buffer(out_frame, 0);
@@ -569,7 +486,7 @@ write_trailer:
     }
 
 fail:
-    s->status = ret;
+    atomic_store(&s->status, ret);
 
     return NULL;
 }
@@ -587,7 +504,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     AVCodec *out_codec = NULL;
 
     s->ctx = ctx;
-    s->in_avctx = dec_ctx->in_avctx;
+    atomic_init(&s->status, 0);
 
     char *dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
                                 cfmt->folder_suffix);
@@ -707,7 +624,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* SWR */
-    s->swr = setup_init_swr(ctx, s->in_avctx, s->out_avctx);
+    s->swr = setup_init_swr(ctx, s->out_avctx);
     if (!s->swr)
         goto fail;
 

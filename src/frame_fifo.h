@@ -19,10 +19,8 @@ static inline int init_fifo(AVFrameFIFO *buf, int max_queued_frames)
     pthread_mutex_init(&buf->lock, NULL);
     pthread_cond_init(&buf->cond_in, NULL);
     pthread_mutex_init(&buf->cond_lock_in, NULL);
-    if (max_queued_frames > 0) {
-        pthread_cond_init(&buf->cond_out, NULL);
-        pthread_mutex_init(&buf->cond_lock_out, NULL);
-    }
+    pthread_cond_init(&buf->cond_out, NULL);
+    pthread_mutex_init(&buf->cond_lock_out, NULL);
     buf->num_queued_frames = 0;
     buf->queued_frames_alloc = 0;
     buf->max_queued_frames = max_queued_frames;
@@ -45,7 +43,7 @@ static inline int push_to_fifo(AVFrameFIFO *buf, AVFrame *f)
     pthread_mutex_lock(&buf->lock);
 
     if ((buf->max_queued_frames > 0) &&
-        (buf->num_queued_frames > buf->max_queued_frames)) {
+        (buf->num_queued_frames > (buf->max_queued_frames + 1))) {
         pthread_mutex_unlock(&buf->lock);
         pthread_cond_wait(&buf->cond_out, &buf->cond_lock_out);
         pthread_mutex_lock(&buf->lock);

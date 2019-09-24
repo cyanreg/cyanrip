@@ -6,8 +6,8 @@ project('cyanrip', 'c',
 conf = configuration_data()
 
 majorver = '0'
-minorver = '3'
-microver = '0'
+minorver = '4'
+microver = '0-rc'
 
 version = majorver + '.' + minorver + '.' + microver
 

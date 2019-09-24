@@ -25,7 +25,7 @@
 #include "cyanrip_encode.h"
 #include "os_compat.h"
 
-bool quit_now = 0;
+int quit_now = 0;
 
 void cyanrip_ctx_end(cyanrip_ctx **s)
 {
@@ -34,7 +34,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
         return;
     ctx = *s;
 
-    for (int i = 0; i < ctx->drive->tracks; i++)
+    for (int i = 0; i < ctx->nb_tracks; i++)
         av_dict_free(&ctx->tracks[i].meta);
 
     if (ctx->paranoia)
@@ -49,60 +49,19 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
 
     av_dict_free(&ctx->meta);
     av_freep(&ctx->base_dst_folder);
-    av_freep(&ctx->tracks);
     av_freep(&ctx);
 
     *s = NULL;
-}
-
-static void setup_track_lsn(cyanrip_ctx *ctx, cyanrip_track *t)
-{
-    /* Duration doesn't depend on adjustments we make to frames */
-    lsn_t first_frame = cdio_get_track_lsn(ctx->cdio, t->number);
-    lsn_t last_frame = cdio_get_track_last_lsn(ctx->cdio, t->number);
-    int frames = last_frame - first_frame + 1;
-
-    lsn_t pregap = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
-    t->pregap_frames = CDIO_INVALID_LSN;
-    if (pregap != CDIO_INVALID_LSN)
-        t->pregap_frames = first_frame - pregap;
-
-    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
-
-    /* Move the seek position coarsely */
-    const int extra_frames = ctx->settings.over_under_read_frames;
-    int sign = (extra_frames < 0) ? -1 : ((extra_frames > 0) ? +1 : 0);
-    first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
-    last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
-
-    /* Bump the lower/higher frame in the offset direction */
-    first_frame -= sign < 0;
-    last_frame  += sign > 0;
-
-    /* Don't read into the lead in/out */
-    t->frames_before_disc_start = FFMAX(ctx->start_lsn - first_frame, 0);
-    t->frames_after_disc_end = FFMAX(last_frame - ctx->end_lsn, 0);
-
-    first_frame += t->frames_before_disc_start;
-    last_frame  -= t->frames_after_disc_end;
-
-    /* Offset accounted start/end sectors */
-    t->start_lsn = first_frame;
-    t->end_lsn = last_frame;
-    t->frames = last_frame - first_frame + 1;
-
-    /* Last/first frame partial offset */
-    ptrdiff_t offs = ctx->settings.offset*4;
-    offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
-
-    t->partial_frame_byte_offs = offs;
 }
 
 int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 {
     cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
 
-    ctx->settings = *settings;
+    memcpy(&ctx->settings, settings, sizeof(cyanrip_settings));
+
+    if (ctx->settings.print_info_only)
+        ctx->settings.eject_on_success_rip = 0;
 
     if (!ctx->settings.dev_path)
         ctx->settings.dev_path = cdio_get_default_device(NULL);
@@ -129,8 +88,6 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         cdio_cddap_free_messages(msg);
     }
 
-    cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_LOGIT, CDDA_MESSAGE_FORGETIT);
-
     cyanrip_log(ctx, 0, "Opening drive...\n");
     int ret = cdio_cddap_open(ctx->drive);
     if (ret < 0) {
@@ -139,8 +96,24 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return 1;
     }
 
-    if (settings->speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
-        cdio_cddap_speed_set(ctx->drive, settings->speed);
+    cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_LOGIT, CDDA_MESSAGE_FORGETIT);
+
+    if (settings->speed) {
+        if (!(ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED)) {
+            cyanrip_log(ctx, 0, "Device does not support changing speeds!\n");
+            cyanrip_ctx_end(&ctx);
+            return 1;
+        }
+
+        ret = cdio_cddap_speed_set(ctx->drive, settings->speed);
+        msg = cdio_cddap_errors(ctx->drive);
+        if (msg) {
+            cyanrip_log(ctx, 0, "cdio error: %s\n", msg);
+            cdio_cddap_free_messages(msg);
+        }
+        if (ret)
+            return 1;
+    }
 
     /* Drives are very slow and burst-y so don't block by default */
     if (!ctx->settings.enc_fifo_size && (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
@@ -165,12 +138,10 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     ctx->end_lsn = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK) - 1;
     ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
 
-    ctx->tracks = av_calloc(cdda_tracks(ctx->drive) + 1, sizeof(cyanrip_track));
+    ctx->nb_tracks = cdio_cddap_tracks(ctx->drive);
 
-    for (int i = 0; i < ctx->drive->tracks; i++) {
+    for (int i = 0; i < ctx->nb_tracks; i++)
         ctx->tracks[i].number = i + 1;
-        setup_track_lsn(ctx, &ctx->tracks[i]);
-    }
 
     /* For hot removal detection - init this so we can detect changes */
     cdio_get_media_changed(ctx->cdio);
@@ -226,7 +197,7 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
     }
 
     for (int i = 0; i < mb5_track_list_size(track_list); i++) {
-        if (i >= ctx->drive->tracks)
+        if (i >= ctx->nb_tracks)
             break;
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);
@@ -324,7 +295,8 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
     /* Get discid */
     DiscId *discid = discid_new();
     if (!discid_read_sparse(discid, ctx->settings.dev_path, 0)) {
-        cyanrip_log(ctx, 0, "Error reading discid!\n");
+        cyanrip_log(ctx, 0, "Error reading discid: %s!\n",
+                    discid_get_error_msg(discid));
         return 1;
     }
 
@@ -339,9 +311,9 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
     return ret;
 }
 
-static void cyanrip_copy_album_to_track_meta(cyanrip_ctx *ctx)
+static void copy_album_to_track_meta(cyanrip_ctx *ctx)
 {
-    for (int i = 0; i < ctx->drive->tracks; i++) {
+    for (int i = 0; i < ctx->nb_tracks; i++) {
         char t_s[64];
         time_t t_c = time(NULL);
         struct tm *t_l = localtime(&t_c);
@@ -350,7 +322,7 @@ static void cyanrip_copy_album_to_track_meta(cyanrip_ctx *ctx)
         av_dict_set(&ctx->tracks[i].meta, "creation_time", t_s, 0);
         av_dict_set(&ctx->tracks[i].meta, "comment", "cyanrip "CYANRIP_VERSION_STRING, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "track", ctx->tracks[i].number, 0);
-        av_dict_set_int(&ctx->tracks[i].meta, "tracktotal", ctx->drive->tracks, 0);
+        av_dict_set_int(&ctx->tracks[i].meta, "tracktotal", ctx->nb_tracks, 0);
         av_dict_copy(&ctx->tracks[i].meta, ctx->meta, AV_DICT_DONT_OVERWRITE);
     }
 }
@@ -378,19 +350,36 @@ const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
     if (msg) {
         cyanrip_log(ctx, 0, "\ncdio error: %s\n", msg);
         cdio_cddap_free_messages(msg);
-        msg = NULL;
         err = 1;
     }
 
     if (!data) {
-        cyanrip_log(ctx, 0, "\nFrame read failed!\n");
+        if (!msg) {
+            cyanrip_log(ctx, 0, "\nFrame read failed!\n");
+            err = 1;
+        }
         data = silent_frame;
-        err = 1;
     }
 
     ctx->total_error_count += err;
 
     return data;
+}
+
+static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    if (!t->track_is_data) {
+        t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->number);
+
+        if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
+            const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->number);
+            if (isrc_str) {
+                if (strlen(isrc_str))
+                    av_dict_set(&t->meta, "isrc", isrc_str, 0);
+                cdio_free((void *)isrc_str);
+            }
+        }
+    }
 }
 
 int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -402,14 +391,13 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     const int frames_after_disc_end = t->frames_after_disc_end;
     const ptrdiff_t offs = t->partial_frame_byte_offs;
 
-    /* Try reading the ISRC now, to hopefully reduce seek distance */
-    if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
-        const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->number);
-        if (isrc_str) {
-            if (strlen(isrc_str))
-                av_dict_set(&t->meta, "isrc", isrc_str, 0);
-            cdio_free((void *)isrc_str);
-        }
+    /* Try reading now to hopefully reduce seeking */
+    track_read_extra(ctx, t);
+
+    if (t->track_is_data) {
+        cyanrip_log(ctx, 0, "Track %i is data, skipping:\n", t->number);
+        cyanrip_log_track_end(ctx, t);
+        return 0;
     }
 
     cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
@@ -541,10 +529,12 @@ fail:
     }
     cyanrip_free_dec_ctx(&dec_ctx);
 
-    if (!ret)
+    if (!ret) {
+        cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
         cyanrip_log_track_end(ctx, t);
-    else
+    } else {
         ctx->total_error_count++;
+    }
 
     return ret;
 }
@@ -557,6 +547,169 @@ void on_quit_signal(int signo)
     }
     cyanrip_log(NULL, 0, "\r\nTrying to quit\n");
     quit_now = 1;
+}
+
+static void setup_track_lsn(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    lsn_t first_frame = t->start_lsn;
+    lsn_t last_frame  = t->end_lsn;
+
+    /* Duration doesn't depend on adjustments we make to frames */
+    int frames = last_frame - first_frame + 1;
+
+    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
+
+    /* Move the seek position coarsely */
+    const int extra_frames = ctx->settings.over_under_read_frames;
+    int sign = (extra_frames < 0) ? -1 : ((extra_frames > 0) ? +1 : 0);
+    first_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
+    last_frame += sign*FFMAX(FFABS(extra_frames) - 1, 0);
+
+    /* Bump the lower/higher frame in the offset direction */
+    first_frame -= sign < 0;
+    last_frame  += sign > 0;
+
+    /* Don't read into the lead in/out */
+    if (!ctx->settings.overread_leadinout) {
+        t->frames_before_disc_start = FFMAX(ctx->start_lsn - first_frame, 0);
+        t->frames_after_disc_end = FFMAX(last_frame - ctx->end_lsn, 0);
+
+        first_frame += t->frames_before_disc_start;
+        last_frame  -= t->frames_after_disc_end;
+    } else {
+        t->frames_before_disc_start = 0;
+        t->frames_after_disc_end = 0;
+    }
+
+    /* Offset accounted start/end sectors */
+    t->start_lsn = first_frame;
+    t->end_lsn = last_frame;
+    t->frames = last_frame - first_frame + 1;
+
+    /* Last/first frame partial offset */
+    ptrdiff_t offs = ctx->settings.offset*4;
+    offs -= sign*FFMAX(FFABS(extra_frames) - 1, 0)*CDIO_CD_FRAMESIZE_RAW;
+
+    t->partial_frame_byte_offs = offs;
+}
+
+static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
+{
+    int gaps = 0;
+
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+
+        t->number = i + 1;
+        t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
+        if (t->track_is_data) {
+            ctx->settings.pregap_action[t->number - 1] = CYANRIP_PREGAP_MERGE;
+            ctx->settings.pregap_action[t->number - 0] = CYANRIP_PREGAP_DROP;
+        }
+        t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
+        t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
+        t->end_lsn = cdio_get_track_last_lsn(ctx->cdio, t->number);
+    }
+
+    cyanrip_log(ctx, 0, "Gaps:\n");
+
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        cyanrip_track *ct = &ctx->tracks[i - 0];
+        cyanrip_track *lt = ct->number > 1 ? &ctx->tracks[i - 1] : NULL;
+
+        if (ct->pregap_lsn == CDIO_INVALID_LSN)
+            continue;
+
+        lsn_t pregap_frames = ct->start_lsn - ct->pregap_lsn + 1;
+        cyanrip_log(ctx, 0, "    %i frame pregap in track %i, ",
+                    pregap_frames, ct->number);
+        gaps++;
+
+        switch (ctx->settings.pregap_action[ct->number - 1]) {
+        case CYANRIP_PREGAP_DEFAULT:
+            if (!lt)
+                cyanrip_log(ctx, 0, "unmerged\n");
+            else
+                cyanrip_log(ctx, 0, "merged into track %i\n", lt->number);
+            break;
+        case CYANRIP_PREGAP_DROP:
+            cyanrip_log(ctx, 0, "dropped\n");
+            if (lt)
+                lt->end_lsn -= pregap_frames - 1;
+            break;
+        case CYANRIP_PREGAP_MERGE:
+            cyanrip_log(ctx, 0, "merged\n");
+            ct->start_lsn = ct->pregap_lsn;
+            if (lt)
+                lt->end_lsn -= pregap_frames - 1;
+            break;
+        case CYANRIP_PREGAP_TRACK:
+            cyanrip_log(ctx, 0, "split off into a new track, number %i\n", ct->number);
+
+            if (lt)
+                lt->end_lsn -= pregap_frames - 1;
+
+            for (int j = i; j < ctx->nb_tracks; j++)
+                ctx->tracks[j].number++;
+
+            memmove(&ctx->tracks[i + 1], &ctx->tracks[i],
+                    sizeof(cyanrip_track)*(ctx->nb_tracks - i));
+
+            ct = &ctx->tracks[i + 1];
+
+            ctx->nb_tracks++;
+            cyanrip_track *nt = &ctx->tracks[i];
+            nt->number = ct->number - 1;
+            nt->pregap_lsn = CDIO_INVALID_LSN;
+            nt->start_lsn = ct->pregap_lsn;
+            nt->end_lsn = ct->start_lsn - 1;
+
+            ct->pregap_lsn = CDIO_INVALID_LSN;
+        }
+    }
+
+    for (int i = 1; i < ctx->nb_tracks; i++) {
+        cyanrip_track *ct = &ctx->tracks[i - 0];
+        cyanrip_track *lt = &ctx->tracks[i - 1];
+
+        if (ct->start_lsn == (lt->end_lsn + 1))
+            continue;
+
+        int discont_frames = ct->start_lsn - lt->end_lsn;
+
+        cyanrip_log(ctx, 0, "    %i frame discontinuity between tracks %i and %i, ",
+                    discont_frames, ct->number, lt->number);
+        gaps++;
+
+        if (ctx->settings.pregap_action[ct->number - 1] != CYANRIP_PREGAP_DROP) {
+            cyanrip_log(ctx, 0, "padding track %i\n", lt->number);
+            lt->end_lsn = ct->start_lsn - 1;
+        } else {
+            cyanrip_log(ctx, 0, "ignoring\n");
+        }
+    }
+
+    cyanrip_track *lt = &ctx->tracks[ctx->nb_tracks - 1];
+    if (ctx->end_lsn > lt->end_lsn + 1) {
+        int discont_frames = ctx->end_lsn - lt->end_lsn + 1;
+        cyanrip_log(ctx, 0, "    %i frame gap between last track and lead-out, padding track\n",
+                    discont_frames);
+        gaps++;
+
+        lt->end_lsn = ctx->end_lsn - 1;
+    }
+
+    /* Finally set up the internals with the set start_lsn/end_lsn */
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+        if (t->track_is_data) {
+            t->frames = t->end_lsn - t->start_lsn + 1;
+        } else {
+            setup_track_lsn(ctx, t);
+        }
+    }
+
+    cyanrip_log(ctx, 0, "%s\n", gaps ? "" : "    None signalled\n");
 }
 
 int main(int argc, char **argv)
@@ -575,13 +728,17 @@ int main(int argc, char **argv)
     settings.frame_max_retries = 25;
     settings.over_under_read_frames = 0;
     settings.offset = 0;
+    settings.print_info_only = 0;
     settings.disable_mb = 0;
     settings.bitrate = 128.0f;
+    settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
     settings.enc_fifo_size = 0;
-    settings.eject_on_success_rip = 1;
+    settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
+
+    memset(settings.pregap_action, 0, sizeof(settings.pregap_action));
 
     int c;
     char *p;
@@ -590,26 +747,32 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnVEl:a:t:b:c:r:d:o:s:S:D:F:")) != -1) {
+    while ((c = getopt(argc, argv, "hnIVEOl:a:t:b:c:r:d:o:s:S:D:p:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
-            cyanrip_log(ctx, 0, "    -d <path>            Set device path\n");
-            cyanrip_log(ctx, 0, "    -D <path>            Folder to rip disc to\n");
-            cyanrip_log(ctx, 0, "    -c <path>            Set cover image path\n");
-            cyanrip_log(ctx, 0, "    -s <int>             CD Drive offset in samples\n");
-            cyanrip_log(ctx, 0, "    -S <int>             Drive speed\n");
-            cyanrip_log(ctx, 0, "    -o <string>          Comma separated list of outputs\n");
-            cyanrip_log(ctx, 0, "    -b <kbps>            Bitrate of lossy files in kbps\n");
-            cyanrip_log(ctx, 0, "    -l <list>            Select which tracks to rip\n");
-            cyanrip_log(ctx, 0, "    -r <int>             Maximum number of retries to read a frame\n");
-            cyanrip_log(ctx, 0, "    -a <string>          Album metadata, key=value:key=value\n");
-            cyanrip_log(ctx, 0, "    -t <number>=<string> Track metadata, can be specified multiple times\n");
-            cyanrip_log(ctx, 0, "    -F <int>             Encoding FIFO queue size\n");
-            cyanrip_log(ctx, 0, "    -E                   Don't eject tray once done\n");
-            cyanrip_log(ctx, 0, "    -V                   Print program version\n");
-            cyanrip_log(ctx, 0, "    -h                   Print options help\n");
-            cyanrip_log(ctx, 0, "    -n                   Disable musicbrainz lookup\n");
+            cyanrip_log(ctx, 0, "\n  Ripping options:\n");
+            cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
+            cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
+            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries to read a frame (default: 25)\n");
+            cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
+            cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
+            cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
+            cyanrip_log(ctx, 0, "\n  Metadata options:\n");
+            cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
+            cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
+            cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
+            cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
+            cyanrip_log(ctx, 0, "    -n                    Disable musicbrainz lookup\n");
+            cyanrip_log(ctx, 0, "\n  Output options:\n");
+            cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
+            cyanrip_log(ctx, 0, "    -D <path>             Base folder name to rip disc to\n");
+            cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
+            cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
+            cyanrip_log(ctx, 0, "\n  Misc. options:\n");
+            cyanrip_log(ctx, 0, "    -E                    Eject tray once successfully done\n");
+            cyanrip_log(ctx, 0, "    -V                    Print program version\n");
+            cyanrip_log(ctx, 0, "    -h                    Print options help\n");
             return 0;
             break;
         case 'S':
@@ -680,18 +843,44 @@ int main(int argc, char **argv)
                 p = strtok(NULL, ",");
             }
             break;
-        case 'F':
-            settings.enc_fifo_size = strtol(optarg, NULL, 10);
-            if (settings.enc_fifo_size < 0) {
-                cyanrip_log(ctx, 0, "Invalid FIFO queue size!\n");
+        case 'I':
+            settings.print_info_only = 1;
+            break;
+        case 'O':
+            settings.overread_leadinout = 1;
+            break;
+        case 'p':
+            p = strtok(optarg, "=");
+            int idx = strtol(p, NULL, 10);
+            if (idx < 1 || idx > 99) {
+                cyanrip_log(ctx, 0, "Invalid track idx %i\n", idx);
                 return 1;
             }
-             break;
+            enum cyanrip_pregap_action act = CYANRIP_PREGAP_DEFAULT;
+            p = strtok(NULL, "=");
+            if (!p) {
+                cyanrip_log(ctx, 0, "Missing pregap action\n");
+                return 1;
+            }
+            if (!strncmp(p, "default", strlen("default"))) {
+                act = CYANRIP_PREGAP_DEFAULT;
+            } else if (!strncmp(p, "drop", strlen("drop"))) {
+                act = CYANRIP_PREGAP_DROP;
+            } else if (!strncmp(p, "merge", strlen("merge"))) {
+                act = CYANRIP_PREGAP_MERGE;
+            } else if (!strncmp(p, "track", strlen("track"))) {
+                act = CYANRIP_PREGAP_TRACK;
+            } else {
+                cyanrip_log(ctx, 0, "Invalid pregap action %s\n", p);
+                return 1;
+            }
+            settings.pregap_action[idx - 1] = act;
+            break;
         case 'c':
             cover_image_path = optarg;
             break;
         case 'E':
-            settings.eject_on_success_rip = 0;
+            settings.eject_on_success_rip = 1;
             break;
         case 'D':
             settings.base_dst_folder = optarg;
@@ -737,7 +926,22 @@ int main(int argc, char **argv)
         }
     }
 
-    cyanrip_copy_album_to_track_meta(ctx);
+    if (ctx->settings.base_dst_folder)
+        ctx->base_dst_folder = av_strdup(ctx->settings.base_dst_folder);
+    else if (dict_get(ctx->meta, "album"))
+        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "album"));
+    else if (dict_get(ctx->meta, "discid"))
+        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "discid"));
+    else
+        ctx->base_dst_folder = av_strdup("Untitled CD");
+
+    if (!ctx->settings.print_info_only)
+        cyanrip_log_init(ctx);
+
+    cyanrip_log_start_report(ctx);
+    setup_track_offsets_and_report(ctx);
+
+    copy_album_to_track_meta(ctx);
 
     /* Read user track metadata */
     for (int i = 0; i < track_metadata_ptr_cnt; i++) {
@@ -746,7 +950,7 @@ int main(int argc, char **argv)
 
         char *end = NULL;
         int track_num = strtol(track_metadata_ptr[i], &end, 10) - 1;
-        if (track_num < 0 || track_num >= ctx->drive->tracks) {
+        if (track_num < 0 || track_num >= ctx->nb_tracks) {
             cyanrip_log(ctx, 0, "Invalid track number %i\n", track_num + 1);
             return 1;
         }
@@ -760,20 +964,16 @@ int main(int argc, char **argv)
         }
     }
 
-    if (ctx->settings.base_dst_folder)
-        ctx->base_dst_folder = av_strdup(ctx->settings.base_dst_folder);
-    else if (dict_get(ctx->meta, "album"))
-        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "album"));
-    else if (dict_get(ctx->meta, "discid"))
-        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "discid"));
-    else
-        ctx->base_dst_folder = av_strdup("Untitled CD");
-
-    cyanrip_log_init(ctx);
-    cyanrip_log_start_report(ctx);
-
-    if (ctx->settings.rip_indices_count == -1) {
-        for (int i = 0; i < ctx->drive->tracks; i++) {
+    cyanrip_log(ctx, 0, "Tracks:\n");
+    if (ctx->settings.print_info_only) {
+        for (int i = 0; i < ctx->nb_tracks; i++) {
+            cyanrip_track *t = &ctx->tracks[i];
+            cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
+            track_read_extra(ctx, t);
+            cyanrip_log_track_end(ctx, t);
+        }
+    } else if (ctx->settings.rip_indices_count == -1) {
+        for (int i = 0; i < ctx->nb_tracks; i++) {
             if (cyanrip_rip_track(ctx, &ctx->tracks[i]))
                 break;
             if (quit_now)
@@ -782,9 +982,9 @@ int main(int argc, char **argv)
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             int index = ctx->settings.rip_indices[i] - 1;
-            if (index < 0 || index >= ctx->drive->tracks) {
+            if (index < 0 || index >= ctx->nb_tracks) {
                 cyanrip_log(ctx, 0, "Invalid rip index %i, disc has %i tracks!\n",
-                            index + 1, ctx->drive->tracks);
+                            index + 1, ctx->nb_tracks);
                 ctx->total_error_count++;
                 goto end;
             }

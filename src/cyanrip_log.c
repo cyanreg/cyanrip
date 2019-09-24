@@ -23,6 +23,9 @@
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
+/* Bump this on each change */
+#define LOG_VERSION 100
+
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
         cyanrip_log(ctx, 0, FORMAT, dict_get(DICT, TAG));                      \
@@ -32,57 +35,63 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     char length[16];
     cyanrip_samples_to_duration(t->nb_samples >> 1, length);
 
-    cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
+    if (t->track_is_data) {
+        cyanrip_log(ctx, 0, "    Data bytes:  %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
+        return;
+    }
+
     CLOG("    Title:       %s\n", t->meta, "title")
     CLOG("    Artist:      %s\n", t->meta, "artist")
     CLOG("    ISRC:        %s\n", t->meta, "isrc")
 
-    cyanrip_log(ctx, 0, "    Preemphasis: %i\n", t->preemphasis);
+    if (t->preemphasis)
+        cyanrip_log(ctx, 0, "    Preemphasis: present, deemphasis required\n");
     cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
-    if (t->pregap_frames != CDIO_INVALID_LSN) {
-        int pregap_samples = t->pregap_frames * (CDIO_CD_FRAMESIZE_RAW >> 1);
-        char pregap_len[16];
-        cyanrip_samples_to_duration(pregap_samples >> 1, pregap_len);
-        cyanrip_log(ctx, 0, "    Pregap:      unmerged, %s\n", pregap_len);
-    }
     cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
+    if (t->pregap_lsn != CDIO_INVALID_LSN)
+        cyanrip_log(ctx, 0, "    Pregap LSN:  %i\n", t->pregap_lsn);
     cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_lsn);
     cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_lsn);
-    cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
-    cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
-    cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
+    if (t->computed_crcs) {
+        cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
+        cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
+        cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
+    }
     cyanrip_log(ctx, 0, "\n");
 }
 
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
-    cyanrip_log(ctx, 0, "cyanrip %s\n", CYANRIP_VERSION_STRING);
-    cyanrip_log(ctx, 0, "Device:        %s\n", ctx->drive->drive_model ? ctx->drive->drive_model : "");
-    cyanrip_log(ctx, 0, "Offset:        %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
+    cyanrip_log(ctx, 0, "cyanrip %s, log version %i\n", CYANRIP_VERSION_STRING, LOG_VERSION);
+    if (ctx->drive->drive_model)
+        cyanrip_log(ctx, 0, "Device:         %s\n", ctx->drive->drive_model);
+    cyanrip_log(ctx, 0, "Offset:         %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
                 abs(ctx->settings.offset) == 1 ? "sample" : "samples");
     cyanrip_log(ctx, 0, "%s%c%i %s\n",
-                ctx->settings.over_under_read_frames < 0 ? "Underread:     " : "Overread:      ",
+                ctx->settings.over_under_read_frames < 0 ? "Underread:      " : "Overread:       ",
                 ctx->settings.over_under_read_frames >= 0 ? '+' : '-',
                 abs(ctx->settings.over_under_read_frames),
                 abs(ctx->settings.over_under_read_frames) == 1 ? "frame" : "frames");
-
-    cyanrip_log(ctx, 0, "Path:          %s\n", ctx->settings.dev_path);
-    CLOG("Album Art:     %s\n", ctx->meta, "cover_art")
-    cyanrip_log(ctx, 0, "Base folder:   %s\n", ctx->base_dst_folder);
+    cyanrip_log(ctx, 0, "%s%s\n",
+                ctx->settings.over_under_read_frames < 0 ? "Underread mode: " : "Overread mode:  ",
+                ctx->settings.overread_leadinout ? "read in lead-in/lead-out" : "fill with silence in lead-in/lead-out");
     if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
-        cyanrip_log(ctx, 0, "Speed:         %ix\n", ctx->settings.speed);
+        cyanrip_log(ctx, 0, "Speed:          %ix\n", ctx->settings.speed);
     else
-        cyanrip_log(ctx, 0, "Speed:         default (%s)\n",
+        cyanrip_log(ctx, 0, "Speed:          default (%s)\n",
                     (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
-    cyanrip_log(ctx, 0, "C2 errors:     %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
+    cyanrip_log(ctx, 0, "C2 errors:      %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
-    cyanrip_log(ctx, 0, "Retries:       %i\n", ctx->settings.frame_max_retries);
-    cyanrip_log(ctx, 0, "Outputs:       ");
+    cyanrip_log(ctx, 0, "Retries:        %i\n", ctx->settings.frame_max_retries);
+    cyanrip_log(ctx, 0, "Path:           %s\n", ctx->settings.dev_path);
+    CLOG("Album Art:     %s\n", ctx->meta, "cover_art")
+    cyanrip_log(ctx, 0, "Base folder:    %s\n", ctx->base_dst_folder);
+    cyanrip_log(ctx, 0, "Outputs:        ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, "\n");
-    cyanrip_log(ctx, 0, "Disc tracks:   %i\n", ctx->drive->tracks);
-    cyanrip_log(ctx, 0, "Tracks to rip: %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
+    cyanrip_log(ctx, 0, "Disc tracks:    %i\n", ctx->drive->tracks);
+    cyanrip_log(ctx, 0, "Tracks to rip:  %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++)
             cyanrip_log(ctx, 0, "%i%s", ctx->settings.rip_indices[i], i != (ctx->settings.rip_indices_count - 1) ? ", " : "");
@@ -92,12 +101,12 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     char duration[16];
     cyanrip_frames_to_duration(ctx->duration_frames, duration);
 
-    CLOG("DiscID:        %s\n", ctx->meta, "discid")
-    CLOG("Disc MCN:      %s\n", ctx->meta, "disc_mcn")
-    CLOG("Album:         %s\n", ctx->meta, "album")
-    CLOG("Album artist:  %s\n", ctx->meta, "album_artist")
+    CLOG("DiscID:         %s\n", ctx->meta, "discid")
+    CLOG("Disc MCN:       %s\n", ctx->meta, "disc_mcn")
+    CLOG("Album:          %s\n", ctx->meta, "album")
+    CLOG("Album artist:   %s\n", ctx->meta, "album_artist")
 
-    cyanrip_log(ctx, 0, "Total time:    %s\n", duration);
+    cyanrip_log(ctx, 0, "Total time:     %s\n", duration);
 
     cyanrip_log(ctx, 0, "\n");
 }
