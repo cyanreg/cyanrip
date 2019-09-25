@@ -131,9 +131,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     else
         cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
 
-    ctx->start_lsn = cdio_get_track_pregap_lsn(ctx->cdio, 1);
-    if (ctx->start_lsn == CDIO_INVALID_LSN)
-        ctx->start_lsn = cdio_get_track_lsn(ctx->cdio, 1);
+    ctx->start_lsn = 0;
 
     ctx->end_lsn = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK) - 1;
     ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
