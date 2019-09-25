@@ -76,7 +76,7 @@ cyanrip_out_fmt fmt_map[] = {
     [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
     [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
     [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "ipod",  0,  2, 1, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "ipod",  1,  2, 1, AV_CODEC_ID_ALAC,      },
     [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_NONE,      },
     [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
     [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_NONE,      },
@@ -744,12 +744,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
     s->avf->oformat->audio_codec = out_codec->id;
-
-    if (format == CYANRIP_FORMAT_OPUS_MP4) {
-        cyanrip_log(ctx, 0, "Opus mapping in MP4 is experimental, "
-                    "use at your own risk.\n");
-        s->avf->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
-    }
 
     /* Output avctx */
     s->out_avctx = setup_out_avctx(ctx, s->avf, out_codec, cfmt);
