@@ -22,6 +22,7 @@ dependencies = [
     dependency('libavcodec', version: '>= 58.19.100'),
     dependency('libavformat', version: '>= 58.13.100'),
     dependency('libswresample', version: '>= 3.2.100'),
+    dependency('libavfilter', version: '>= 7.2.100'),
     dependency('libavutil', version: '>= 56.15.100'),
     dependency('threads'),
 ]

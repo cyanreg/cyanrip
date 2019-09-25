@@ -25,6 +25,8 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
 
 #include "frame_fifo.h"
@@ -43,6 +45,13 @@ struct cyanrip_enc_ctx {
 };
 
 struct cyanrip_dec_ctx {
+    /* HDCD decoding */
+    AVFilterGraph *graph;
+    AVFilterContext *buffersink_ctx;
+    AVFilterContext *buffersrc_ctx;
+    AVFilterGraph *filter_graph;
+
+    /* Cover image demuxing */
     AVPacket *cover_image_pkt;
     AVCodecParameters *cover_image_params;
 };
@@ -67,17 +76,20 @@ cyanrip_out_fmt fmt_map[] = {
     [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
     [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
     [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "alac",  0,  2, 1, AV_CODEC_ID_ALAC,      },
-    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "ipod",  0,  2, 1, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_NONE,      },
     [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_PCM_S16LE, },
+    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_NONE,      },
 };
 
 void cyanrip_print_codecs(void)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         cyanrip_out_fmt *cfmt = &fmt_map[i];
-        if (avcodec_find_encoder(cfmt->codec)) {
+        if (avcodec_find_encoder(cfmt->codec) ||
+            ((cfmt->codec == AV_CODEC_ID_NONE) &&
+              avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
+              avcodec_find_encoder(AV_CODEC_ID_PCM_S32LE))) {
             const char *str = cfmt->coverart_supported ? "\t(supports cover art)" : "";
             cyanrip_log(NULL, 0, "\t%s\tfolder: [%s]\textension: %s%s\n", cfmt->name, cfmt->folder_suffix, cfmt->ext, str);
         }
@@ -90,7 +102,11 @@ int cyanrip_validate_fmt(const char *fmt)
         cyanrip_out_fmt *cfmt = &fmt_map[i];
         if ((!strncasecmp(fmt, cfmt->name, strlen(fmt))) &&
             (strlen(fmt) == strlen(cfmt->name))) {
-            if (avcodec_find_encoder(cfmt->codec))
+            if (cfmt->codec == AV_CODEC_ID_NONE &&
+                avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
+                avcodec_find_encoder(AV_CODEC_ID_PCM_S32LE))
+                return i;
+            else if (avcodec_find_encoder(cfmt->codec))
                 return i;
             cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
             return -1;
@@ -119,15 +135,15 @@ static const uint64_t get_codec_channel_layout(AVCodec *codec)
     return codec->channel_layouts[0];
 }
 
-static enum AVSampleFormat get_codec_sample_fmt(AVCodec *codec)
+static enum AVSampleFormat get_codec_sample_fmt(AVCodec *codec, int hdcd)
 {
     int i = 0;
     if (!codec->sample_fmts)
-        return AV_SAMPLE_FMT_S16;
+        return hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
     while (1) {
         if (codec->sample_fmts[i] == -1)
             break;
-        if (av_get_bytes_per_sample(codec->sample_fmts[i]) >= 2)
+        if (av_get_bytes_per_sample(codec->sample_fmts[i]) >= (2 + 2*hdcd))
             return codec->sample_fmts[i];
         i++;
     }
@@ -168,12 +184,15 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     avctx->opaque            = ctx;
     avctx->bit_rate          = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt        = get_codec_sample_fmt(codec);
+    avctx->sample_fmt        = get_codec_sample_fmt(codec, ctx->settings.decode_hdcd);
     avctx->channel_layout    = get_codec_channel_layout(codec);
     avctx->compression_level = cfmt->compression_level;
     avctx->sample_rate       = get_codec_sample_rate(codec);
     avctx->time_base         = (AVRational){ 1, avctx->sample_rate };
     avctx->channels          = av_get_channel_layout_nb_channels(avctx->channel_layout);
+
+    if (cfmt->lossless && ctx->settings.decode_hdcd)
+        avctx->bits_per_raw_sample = 24;
 
     if (avf->oformat->flags & AVFMT_GLOBALHEADER)
         avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -188,6 +207,7 @@ void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
 
     cyanrip_dec_ctx *dec_ctx = *s;
 
+    avfilter_graph_free(&dec_ctx->graph);
     av_packet_free(&dec_ctx->cover_image_pkt);
     av_freep(&dec_ctx->cover_image_params);
     av_freep(s);
@@ -241,8 +261,112 @@ static int cyanrip_read_cover_image(cyanrip_ctx *ctx, cyanrip_dec_ctx *dec_ctx,
 
 fail:
     av_dict_set(&t->meta, "cover_art", NULL, 0);
-    cyanrip_free_dec_ctx(&dec_ctx);
     avformat_close_input(&avf);
+
+    return ret;
+}
+
+static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
+{
+    int ret = 0;
+    AVFilterInOut *outputs = NULL;
+    AVFilterInOut *inputs = NULL;
+
+    s->graph = avfilter_graph_alloc();
+    if (!s->graph)
+        return AVERROR(ENOMEM);
+
+    const AVFilter *abuffersrc  = avfilter_get_by_name("abuffer");
+
+    char args[512];
+    uint64_t layout = AV_CH_LAYOUT_STEREO;
+    snprintf(args, sizeof(args),
+            "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%"PRIx64,
+             1, 44100, 44100, av_get_sample_fmt_name(AV_SAMPLE_FMT_S16), layout);
+
+    ret = avfilter_graph_create_filter(&s->buffersrc_ctx, abuffersrc, "in",
+                                       args, NULL, s->graph);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error creating filter source: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+
+    const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
+    ret = avfilter_graph_create_filter(&s->buffersink_ctx, abuffersink, "out",
+                                       NULL, NULL, s->graph);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error creating filter sink: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    static const enum AVSampleFormat out_sample_fmts[] = { AV_SAMPLE_FMT_S32, -1 };
+    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_fmts", out_sample_fmts, -1,
+                              AV_OPT_SEARCH_CHILDREN);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error setting filter sample format: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
+    ret = av_opt_set_int_list(s->buffersink_ctx, "channel_layouts", out_channel_layouts, -1,
+                              AV_OPT_SEARCH_CHILDREN);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error setting filter channel layout: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    static const int out_sample_rates[] = { 44100, -1 };
+    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_rates", out_sample_rates, -1,
+                              AV_OPT_SEARCH_CHILDREN);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error setting filter sample rate: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+
+    outputs = avfilter_inout_alloc();
+    if (!outputs) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    outputs->name          = av_strdup("in");
+    outputs->filter_ctx    = s->buffersrc_ctx;
+    outputs->pad_idx       = 0;
+    outputs->next          = NULL;
+
+    inputs = avfilter_inout_alloc();
+    if (!inputs) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    inputs->name          = av_strdup("out");
+    inputs->filter_ctx    = s->buffersink_ctx;
+    inputs->pad_idx       = 0;
+    inputs->next          = NULL;
+
+    const char *filter_desc = "hdcd";
+
+    ret = avfilter_graph_parse_ptr(s->graph, filter_desc, &inputs, &outputs, NULL);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error parsing filter graph: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    ret = avfilter_graph_config(s->graph, NULL);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error configuring filter graph: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+
+    return 0;
+
+fail:
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
 
     return ret;
 }
@@ -259,6 +383,12 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     ret = cyanrip_read_cover_image(ctx, dec_ctx, t);
     if (ret < 0)
         goto fail;
+
+    if (ctx->settings.decode_hdcd) {
+        ret = init_hdcd_decoding(ctx, dec_ctx);
+        if (ret < 0)
+            goto fail;
+    }
 
     *s = dec_ctx;
 
@@ -287,6 +417,50 @@ static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     return 0;
+}
+
+static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
+                        int num_enc, cyanrip_dec_ctx *dec_ctx, AVFrame *frame)
+{
+    int ret = 0;
+    AVFrame *dec_frame = NULL;
+
+    if (!dec_ctx->buffersrc_ctx)
+        return push_frame_to_encs(ctx, enc_ctx, num_enc, frame);
+
+    ret = av_buffersrc_add_frame_flags(dec_ctx->buffersrc_ctx, frame,
+                                       AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                       AV_BUFFERSRC_FLAG_KEEP_REF);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    while (1) {
+        dec_frame = av_frame_alloc();
+        if (!dec_frame) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+
+        ret = av_buffersink_get_frame(dec_ctx->buffersink_ctx, dec_frame);
+        if (ret == AVERROR(EAGAIN)) {
+            av_frame_free(&dec_frame);
+            break;
+        } else if (ret == AVERROR_EOF) {
+            av_frame_free(&dec_frame);
+            return push_frame_to_encs(ctx, enc_ctx, num_enc, NULL);
+        } else if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+            goto fail;
+        }
+
+        push_frame_to_encs(ctx, enc_ctx, num_enc, dec_frame);
+        av_frame_free(&dec_frame);
+    }
+
+fail:
+    return ret;
 }
 
 int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
@@ -322,13 +496,13 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     memcpy(frame->data[0], data, bytes);
 
 send:
-    ret = push_frame_to_encs(ctx, enc_ctx, num_enc, frame);
+    filter_frame(ctx, enc_ctx, num_enc, dec_ctx, frame);
 fail:
     av_frame_free(&frame);
     return ret;
 }
 
-static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx)
+static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx, int hdcd)
 {
     SwrContext *swr = swr_alloc();
     if (!swr) {
@@ -336,9 +510,11 @@ static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx)
         return NULL;
     }
 
+    enum AVSampleFormat in_sample_fmt = hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
+
     av_opt_set_int           (swr, "in_sample_rate",     44100,                     0);
     av_opt_set_channel_layout(swr, "in_channel_layout",  AV_CH_LAYOUT_STEREO,       0);
-    av_opt_set_sample_fmt    (swr, "in_sample_fmt",      AV_SAMPLE_FMT_S16,         0);
+    av_opt_set_sample_fmt    (swr, "in_sample_fmt",      in_sample_fmt,             0);
 
     av_opt_set_int           (swr, "out_sample_rate",    out_avctx->sample_rate,    0);
     av_opt_set_channel_layout(swr, "out_channel_layout", out_avctx->channel_layout, 0);
@@ -368,7 +544,8 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     avcodec_close(ctx->out_avctx);
 
-    avio_closep(&ctx->avf->pb);
+    if (ctx->avf)
+        avio_closep(&ctx->avf->pb);
     avformat_free_context(ctx->avf);
 
     free_fifo(&ctx->fifo);
@@ -496,6 +673,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 enum cyanrip_output_formats format)
 {
     int ret = 0;
+    char *dirname = NULL;
+    char *filename = NULL;
     cyanrip_out_fmt *cfmt = &fmt_map[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
 
@@ -506,10 +685,9 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->ctx = ctx;
     atomic_init(&s->status, 0);
 
-    char *dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
-                                cfmt->folder_suffix);
+    dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
+                          cfmt->folder_suffix);
 
-    char *filename;
     if (dict_get(t->meta, "title"))
         filename = av_asprintf("%s/%02i - %s.%s", dirname, t->number,
                                cyanrip_sanitize_fn(dict_get(t->meta, "title")),
@@ -521,7 +699,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     if (stat(dirname, &st_req) == -1)
         mkdir(dirname, 0700);
 
-    av_free(dirname);
+    av_freep(&dirname);
 
     /* lavf init */
     ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);
@@ -553,7 +731,13 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Find encoder */
-    out_codec = avcodec_find_encoder(cfmt->codec);
+    if (cfmt->codec == AV_CODEC_ID_NONE)
+        out_codec = avcodec_find_encoder(ctx->settings.decode_hdcd ?
+                                         AV_CODEC_ID_PCM_S32LE :
+                                         AV_CODEC_ID_PCM_S16LE);
+    else
+        out_codec = avcodec_find_encoder(cfmt->codec);
+
     if (!out_codec) {
         cyanrip_log(ctx, 0, "Codec not found (not compiled in lavc?)!\n");
         ret = AVERROR(ENOMEM);
@@ -604,7 +788,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         cyanrip_log(ctx, 0, "Couldn't open %s: %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
         goto fail;
     }
-    av_free(filename);
+    av_freep(&filename);
 
     /* Write header */
     ret = avformat_write_header(s->avf, NULL);
@@ -624,7 +808,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* SWR */
-    s->swr = setup_init_swr(ctx, s->out_avctx);
+    s->swr = setup_init_swr(ctx, s->out_avctx, ctx->settings.decode_hdcd);
     if (!s->swr)
         goto fail;
 

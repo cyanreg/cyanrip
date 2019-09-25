@@ -68,6 +68,7 @@ typedef struct cyanrip_settings {
     int print_info_only;
     int disable_mb;
     float bitrate;
+    int decode_hdcd;
     int enc_fifo_size;
     int overread_leadinout;
     int eject_on_success_rip;

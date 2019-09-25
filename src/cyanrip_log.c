@@ -24,7 +24,7 @@
 #include "cyanrip_log.h"
 
 /* Bump this on each change */
-#define LOG_VERSION 100
+#define LOG_VERSION 101
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -82,7 +82,8 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                     (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
     cyanrip_log(ctx, 0, "C2 errors:      %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
-    cyanrip_log(ctx, 0, "Retries:        %i\n", ctx->settings.frame_max_retries);
+    cyanrip_log(ctx, 0, "Frame retries:  %i\n", ctx->settings.frame_max_retries);
+    cyanrip_log(ctx, 0, "HDCD decoding:  %s\n", ctx->settings.decode_hdcd ? "enabled" : "disabled");
     cyanrip_log(ctx, 0, "Path:           %s\n", ctx->settings.dev_path);
     CLOG("Album Art:     %s\n", ctx->meta, "cover_art")
     cyanrip_log(ctx, 0, "Base folder:    %s\n", ctx->base_dst_folder);

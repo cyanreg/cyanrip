@@ -404,14 +404,14 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
     ret = cyanrip_create_dec_ctx(ctx, &dec_ctx, t);
     if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error initting decoder!\n");
+        cyanrip_log(ctx, 0, "Error initializing decoder!\n");
         goto fail;
     }
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
         ret = cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
                                           ctx->settings.outputs[i]);
         if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error initting encoder!\n");
+            cyanrip_log(ctx, 0, "Error initializing encoder!\n");
             goto fail;
         }
     }
@@ -611,6 +611,18 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
 
     cyanrip_log(ctx, 0, "Gaps:\n");
 
+    /* Before pregap */
+    if (ctx->tracks[0].pregap_lsn != CDIO_INVALID_LSN &&
+        ctx->tracks[0].pregap_lsn > ctx->start_lsn) {
+        lsn_t frames = ctx->tracks[0].pregap_lsn - ctx->start_lsn;
+        cyanrip_log(ctx, 0, "    %i frames between lead-in and track 1 pregap, merging into pregap\n",
+                    frames);
+        gaps++;
+
+        ctx->tracks[0].pregap_lsn = ctx->start_lsn;
+    }
+
+    /* Pregaps */
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *ct = &ctx->tracks[i - 0];
         cyanrip_track *lt = ct->number > 1 ? &ctx->tracks[i - 1] : NULL;
@@ -618,7 +630,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         if (ct->pregap_lsn == CDIO_INVALID_LSN)
             continue;
 
-        lsn_t pregap_frames = ct->start_lsn - ct->pregap_lsn + 1;
+        lsn_t pregap_frames = ct->start_lsn - ct->pregap_lsn;
         cyanrip_log(ctx, 0, "    %i frame pregap in track %i, ",
                     pregap_frames, ct->number);
         gaps++;
@@ -633,19 +645,19 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         case CYANRIP_PREGAP_DROP:
             cyanrip_log(ctx, 0, "dropped\n");
             if (lt)
-                lt->end_lsn -= pregap_frames - 1;
+                lt->end_lsn -= pregap_frames;
             break;
         case CYANRIP_PREGAP_MERGE:
             cyanrip_log(ctx, 0, "merged\n");
             ct->start_lsn = ct->pregap_lsn;
             if (lt)
-                lt->end_lsn -= pregap_frames - 1;
+                lt->end_lsn -= pregap_frames;
             break;
         case CYANRIP_PREGAP_TRACK:
             cyanrip_log(ctx, 0, "split off into a new track, number %i\n", ct->number);
 
             if (lt)
-                lt->end_lsn -= pregap_frames - 1;
+                lt->end_lsn -= pregap_frames;
 
             for (int j = i; j < ctx->nb_tracks; j++)
                 ctx->tracks[j].number++;
@@ -666,6 +678,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         }
     }
 
+    /* Between tracks */
     for (int i = 1; i < ctx->nb_tracks; i++) {
         cyanrip_track *ct = &ctx->tracks[i - 0];
         cyanrip_track *lt = &ctx->tracks[i - 1];
@@ -687,9 +700,10 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         }
     }
 
+    /* After last track */
     cyanrip_track *lt = &ctx->tracks[ctx->nb_tracks - 1];
-    if (ctx->end_lsn > lt->end_lsn + 1) {
-        int discont_frames = ctx->end_lsn - lt->end_lsn + 1;
+    if (ctx->end_lsn > (lt->end_lsn + 1)) {
+        int discont_frames = ctx->end_lsn - lt->end_lsn;
         cyanrip_log(ctx, 0, "    %i frame gap between last track and lead-out, padding track\n",
                     discont_frames);
         gaps++;
@@ -728,6 +742,7 @@ int main(int argc, char **argv)
     settings.offset = 0;
     settings.print_info_only = 0;
     settings.disable_mb = 0;
+    settings.decode_hdcd = 0;
     settings.bitrate = 128.0f;
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
@@ -745,7 +760,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnIVEOl:a:t:b:c:r:d:o:s:S:D:p:")) != -1) {
+    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
@@ -756,6 +771,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
             cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
             cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
+            cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
             cyanrip_log(ctx, 0, "\n  Metadata options:\n");
             cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
@@ -843,6 +859,9 @@ int main(int argc, char **argv)
             break;
         case 'I':
             settings.print_info_only = 1;
+            break;
+        case 'H':
+            settings.decode_hdcd = 1;
             break;
         case 'O':
             settings.overread_leadinout = 1;

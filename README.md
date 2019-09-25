@@ -8,6 +8,7 @@ Features
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation and error recovery via cd-paranoia
  * Full pregap handling
+ * HDCD decoding
  * Able to encode to multiple formats in parallel
  * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
  * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
@@ -47,6 +48,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -S *int*             | Sets the drive speed if possible (default is unset, usually maximum)             |
 | -p *number*=*string* | Specifies what to do with the pregap, sytax is described below                   |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping |
+| -H                   | Enable HDCD decoding, read below for details                                     |
 |                      | **Metadata options**                                                             |
 | -I                   | Only print CD metadata and information, will not rip or eject the CD             |
 | -a *string*          | Album metadata, syntax is described below                                        |
@@ -107,3 +109,21 @@ To embed cover art for the whole album, either specify it with the -c *path* par
 To specify the cover art for a single track, specify it with the cover_art=*path* tag in the track's metadata. Metadata precedence is as specified above.
 
 The cover_art tag containing the path will not be encoded.
+
+
+HDCD decoding
+-------------
+
+cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look for the report after the track has been encoded. A non-HDCD enabled disc will say:
+
+```
+[Parsed_hdcd_0 @ 0xa332e12] HDCD detected: no
+```
+
+While if the CD does contain HDCD audio something similar to the following will be printed:
+
+```
+[Parsed_hdcd_0 @ 0xf210f80] HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_filter: not detected, detectable errors: 0
+```
+
+Should a disc be detected as HDCD, it would be safe to proceed decoding all of it. The resulting encoded files will have a bit depth of at least 24 bits.
