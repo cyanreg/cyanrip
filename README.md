@@ -1,6 +1,6 @@
 cyanrip
 =======
-Rips and encodes standard audio CDs with the least effort required from user. Cross platform and very accurate.
+Rips and encodes audio CDs with the least effort required from user. Cross platform and very accurate.
 
 Features
 --------
@@ -11,7 +11,7 @@ Features
  * Full pregap handling
  * HDCD decoding
  * Able to encode to multiple formats in parallel
- * Able to embed in cover images to mp3, flac and mp4
+ * Able to embed in cover images to mp3, flac, mp4 and alac
  * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
@@ -47,7 +47,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -s *int*             | Specifies the CD drive offset in samples (same as EAC, default is 0)             |
 | -r *int*             | Specifies how many times to retry reading a frame if it fails, (default is 25)   |
 | -S *int*             | Sets the drive speed if possible (default is unset, usually maximum)             |
-| -p *number*=*string* | Specifies what to do with the pregap, sytax is described below                   |
+| -p *number*=*string* | Specifies what to do with the pregap, syntax is described below                  |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping |
 | -H                   | Enable HDCD decoding, read below for details                                     |
 |                      | **Metadata options**                                                             |
@@ -115,13 +115,13 @@ The cover_art tag containing the path will not be encoded.
 HDCD decoding
 -------------
 
-cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look for the report after the track has been encoded. A non-HDCD enabled disc will say:
+cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look for the report after the track has been encoded. A non-HDCD encoded disc will have:
 
 ```
 [Parsed_hdcd_0 @ 0xa332e12] HDCD detected: no
 ```
 
-While if the CD does contain HDCD audio something similar to the following will be printed:
+If the CD does contain HDCD audio something similar to the following will be printed:
 
 ```
 [Parsed_hdcd_0 @ 0xf210f80] HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_filter: not detected, detectable errors: 0
