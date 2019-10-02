@@ -6,12 +6,11 @@ Features
 --------
  * Automatic tag lookup from the musicbrainz database
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
- * Error recovery via cd-paranoia
- * Drive offset compensation
+ * Drive offset compensation and error recovery via cd-paranoia
  * Full pregap handling
  * HDCD decoding
  * Able to encode to multiple formats in parallel
- * Able to embed in cover images to mp3, flac, mp4 and alac
+ * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
  * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
 
 
