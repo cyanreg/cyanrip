@@ -95,7 +95,9 @@ typedef struct cyanrip_track {
 
     lsn_t pregap_lsn;
     lsn_t start_lsn;
+    lsn_t start_lsn_sig;
     lsn_t end_lsn;
+    lsn_t end_lsn_sig;
 
     ptrdiff_t partial_frame_byte_offs;
 

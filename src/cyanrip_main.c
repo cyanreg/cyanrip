@@ -523,16 +523,19 @@ fail:
         if (err) {
             cyanrip_log(ctx, 0, "Error in encoding!\n");
             ret = err;
+            break;
         }
     }
-    cyanrip_free_dec_ctx(&dec_ctx);
 
-    if (!ret) {
+    if (!ret)
         cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
+
+    cyanrip_free_dec_ctx(ctx, &dec_ctx);
+
+    if (!ret)
         cyanrip_log_track_end(ctx, t);
-    } else {
+    else
         ctx->total_error_count++;
-    }
 
     return ret;
 }
@@ -555,7 +558,7 @@ static void setup_track_lsn(cyanrip_ctx *ctx, cyanrip_track *t)
     /* Duration doesn't depend on adjustments we make to frames */
     int frames = last_frame - first_frame + 1;
 
-    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 1);
+    t->nb_samples = frames*(CDIO_CD_FRAMESIZE_RAW >> 2);
 
     /* Move the seek position coarsely */
     const int extra_frames = ctx->settings.over_under_read_frames;
@@ -607,6 +610,9 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
         t->end_lsn = cdio_get_track_last_lsn(ctx->cdio, t->number);
+
+        t->start_lsn_sig = t->start_lsn;
+        t->end_lsn_sig = t->end_lsn;
     }
 
     cyanrip_log(ctx, 0, "Gaps:\n");
@@ -713,11 +719,11 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     /* Finally set up the internals with the set start_lsn/end_lsn */
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
-        if (t->track_is_data) {
+
+        if (t->track_is_data)
             t->frames = t->end_lsn - t->start_lsn + 1;
-        } else {
+        else
             setup_track_lsn(ctx, t);
-        }
     }
 
     cyanrip_log(ctx, 0, "%s\n", gaps ? "" : "    None signalled\n");

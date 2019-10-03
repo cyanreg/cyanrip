@@ -114,16 +114,16 @@ The cover_art tag containing the path will not be encoded.
 HDCD decoding
 -------------
 
-cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look for the report after the track has been encoded. A non-HDCD encoded disc will have:
+cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look at the log. A non-HDCD encoded disc will have:
 
 ```
-[Parsed_hdcd_0 @ 0xa332e12] HDCD detected: no
+    HDCD detected: no
 ```
 
 If the CD does contain HDCD audio something similar to the following will be printed:
 
 ```
-[Parsed_hdcd_0 @ 0xf210f80] HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_filter: not detected, detectable errors: 0
+    HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_filter: not detected, detectable errors: 0
 ```
 
-Should a disc be detected as HDCD, it would be safe to proceed decoding all of it. The resulting encoded files will have a bit depth of at least 24 bits.
+Should a track be detected as HDCD, it would be safe to proceed decoding all of the disc. The resulting encoded files will have a bit depth of at least 24 bits.

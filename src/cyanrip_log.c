@@ -18,13 +18,14 @@
 
 #include <stdarg.h>
 #include <time.h>
+#include <pthread.h>
 
 #include <libavutil/avutil.h>
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
 /* Bump this on each change */
-#define LOG_VERSION 101
+#define LOG_VERSION 102
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -33,30 +34,43 @@
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
-    cyanrip_samples_to_duration(t->nb_samples >> 1, length);
+    cyanrip_samples_to_duration(t->nb_samples, length);
 
     if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "    Data bytes:  %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
+        cyanrip_log(ctx, 0, "    Data bytes:    %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
         return;
     }
 
-    CLOG("    Title:       %s\n", t->meta, "title")
-    CLOG("    Artist:      %s\n", t->meta, "artist")
-    CLOG("    ISRC:        %s\n", t->meta, "isrc")
+    CLOG("    Title:         %s\n", t->meta, "title")
+    CLOG("    Artist:        %s\n", t->meta, "artist")
+    CLOG("    ISRC:          %s\n", t->meta, "isrc")
 
     if (t->preemphasis)
-        cyanrip_log(ctx, 0, "    Preemphasis: present, deemphasis required\n");
-    cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
-    cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
+        cyanrip_log(ctx, 0, "    Preemphasis:   present, deemphasis required\n");
+    cyanrip_log(ctx, 0, "    Duration:      %s\n", length);
+    cyanrip_log(ctx, 0, "    Samples:       %u\n", t->nb_samples);
+
     if (t->pregap_lsn != CDIO_INVALID_LSN)
-        cyanrip_log(ctx, 0, "    Pregap LSN:  %i\n", t->pregap_lsn);
-    cyanrip_log(ctx, 0, "    Start LSN:   %i\n", t->start_lsn);
-    cyanrip_log(ctx, 0, "    End LSN:     %i\n", t->end_lsn);
+        cyanrip_log(ctx, 0, "    Pregap LSN:    %i\n", t->pregap_lsn);
+
+    if (t->frames_before_disc_start)
+        cyanrip_log(ctx, 0, "    Silent frames: %i prepended\n", t->frames_before_disc_start);
+    cyanrip_log(ctx, 0, "    Start LSN:     %i\n", t->start_lsn_sig);
+    if (t->start_lsn != t->start_lsn_sig)
+        cyanrip_log(ctx, 0, "    Offset start:  %i\n", t->start_lsn);
+
+    cyanrip_log(ctx, 0, "    End LSN:       %i\n", t->end_lsn_sig);
+    if (t->end_lsn != t->end_lsn_sig)
+        cyanrip_log(ctx, 0, "    Offset end:    %i\n", t->end_lsn);
+    if (t->frames_after_disc_end)
+        cyanrip_log(ctx, 0, "    Silent frames: %i appended\n", t->frames_after_disc_end);
+
     if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:   0x%08x\n", t->eac_crc);
-        cyanrip_log(ctx, 0, "    Accurip v1:  0x%08x\n", t->acurip_crc_v1);
-        cyanrip_log(ctx, 0, "    Accurip v2:  0x%08x\n", t->acurip_crc_v2);
+        cyanrip_log(ctx, 0, "    EAC CRC32:     0x%08x\n", t->eac_crc);
+        cyanrip_log(ctx, 0, "    Accurip v1:    0x%08x\n", t->acurip_crc_v1);
+        cyanrip_log(ctx, 0, "    Accurip v2:    0x%08x\n", t->acurip_crc_v2);
     }
+
     cyanrip_log(ctx, 0, "\n");
 }
 
@@ -120,38 +134,36 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
 
     cyanrip_log(ctx, 0, "Paranoia status counts:\n");
-    if (paranoia_status[PARANOIA_CB_READ])
-        cyanrip_log(ctx, 0, "    READ:          %lu\n", paranoia_status[PARANOIA_CB_READ]);
-    if (paranoia_status[PARANOIA_CB_VERIFY])
-        cyanrip_log(ctx, 0, "    VERIFY:        %lu\n", paranoia_status[PARANOIA_CB_VERIFY]);
-    if (paranoia_status[PARANOIA_CB_FIXUP_EDGE])
-        cyanrip_log(ctx, 0, "    FIXUP_EDGE:    %lu\n", paranoia_status[PARANOIA_CB_FIXUP_EDGE]);
-    if (paranoia_status[PARANOIA_CB_FIXUP_ATOM])
-        cyanrip_log(ctx, 0, "    FIXUP_ATOM:    %lu\n", paranoia_status[PARANOIA_CB_FIXUP_ATOM]);
-    if (paranoia_status[PARANOIA_CB_SCRATCH])
-        cyanrip_log(ctx, 0, "    SCRATCH:       %lu\n", paranoia_status[PARANOIA_CB_SCRATCH]);
-    if (paranoia_status[PARANOIA_CB_REPAIR])
-        cyanrip_log(ctx, 0, "    REPAIR:        %lu\n", paranoia_status[PARANOIA_CB_REPAIR]);
-    if (paranoia_status[PARANOIA_CB_SKIP])
-        cyanrip_log(ctx, 0, "    SKIP:          %lu\n", paranoia_status[PARANOIA_CB_SKIP]);
-    if (paranoia_status[PARANOIA_CB_DRIFT])
-        cyanrip_log(ctx, 0, "    DRIFT:         %lu\n", paranoia_status[PARANOIA_CB_DRIFT]);
-    if (paranoia_status[PARANOIA_CB_BACKOFF])
-        cyanrip_log(ctx, 0, "    BACKOFF:       %lu\n", paranoia_status[PARANOIA_CB_BACKOFF]);
-    if (paranoia_status[PARANOIA_CB_OVERLAP])
-        cyanrip_log(ctx, 0, "    OVERLAP:       %lu\n", paranoia_status[PARANOIA_CB_OVERLAP]);
-    if (paranoia_status[PARANOIA_CB_FIXUP_DROPPED])
-        cyanrip_log(ctx, 0, "    FIXUP_DROPPED: %lu\n", paranoia_status[PARANOIA_CB_FIXUP_DROPPED]);
-    if (paranoia_status[PARANOIA_CB_FIXUP_DUPED])
-        cyanrip_log(ctx, 0, "    FIXUP_DUPED:   %lu\n", paranoia_status[PARANOIA_CB_FIXUP_DUPED]);
-    if (paranoia_status[PARANOIA_CB_READERR])
-        cyanrip_log(ctx, 0, "    READERR:       %lu\n", paranoia_status[PARANOIA_CB_READERR]);
-    if (paranoia_status[PARANOIA_CB_CACHEERR])
-        cyanrip_log(ctx, 0, "    CACHEERR:      %lu\n", paranoia_status[PARANOIA_CB_CACHEERR]);
-    if (paranoia_status[PARANOIA_CB_WROTE])
-        cyanrip_log(ctx, 0, "    WROTE:         %lu\n", paranoia_status[PARANOIA_CB_WROTE]);
-    if (paranoia_status[PARANOIA_CB_FINISHED])
-        cyanrip_log(ctx, 0, "    FINISHED:      %lu\n", paranoia_status[PARANOIA_CB_FINISHED]);
+
+#define PCHECK(PROP)                                                           \
+    if (paranoia_status[PARANOIA_CB_ ## PROP]) {                               \
+        const char *pstr = "    " #PROP ": ";                                  \
+        cyanrip_log(ctx, 0, "%s", pstr);                                       \
+        int padding = strlen("    FIXUP_DROPPED: ") - strlen(pstr);            \
+        for (int i = 0; i < padding; i++)                                      \
+            cyanrip_log(ctx, 0, " ");                                          \
+        cyanrip_log(ctx, 0, "%lu\n", paranoia_status[PARANOIA_CB_ ## PROP]);   \
+    }
+
+    PCHECK(READ)
+    PCHECK(VERIFY)
+    PCHECK(FIXUP_EDGE)
+    PCHECK(FIXUP_ATOM)
+    PCHECK(SCRATCH)
+    PCHECK(REPAIR)
+    PCHECK(SKIP)
+    PCHECK(DRIFT)
+    PCHECK(BACKOFF)
+    PCHECK(OVERLAP)
+    PCHECK(FIXUP_DROPPED)
+    PCHECK(FIXUP_DUPED)
+    PCHECK(READERR)
+    PCHECK(CACHEERR)
+    PCHECK(WROTE)
+    PCHECK(FINISHED)
+    cyanrip_log(ctx, 0, "\n");
+
+#undef PCHECK
 
     cyanrip_log(ctx, 0, "Ripping errors: %i\n", ctx->total_error_count);
     cyanrip_log(ctx, 0, "Ripping finished at %s\n", t_s);
@@ -172,6 +184,7 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "Error opening log file to write to!\n");
         return 1;
     }
+
     return 0;
 }
 
@@ -180,20 +193,82 @@ void cyanrip_log_end(cyanrip_ctx *ctx)
     if (!ctx->logfile)
         return;
     fclose(ctx->logfile);
+    ctx->logfile = NULL;
 }
 
-int cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
+static cyanrip_ctx *av_global_ctx = NULL;
+static int av_log_indent = 0;
+static int av_max_log_level = AV_LOG_QUIET;
+static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void av_log_capture(void *ptr, int lvl, const char *format,
+                           va_list args)
 {
-    va_list args;
-    if (ctx && ctx->logfile) {
-        va_start(args, format);
-        vfprintf(ctx->logfile, format, args);
-        va_end(args);
+    pthread_mutex_lock(&log_lock);
+
+    if (lvl > av_max_log_level)
+        goto end;
+
+    if (av_global_ctx && av_global_ctx->logfile) {
+        for (int i = 0; i < av_log_indent; i++)
+            vfprintf(av_global_ctx->logfile, "    ", NULL);
+
+        va_list args2;
+        va_copy(args2, args);
+        vfprintf(av_global_ctx->logfile, format, args2);
+        va_end(args2);
     }
-    if (ctx && !ctx->settings.verbose && verbose)
-        return 0;
+
+    for (int i = 0; i < av_log_indent; i++)
+        vprintf("    ", NULL);
+
+    vprintf(format, args);
+
+end:
+    pthread_mutex_unlock(&log_lock);
+}
+
+void cyanrip_set_av_log_capture(cyanrip_ctx *ctx, int enable,
+                                int indent, int max_av_lvl)
+{
+    pthread_mutex_lock(&log_lock);
+
+    if (enable) {
+        av_global_ctx = ctx;
+        av_max_log_level = max_av_lvl;
+        av_log_indent = indent;
+        av_log_set_callback(av_log_capture);
+    } else {
+        av_log_set_callback(av_log_default_callback);
+        av_global_ctx = NULL;
+        av_log_indent = 0;
+        av_max_log_level = AV_LOG_QUIET;
+    }
+
+    pthread_mutex_unlock(&log_lock);
+}
+
+void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
+{
+    pthread_mutex_lock(&log_lock);
+
+    va_list args;
     va_start(args, format);
-    int num = vprintf(format, args);
+
+    if (ctx && ctx->logfile) {
+        va_list args2;
+        va_copy(args2, args);
+        vfprintf(ctx->logfile, format, args2);
+        va_end(args2);
+    }
+
+    if (ctx && !ctx->settings.verbose && verbose)
+        goto end;
+
+    vprintf(format, args);
+
+end:
     va_end(args);
-    return num;
+
+    pthread_mutex_unlock(&log_lock);
 }

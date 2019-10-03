@@ -193,6 +193,8 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     if (cfmt->lossless && ctx->settings.decode_hdcd)
         avctx->bits_per_raw_sample = 24;
+    else if (cfmt->lossless)
+        avctx->bits_per_raw_sample = 16;
 
     if (avf->oformat->flags & AVFMT_GLOBALHEADER)
         avctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -200,14 +202,18 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
     return avctx;
 }
 
-void cyanrip_free_dec_ctx(cyanrip_dec_ctx **s)
+void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
 {
     if (!s || !*s)
         return;
 
     cyanrip_dec_ctx *dec_ctx = *s;
 
-    avfilter_graph_free(&dec_ctx->graph);
+    if (dec_ctx->graph) {
+        cyanrip_set_av_log_capture(ctx, 1, 1, AV_LOG_INFO);
+        avfilter_graph_free(&dec_ctx->graph);
+        cyanrip_set_av_log_capture(ctx, 0, 0, 0);
+    }
     av_packet_free(&dec_ctx->cover_image_pkt);
     av_freep(&dec_ctx->cover_image_params);
     av_freep(s);
@@ -291,7 +297,6 @@ static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
         goto fail;
     }
 
-
     const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
     ret = avfilter_graph_create_filter(&s->buffersink_ctx, abuffersink, "out",
                                        NULL, NULL, s->graph);
@@ -323,7 +328,6 @@ static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
         cyanrip_log(ctx, 0, "Error setting filter sample rate: %s!\n", av_err2str(ret));
         goto fail;
     }
-
 
     outputs = avfilter_inout_alloc();
     if (!outputs) {
@@ -395,7 +399,7 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     return 0;
 
 fail:
-    cyanrip_free_dec_ctx(&dec_ctx);
+    cyanrip_free_dec_ctx(ctx, &dec_ctx);
     return ret;
 }
 
@@ -446,9 +450,11 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         ret = av_buffersink_get_frame(dec_ctx->buffersink_ctx, dec_frame);
         if (ret == AVERROR(EAGAIN)) {
             av_frame_free(&dec_frame);
+            ret = 0;
             break;
         } else if (ret == AVERROR_EOF) {
             av_frame_free(&dec_frame);
+            ret = 0;
             return push_frame_to_encs(ctx, enc_ctx, num_enc, NULL);
         } else if (ret < 0) {
             cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
@@ -496,7 +502,7 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     memcpy(frame->data[0], data, bytes);
 
 send:
-    filter_frame(ctx, enc_ctx, num_enc, dec_ctx, frame);
+    ret = filter_frame(ctx, enc_ctx, num_enc, dec_ctx, frame);
 fail:
     av_frame_free(&frame);
     return ret;
@@ -637,8 +643,10 @@ void *cyanrip_track_encoding(void *ctx)
             av_init_packet(&out_pkt);
             ret = avcodec_receive_packet(s->out_avctx, &out_pkt);
             if (ret == AVERROR_EOF) {
+                ret = 0;
                 goto write_trailer;
             } else if (ret == AVERROR(EAGAIN)) {
+                ret = 0;
                 break;
             } else if (ret < 0) {
                 cyanrip_log(s->ctx, 0, "Error while encoding: %s!\n", av_err2str(ret));
