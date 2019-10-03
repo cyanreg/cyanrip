@@ -20,7 +20,6 @@
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <strings.h>
-#include <sys/stat.h>
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -67,7 +66,7 @@ typedef struct cyanrip_out_fmt {
     enum AVCodecID codec;
 } cyanrip_out_fmt;
 
-cyanrip_out_fmt fmt_map[] = {
+static const cyanrip_out_fmt fmt_map[] = {
     [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
     [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
     [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
@@ -85,7 +84,7 @@ cyanrip_out_fmt fmt_map[] = {
 void cyanrip_print_codecs(void)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
-        cyanrip_out_fmt *cfmt = &fmt_map[i];
+        const cyanrip_out_fmt *cfmt = &fmt_map[i];
         if (avcodec_find_encoder(cfmt->codec) ||
             ((cfmt->codec == AV_CODEC_ID_NONE) &&
               avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
@@ -99,7 +98,7 @@ void cyanrip_print_codecs(void)
 int cyanrip_validate_fmt(const char *fmt)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
-        cyanrip_out_fmt *cfmt = &fmt_map[i];
+        const cyanrip_out_fmt *cfmt = &fmt_map[i];
         if ((!strncasecmp(fmt, cfmt->name, strlen(fmt))) &&
             (strlen(fmt) == strlen(cfmt->name))) {
             if (cfmt->codec == AV_CODEC_ID_NONE &&
@@ -118,6 +117,11 @@ int cyanrip_validate_fmt(const char *fmt)
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format)
 {
     return format < CYANRIP_FORMATS_NB ? fmt_map[format].name : NULL;
+}
+
+const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
+{
+    return format < CYANRIP_FORMATS_NB ? fmt_map[format].folder_suffix : NULL;
 }
 
 static const uint64_t get_codec_channel_layout(AVCodec *codec)
@@ -176,7 +180,7 @@ static int get_codec_sample_rate(AVCodec *codec)
 }
 
 static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
-                                       AVCodec *codec, cyanrip_out_fmt *cfmt)
+                                       AVCodec *codec, const cyanrip_out_fmt *cfmt)
 {
     AVCodecContext *avctx = avcodec_alloc_context3(codec);
     if (!avctx)
@@ -235,6 +239,8 @@ static int cyanrip_read_cover_image(cyanrip_ctx *ctx, cyanrip_dec_ctx *dec_ctx,
                     av_err2str(ret));
         goto fail;
     }
+
+    av_dict_set(&t->meta, "cover_art", NULL, 0);
 
     ret = avformat_find_stream_info(avf, NULL);
     if (ret < 0) {
@@ -681,9 +687,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 enum cyanrip_output_formats format)
 {
     int ret = 0;
-    char *dirname = NULL;
     char *filename = NULL;
-    cyanrip_out_fmt *cfmt = &fmt_map[format];
+    const cyanrip_out_fmt *cfmt = &fmt_map[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
 
     AVStream *st_aud = NULL;
@@ -693,21 +698,14 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->ctx = ctx;
     atomic_init(&s->status, 0);
 
-    dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
-                          cfmt->folder_suffix);
-
     if (dict_get(t->meta, "title"))
-        filename = av_asprintf("%s/%02i - %s.%s", dirname, t->number,
+        filename = av_asprintf("%s [%s]/%02i - %s.%s", ctx->base_dst_folder,
+                               cfmt->folder_suffix, t->number,
                                cyanrip_sanitize_fn(dict_get(t->meta, "title")),
                                cfmt->ext);
     else
-        filename = av_asprintf("%s/%02i.%s", dirname, t->number, cfmt->ext);
-
-    struct stat st_req = { 0 };
-    if (stat(dirname, &st_req) == -1)
-        mkdir(dirname, 0700);
-
-    av_freep(&dirname);
+        filename = av_asprintf("%s [%s]/%02i.%s", ctx->base_dst_folder,
+                               cfmt->folder_suffix, t->number, cfmt->ext);
 
     /* lavf init */
     ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);
@@ -787,9 +785,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
 
-    /* Debug print */
-    av_dump_format(s->avf, 0, filename, 1);
-
     /* Open for writing */
     ret = avio_open(&s->avf->pb, filename, AVIO_FLAG_WRITE);
     if (ret < 0) {
@@ -830,7 +825,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     return 0;
 
 fail:
-    av_free(dirname);
     av_free(filename);
     cyanrip_end_track_encoding(&s);
 

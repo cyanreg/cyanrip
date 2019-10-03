@@ -60,7 +60,6 @@ enum cyanrip_pregap_action {
 typedef struct cyanrip_settings {
     char *dev_path;
     char *base_dst_folder;
-    int verbose;
     int speed;
     int frame_max_retries;
     int offset;
@@ -111,7 +110,7 @@ typedef struct cyanrip_ctx {
     cdrom_drive_t     *drive;
     cdrom_paranoia_t  *paranoia;
     CdIo_t            *cdio;
-    FILE              *logfile;
+    FILE              *logfile[CYANRIP_FORMATS_NB];
     cyanrip_settings   settings;
 
     cyanrip_track tracks[99];

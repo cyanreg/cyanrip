@@ -26,6 +26,7 @@ typedef struct cyanrip_enc_ctx cyanrip_enc_ctx;
 void cyanrip_print_codecs(void);
 int cyanrip_validate_fmt(const char *fmt);
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format);
+const char *cyanrip_fmt_folder(enum cyanrip_output_formats format);
 
 int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
                            cyanrip_track *t);

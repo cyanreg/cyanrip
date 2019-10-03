@@ -368,6 +368,8 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (!t->track_is_data) {
         t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->number);
+        if (t->preemphasis)
+            av_dict_set(&t->meta, "deemphasis", "required", 0);
 
         if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->number);
@@ -389,14 +391,14 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     const int frames_after_disc_end = t->frames_after_disc_end;
     const ptrdiff_t offs = t->partial_frame_byte_offs;
 
-    /* Try reading now to hopefully reduce seeking */
-    track_read_extra(ctx, t);
-
     if (t->track_is_data) {
         cyanrip_log(ctx, 0, "Track %i is data, skipping:\n", t->number);
         cyanrip_log_track_end(ctx, t);
         return 0;
     }
+
+    /* Hopefully reduce seeking by reading this here */
+    track_read_extra(ctx, t);
 
     cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
 
@@ -674,6 +676,9 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
 
             ctx->nb_tracks++;
             cyanrip_track *nt = &ctx->tracks[i];
+
+            memset(nt, 0, sizeof(*nt));
+
             nt->number = ct->number - 1;
             nt->pregap_lsn = CDIO_INVALID_LSN;
             nt->start_lsn = ct->pregap_lsn;
@@ -740,7 +745,6 @@ int main(int argc, char **argv)
     /* Default settings */
     settings.dev_path = NULL;
     settings.base_dst_folder = NULL;
-    settings.verbose = 1;
     settings.speed = 0;
     settings.frame_max_retries = 25;
     settings.over_under_read_frames = 0;
@@ -992,6 +996,7 @@ int main(int argc, char **argv)
             cyanrip_track *t = &ctx->tracks[i];
             cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
             track_read_extra(ctx, t);
+            av_dict_set(&t->meta, "cover_art", NULL, 0);
             cyanrip_log_track_end(ctx, t);
         }
     } else if (ctx->settings.rip_indices_count == -1) {
@@ -1020,7 +1025,8 @@ int main(int argc, char **argv)
         }
     }
 
-    cyanrip_log_finish_report(ctx);
+    if (!ctx->settings.print_info_only)
+        cyanrip_log_finish_report(ctx);
 end:
     cyanrip_log_end(ctx);
 

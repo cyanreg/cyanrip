@@ -19,13 +19,14 @@
 #include <stdarg.h>
 #include <time.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #include <libavutil/avutil.h>
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 
 /* Bump this on each change */
-#define LOG_VERSION 102
+#define LOG_VERSION 103
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -41,9 +42,11 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         return;
     }
 
-    CLOG("    Title:         %s\n", t->meta, "title")
-    CLOG("    Artist:        %s\n", t->meta, "artist")
-    CLOG("    ISRC:          %s\n", t->meta, "isrc")
+    cyanrip_log(ctx, 0, "    Metadata:\n", length);
+
+    const AVDictionaryEntry *d = NULL;
+    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
+        cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
 
     if (t->preemphasis)
         cyanrip_log(ctx, 0, "    Preemphasis:   present, deemphasis required\n");
@@ -77,8 +80,9 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
     cyanrip_log(ctx, 0, "cyanrip %s, log version %i\n", CYANRIP_VERSION_STRING, LOG_VERSION);
+    cyanrip_log(ctx, 0, "System device:  %s\n", ctx->settings.dev_path);
     if (ctx->drive->drive_model)
-        cyanrip_log(ctx, 0, "Device:         %s\n", ctx->drive->drive_model);
+        cyanrip_log(ctx, 0, "Device model:   %s\n", ctx->drive->drive_model);
     cyanrip_log(ctx, 0, "Offset:         %c%i %s\n", ctx->settings.offset >= 0 ? '+' : '-', abs(ctx->settings.offset),
                 abs(ctx->settings.offset) == 1 ? "sample" : "samples");
     cyanrip_log(ctx, 0, "%s%c%i %s\n",
@@ -98,12 +102,11 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                 "supported" : "unsupported");
     cyanrip_log(ctx, 0, "Frame retries:  %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "HDCD decoding:  %s\n", ctx->settings.decode_hdcd ? "enabled" : "disabled");
-    cyanrip_log(ctx, 0, "Path:           %s\n", ctx->settings.dev_path);
-    CLOG("Album Art:     %s\n", ctx->meta, "cover_art")
+    CLOG("Album Art:      %s\n", ctx->meta, "cover_art")
     cyanrip_log(ctx, 0, "Base folder:    %s\n", ctx->base_dst_folder);
-    cyanrip_log(ctx, 0, "Outputs:        ");
+    cyanrip_log(NULL, 0, "Outputs:        ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
-        cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
+        cyanrip_log(NULL, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, "\n");
     cyanrip_log(ctx, 0, "Disc tracks:    %i\n", ctx->drive->tracks);
     cyanrip_log(ctx, 0, "Tracks to rip:  %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
@@ -171,18 +174,30 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
-    int len = strlen(ctx->base_dst_folder) + strlen("/.log");
-    char *logfile = av_malloc(len);
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        /* Directory name */
+        char *dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
+                                    cyanrip_fmt_folder(ctx->settings.outputs[i]));
 
-    sprintf(logfile, "%s.log", ctx->base_dst_folder);
+        /* Create if it doesn't exist */
+        struct stat st_req = { 0 };
+        if (stat(dirname, &st_req) == -1)
+            mkdir(dirname, 0700);
 
-    ctx->logfile = av_fopen_utf8(logfile, "w");
+        /* Log file name */
+        char *logfile = av_asprintf("%s/%s.log", dirname, ctx->base_dst_folder);
 
-    av_free(logfile);
+        av_freep(&dirname);
 
-    if (!ctx->logfile) {
-        cyanrip_log(ctx, 0, "Error opening log file to write to!\n");
-        return 1;
+        ctx->logfile[i] = av_fopen_utf8(logfile, "w");
+
+        if (!ctx->logfile) {
+            cyanrip_log(ctx, 0, "Error opening log file \"%s\" to write to!\n", logfile);
+            av_freep(&logfile);
+            return 1;
+        }
+
+        av_freep(&logfile);
     }
 
     return 0;
@@ -190,10 +205,13 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
 
 void cyanrip_log_end(cyanrip_ctx *ctx)
 {
-    if (!ctx->logfile)
-        return;
-    fclose(ctx->logfile);
-    ctx->logfile = NULL;
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        if (!ctx->logfile[i])
+            continue;
+
+        fclose(ctx->logfile[i]);
+        ctx->logfile[i] = NULL;
+    }
 }
 
 static cyanrip_ctx *av_global_ctx = NULL;
@@ -209,18 +227,23 @@ static void av_log_capture(void *ptr, int lvl, const char *format,
     if (lvl > av_max_log_level)
         goto end;
 
-    if (av_global_ctx && av_global_ctx->logfile) {
-        for (int i = 0; i < av_log_indent; i++)
-            vfprintf(av_global_ctx->logfile, "    ", NULL);
+    if (av_global_ctx) {
+        for (int i = 0; i < av_global_ctx->settings.outputs_num; i++) {
+            if (!av_global_ctx->logfile[i])
+                continue;
 
-        va_list args2;
-        va_copy(args2, args);
-        vfprintf(av_global_ctx->logfile, format, args2);
-        va_end(args2);
+            for (int j = 0; j < av_log_indent; j++)
+                fprintf(av_global_ctx->logfile[i], "    ");
+
+            va_list args2;
+            va_copy(args2, args);
+            vfprintf(av_global_ctx->logfile[i], format, args2);
+            va_end(args2);
+        }
     }
 
     for (int i = 0; i < av_log_indent; i++)
-        vprintf("    ", NULL);
+        printf("    ");
 
     vprintf(format, args);
 
@@ -255,19 +278,20 @@ void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
     va_list args;
     va_start(args, format);
 
-    if (ctx && ctx->logfile) {
-        va_list args2;
-        va_copy(args2, args);
-        vfprintf(ctx->logfile, format, args2);
-        va_end(args2);
-    }
+    if (ctx) {
+        for (int i = 0; i < ctx->settings.outputs_num; i++) {
+            if (!ctx->logfile[i])
+                continue;
 
-    if (ctx && !ctx->settings.verbose && verbose)
-        goto end;
+            va_list args2;
+            va_copy(args2, args);
+            vfprintf(ctx->logfile[i], format, args2);
+            va_end(args2);
+        }
+    }
 
     vprintf(format, args);
 
-end:
     va_end(args);
 
     pthread_mutex_unlock(&log_lock);
