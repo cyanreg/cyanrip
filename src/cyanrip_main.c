@@ -68,7 +68,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     if (!(ctx->cdio = cdio_open(ctx->settings.dev_path, DRIVER_UNKNOWN))) {
         cyanrip_log(ctx, 0, "Unable to init cdio context\n");
-        return 1;
+        return AVERROR(EINVAL);
     }
 
     cdio_get_drive_cap(ctx->cdio, &ctx->rcap, &ctx->wcap, &ctx->mcap);
@@ -80,7 +80,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
             cyanrip_log(ctx, 0, "cdio: \"%s\"\n", msg);
             cdio_cddap_free_messages(msg);
         }
-        return 1;
+        return AVERROR(EINVAL);
     }
 
     if (msg) {
@@ -93,7 +93,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to open device!\n");
         cyanrip_ctx_end(&ctx);
-        return 1;
+        return AVERROR(EINVAL);
     }
 
     cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_LOGIT, CDDA_MESSAGE_FORGETIT);
@@ -102,7 +102,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         if (!(ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED)) {
             cyanrip_log(ctx, 0, "Device does not support changing speeds!\n");
             cyanrip_ctx_end(&ctx);
-            return 1;
+            return AVERROR(EINVAL);
         }
 
         ret = cdio_cddap_speed_set(ctx->drive, settings->speed);
@@ -112,7 +112,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
             cdio_cddap_free_messages(msg);
         }
         if (ret)
-            return 1;
+            return AVERROR(EINVAL);
     }
 
     /* Drives are very slow and burst-y so don't block by default */
@@ -123,7 +123,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     if (!ctx->paranoia) {
         cyanrip_log(ctx, 0, "Unable to init paranoia!\n");
         cyanrip_ctx_end(&ctx);
-        return 1;
+        return AVERROR(EINVAL);
     }
 
     if (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE)
@@ -137,6 +137,12 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
 
     ctx->nb_tracks = cdio_cddap_tracks(ctx->drive);
+    if (!ctx->nb_tracks || ctx->nb_tracks == CDIO_INVALID_TRACK) {
+        cyanrip_log(ctx, 0, "CD has no tracks!\n");
+        ctx->nb_tracks = 0;
+        cyanrip_ctx_end(&ctx);
+        return AVERROR(EINVAL);
+    }
 
     for (int i = 0; i < ctx->nb_tracks; i++)
         ctx->tracks[i].number = i + 1;
