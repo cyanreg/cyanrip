@@ -24,6 +24,7 @@
 #include <libavutil/avutil.h>
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
+#include "os_compat.h"
 
 /* Bump this on each change */
 #define LOG_VERSION 103
