@@ -27,7 +27,7 @@
 
 int quit_now = 0;
 
-void cyanrip_ctx_end(cyanrip_ctx **s)
+static void cyanrip_ctx_end(cyanrip_ctx **s)
 {
     cyanrip_ctx *ctx;
     if (!s || !*s)
@@ -54,7 +54,7 @@ void cyanrip_ctx_end(cyanrip_ctx **s)
     *s = NULL;
 }
 
-int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
+static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 {
     cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
 
@@ -137,8 +137,8 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
 
     ctx->nb_tracks = cdio_cddap_tracks(ctx->drive);
-    if (!ctx->nb_tracks || ctx->nb_tracks == CDIO_INVALID_TRACK) {
-        cyanrip_log(ctx, 0, "CD has no tracks!\n");
+    if ((ctx->nb_tracks < 1) || (ctx->nb_tracks > CDIO_CD_MAX_TRACKS)) {
+        cyanrip_log(ctx, 0, "Invalid number of tracks: %i!\n", ctx->nb_tracks);
         ctx->nb_tracks = 0;
         cyanrip_ctx_end(&ctx);
         return AVERROR(EINVAL);
@@ -162,7 +162,7 @@ int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         av_dict_set(&DICT, KEY, str, AV_DICT_DONT_STRDUP_VAL | AV_DICT_APPEND);\
     } while (0)
 
-void cyanrip_mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *key)
+static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *key)
 {
     Mb5NameCreditList namecredit_list = mb5_artistcredit_get_namecreditlist(credit);
     for (int i = 0; i < mb5_namecredit_list_size(namecredit_list); i++) {
@@ -180,7 +180,7 @@ void cyanrip_mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *k
     }
 }
 
-void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
+static void mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
 {
     Mb5MediumList medium_list = mb5_release_media_matching_discid(release, discid);
     if (!medium_list) {
@@ -214,14 +214,14 @@ void cyanrip_mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
             credit = mb5_track_get_artistcredit(track);
         }
         if (credit)
-            cyanrip_mb_credit(credit, ctx->tracks[i].meta, "artist");
+            mb_credit(credit, ctx->tracks[i].meta, "artist");
     }
 
 end:
     mb5_medium_list_delete(medium_list);
 }
 
-int cyanrip_mb_metadata(cyanrip_ctx *ctx)
+static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
 {
     int ret = 0;
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
@@ -235,8 +235,40 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
     const char *discid = dict_get(ctx->meta, "discid");
     Mb5Metadata metadata = mb5_query_query(query, "discid", discid, 0, 1, names, values);
     if (!metadata) {
-        cyanrip_log(ctx, 0, "MusicBrainz lookup failed, either server was busy "
-                            "or CD is missing from database, try again or disable with -n\n");
+        tQueryResult res = mb5_query_get_lastresult(query);
+        if (res != eQuery_ResourceNotFound) {
+            int chars = mb5_query_get_lasterrormessage(query, NULL, 0) + 1;
+            char *msg = av_mallocz(chars*sizeof(*msg));
+            mb5_query_get_lasterrormessage(query, msg, chars);
+            cyanrip_log(ctx, 0, "MusicBrainz lookup failed: %s\n", msg);
+            av_freep(&msg);
+        }
+
+        switch(res) {
+        case eQuery_Timeout:
+        case eQuery_ConnectionError:
+            cyanrip_log(ctx, 0, "Connection failed, try again? Or disable via -n\n");
+            break;
+        case eQuery_AuthenticationError:
+        case eQuery_FetchError:
+        case eQuery_RequestError:
+            cyanrip_log(ctx, 0, "Error fetching/requesting/auth, this shouldn't happen.\n");
+            break;
+        case eQuery_ResourceNotFound:
+            if (manual_metadata_specified) {
+                cyanrip_log(ctx, 0, "Unable to find metadata for this CD, but "
+                            "metadata has been manually specified, continuing.\n");
+                goto end;
+            } else {
+                cyanrip_log(ctx, 0, "Unable to find release info for this CD, "
+                            "and metadata hasn't been manually added!\n");
+                cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -n!\n");
+            }
+            break;
+        default:
+            break;
+        }
+
         ret = 1;
         goto end;
     }
@@ -263,13 +295,13 @@ int cyanrip_mb_metadata(cyanrip_ctx *ctx)
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
     if (artistcredit)
-        cyanrip_mb_credit(artistcredit, ctx->meta, "album_artist");
+        mb_credit(artistcredit, ctx->meta, "album_artist");
 
     cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
                 dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
 
     /* Read track metadata */
-    cyanrip_mb_tracks(ctx, release, discid);
+    mb_tracks(ctx, release, discid);
 
 end_meta:
     mb5_metadata_delete(metadata);
@@ -279,10 +311,8 @@ end:
     return ret;
 }
 
-int cyanrip_fill_metadata(cyanrip_ctx *ctx)
+static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
 {
-    int ret = 0;
-
     /* Get disc MCN */
     if (ctx->rcap & CDIO_DRIVE_CAP_READ_MCN) {
         const char *mcn = cdio_get_mcn(ctx->cdio);
@@ -310,9 +340,9 @@ int cyanrip_fill_metadata(cyanrip_ctx *ctx)
 
     /* Get musicbrainz tags */
     if (!ctx->settings.disable_mb)
-        ret |= cyanrip_mb_metadata(ctx);
+        return mb_metadata(ctx, manual_metadata_specified);
 
-    return ret;
+    return 0;
 }
 
 static void copy_album_to_track_meta(cyanrip_ctx *ctx)
@@ -335,13 +365,13 @@ static const uint8_t silent_frame[CDIO_CD_FRAMESIZE_RAW] = { 0 };
 
 uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1] = { 0 };
 
-void status_cb(long int n, paranoia_cb_mode_t status)
+static void status_cb(long int n, paranoia_cb_mode_t status)
 {
     if (status >= PARANOIA_CB_READ && status <= PARANOIA_CB_FINISHED)
         paranoia_status[status]++;
 }
 
-const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
+static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int err = 0;
     char *msg = NULL;
@@ -388,7 +418,7 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 }
 
-int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
+static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
 
@@ -451,6 +481,13 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
     /* Read the actual CD data */
     for (int i = 0; i < frames; i++) {
+        /* Detect disc removals */
+        if (cdio_get_media_changed(ctx->cdio)) {
+            cyanrip_log(ctx, 0, "\nDrive media changed, stopping!\n");
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+
         int bytes = CDIO_CD_FRAMESIZE_RAW;
         const uint8_t *data = cyanrip_read_frame(ctx, t);
 
@@ -471,9 +508,11 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             }
         }
 
-        /* For "oh no I forgot to specify outputs" situations */
-        if (quit_now)
+        /* Stop now if requested */
+        if (quit_now) {
+            cyanrip_log(ctx, 0, "\nStopping, ripping incomplete!\n");
             break;
+        }
 
         /* Update CRCs */
         process_crc(&crc_ctx, data, bytes);
@@ -486,16 +525,11 @@ int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             goto fail;
         }
 
-        /* Detect disc removals */
-        if (cdio_get_media_changed(ctx->cdio)) {
-            cyanrip_log(ctx, 0, "\nDrive media changed, stopping!\n");
-            ret = AVERROR(EINVAL);
-            goto fail;
-        }
-
         /* Report progress */
-        cyanrip_log(NULL, 0, "\rRipping and encoding track %i, progress - %0.2f%%, errors - %i",
-                    t->number, ((double)(i + 1)/frames)*100.0f, ctx->total_error_count - start_err);
+        cyanrip_log(NULL, 0, "\rRipping and encoding track %i, progress - %0.2f%%",
+                    t->number, ((double)(i + 1)/frames)*100.0f);
+        if (ctx->total_error_count - start_err)
+            cyanrip_log(NULL, 0, ", errors - %i", ctx->total_error_count - start_err);
     }
 
     /* Fill with silence to maintain track length */
@@ -535,7 +569,7 @@ fail:
         }
     }
 
-    if (!ret)
+    if (!ret && !quit_now)
         cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
 
     cyanrip_free_dec_ctx(ctx, &dec_ctx);
@@ -548,7 +582,7 @@ fail:
     return ret;
 }
 
-void on_quit_signal(int signo)
+static void on_quit_signal(int signo)
 {
     if (quit_now) {
         cyanrip_log(NULL, 0, "Force quitting\n");
@@ -628,9 +662,15 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     /* Before pregap */
     if (ctx->tracks[0].pregap_lsn != CDIO_INVALID_LSN &&
         ctx->tracks[0].pregap_lsn > ctx->start_lsn) {
-        lsn_t frames = ctx->tracks[0].pregap_lsn - ctx->start_lsn;
-        cyanrip_log(ctx, 0, "    %i frames between lead-in and track 1 pregap, merging into pregap\n",
-                    frames);
+        cyanrip_log(ctx, 0, "    %i frame gap between lead-in and track 1 pregap, merging into pregap\n",
+                    ctx->tracks[0].pregap_lsn - ctx->start_lsn);
+        gaps++;
+
+        ctx->tracks[0].pregap_lsn = ctx->start_lsn;
+    } else if (ctx->tracks[0].pregap_lsn == CDIO_INVALID_LSN &&
+               ctx->tracks[0].start_lsn > ctx->start_lsn) {
+        cyanrip_log(ctx, 0, "    %i frame unmarked gap between lead-in and track 1, marking as a pregap\n",
+                    ctx->tracks[0].start_lsn - ctx->start_lsn);
         gaps++;
 
         ctx->tracks[0].pregap_lsn = ctx->start_lsn;
@@ -653,21 +693,21 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
             if (!lt)
                 cyanrip_log(ctx, 0, "unmerged\n");
             else
-                cyanrip_log(ctx, 0, "merged into track %i\n", lt->number);
+                cyanrip_log(ctx, 0, "merging into track %i\n", lt->number);
             break;
         case CYANRIP_PREGAP_DROP:
-            cyanrip_log(ctx, 0, "dropped\n");
+            cyanrip_log(ctx, 0, "dropping\n");
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
             break;
         case CYANRIP_PREGAP_MERGE:
-            cyanrip_log(ctx, 0, "merged\n");
+            cyanrip_log(ctx, 0, "merging\n");
             ct->start_lsn = ct->pregap_lsn;
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
             break;
         case CYANRIP_PREGAP_TRACK:
-            cyanrip_log(ctx, 0, "split off into a new track, number %i\n", ct->number);
+            cyanrip_log(ctx, 0, "splitting off into a new track, number %i\n", ct->number);
 
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
@@ -792,7 +832,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
             cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
             cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
-            cyanrip_log(ctx, 0, "    -n                    Disable musicbrainz lookup\n");
+            cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
             cyanrip_log(ctx, 0, "    -D <path>             Base folder name to rip disc to\n");
@@ -941,7 +981,7 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
-    if (cyanrip_fill_metadata(ctx))
+    if (fill_metadata(ctx, !!album_metadata_ptr || track_metadata_ptr_cnt))
         return 1;
 
     if (cover_image_path)
@@ -1004,6 +1044,14 @@ int main(int argc, char **argv)
             track_read_extra(ctx, t);
             av_dict_set(&t->meta, "cover_art", NULL, 0);
             cyanrip_log_track_end(ctx, t);
+
+            if (cdio_get_media_changed(ctx->cdio)) {
+                cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
+                break;
+            }
+
+            if (quit_now)
+                break;
         }
     } else if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->nb_tracks; i++) {

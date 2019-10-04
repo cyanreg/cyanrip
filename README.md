@@ -18,14 +18,14 @@ Compiling
 ---------
 Complete list of dependencies:
 
- * FFmpeg (at least 4.0, libavcodec, libswresample, libavutil, libavformat)
+ * FFmpeg (at least 4.0, libavcodec, libswresample, libavutil, libavformat, libavfilter)
  * libcdio-paranoia
  * libdiscid
  * libmusicbrainz5
 
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
-`meson build --buildtype release`
+`meson build`
 
 `ninja -C build`
 
@@ -54,7 +54,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -a *string*          | Album metadata, syntax is described below                                        |
 | -t *number*=*string* | Track metadata, syntax is described below                                        |
 | -c *path*            | Sets cover image to embed into each track, syntax is described below             |
-| -n                   | Disable MusicBrainz lookup, needs to be set for unknown discs                    |
+| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue      |
 |                      | **Output options**                                                               |
 | -l *list*            | Comma separated list of track numbers to rip, (default is it rips all)           |
 | -D *string*          | Base folder name to which to rip into, default is the album name                 |
@@ -69,11 +69,11 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 Metadata
 --------
 
-In case the Musicbrainz database doesn't contain the disc information, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
+In case the Musicbrainz database doesn't contain the disc information, is incomplete, or incorrect, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
 
--a album="Name":album_artist="Artist":date="2018":random_tag="Value"
+`-a album="Name":album_artist="Artist":date="2018":random_tag="Value"`
 
--t 1=artist="Track Artist":lyrics="Name":random_tag="Value"
+`-t 1=artist="Track Artist":lyrics="Name":random_tag="Value" -t 3=artist="Someone Else"`
 
 All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
 
