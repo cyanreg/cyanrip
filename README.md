@@ -9,6 +9,7 @@ Features
  * Drive offset compensation and error recovery via cd-paranoia
  * Full pregap handling
  * HDCD decoding
+ * Multi-disc album ripping
  * Able to encode to multiple formats in parallel
  * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
  * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
@@ -42,24 +43,25 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | Argument             | Description                                                                      |
 |----------------------|----------------------------------------------------------------------------------|
 |                      | **Ripping options**                                                              |
-| -d *string*          | The path or name for a specific device, otherwise uses the default device        |
-| -s *int*             | Specifies the CD drive offset in samples (same as EAC, default is 0)             |
-| -r *int*             | Specifies how many times to retry reading a frame if it fails, (default is 25)   |
-| -S *int*             | Sets the drive speed if possible (default is unset, usually maximum)             |
-| -p *number*=*string* | Specifies what to do with the pregap, syntax is described below                  |
+| -d `string`          | The path or name for a specific device, otherwise uses the default device        |
+| -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)             |
+| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)   |
+| -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)             |
+| -p `number=string`   | Specifies what to do with the pregap, syntax is described below                  |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping |
 | -H                   | Enable HDCD decoding, read below for details                                     |
 |                      | **Metadata options**                                                             |
 | -I                   | Only print CD metadata and information, will not rip or eject the CD             |
-| -a *string*          | Album metadata, syntax is described below                                        |
-| -t *number*=*string* | Track metadata, syntax is described below                                        |
-| -c *path*            | Sets cover image to embed into each track, syntax is described below             |
+| -a `string`          | Album metadata, syntax is described below                                        |
+| -t `number=string`   | Track metadata, syntax is described below                                        |
+| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below             |
 | -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue      |
+| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below           |
 |                      | **Output options**                                                               |
-| -l *list*            | Comma separated list of track numbers to rip, (default is it rips all)           |
-| -D *string*          | Base folder name to which to rip into, default is the album name                 |
-| -o *list*            | Comma separated list of output formats, "help" to list all, default is flac      |
-| -b *int*             | Bitrate in kbps for lossy formats                                                |
+| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)           |
+| -D `string`          | Base folder name to which to rip into, default is the album name                 |
+| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac      |
+| -b `int`             | Bitrate in kbps for lossy formats                                                |
 |                      | **Misc. options**                                                                |
 | -E                   | Eject CD tray if ripping has been successfully completed                         |
 | -V                   | Print version                                                                    |
@@ -104,11 +106,21 @@ Cover art embedding
 
 cyanrip supports embedding album and track cover art, in either jpeg or png formats.
 
-To embed cover art for the whole album, either specify it with the -c *path* parameter, or add the cover_art=*path* tag to the album metadata.
+To embed cover art for the whole album, either specify it with the -c *path* parameter, or add the cover_art=*path* tag to the album metadata. *path* can be a URL as well, in which case it will be downloaded once per track.
 
-To specify the cover art for a single track, specify it with the cover_art=*path* tag in the track's metadata. Metadata precedence is as specified above.
+To specify the cover art for a single track, specify it with the `cover_art="path"` tag in the track's metadata. Metadata precedence is as specified above.
 
 The cover_art tag containing the path will not be encoded.
+
+
+Multi-disc albums
+-----------------
+
+cyanrip supports ripping multi-disc albums in the same output folder. To enable this, specify the -C argument followed by `disc/totaldiscs`. The album name should not be suffixed with the CD number in that case. *totaldiscs* can be omitted if unknown.
+
+The track filenames will be `disc.track - title.ext`. The logfile will be `Album name CD<disc>.log`.
+
+As well as using the -C argument, you can also specify the `disc=number:totaldiscs=number` in the album/track metadata.
 
 
 HDCD decoding

@@ -687,6 +687,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 enum cyanrip_output_formats format)
 {
     int ret = 0;
+    char *prefix = NULL;
     char *filename = NULL;
     const cyanrip_out_fmt *cfmt = &fmt_map[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
@@ -698,14 +699,24 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->ctx = ctx;
     atomic_init(&s->status, 0);
 
-    if (dict_get(t->meta, "title"))
-        filename = av_asprintf("%s [%s]/%02i - %s.%s", ctx->base_dst_folder,
-                               cfmt->folder_suffix, t->number,
-                               cyanrip_sanitize_fn(dict_get(t->meta, "title")),
-                               cfmt->ext);
+    const char *discnumber = dict_get(t->meta, "disc");
+    if (discnumber)
+        prefix = av_asprintf("%s.%02i", discnumber, t->number);
     else
-        filename = av_asprintf("%s [%s]/%02i.%s", ctx->base_dst_folder,
-                               cfmt->folder_suffix, t->number, cfmt->ext);
+        prefix = av_asprintf("%02i", t->number);
+
+    if (dict_get(t->meta, "title")) {
+        char *sanitized_title = cyanrip_sanitize_fn(dict_get(t->meta, "title"));
+        filename = av_asprintf("%s [%s]/%s - %s.%s", ctx->base_dst_folder,
+                               cfmt->folder_suffix, prefix, sanitized_title,
+                               cfmt->ext);
+        av_freep(&sanitized_title);
+    } else {
+        filename = av_asprintf("%s [%s]/%s.%s", ctx->base_dst_folder,
+                               cfmt->folder_suffix, prefix, cfmt->ext);
+    }
+
+    av_freep(&prefix);
 
     /* lavf init */
     ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);

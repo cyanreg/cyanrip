@@ -27,7 +27,7 @@
 #include "os_compat.h"
 
 /* Bump this on each change */
-#define LOG_VERSION 103
+#define LOG_VERSION 104
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -109,6 +109,8 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(NULL, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, "\n");
+    CLOG("Disc number:    %s\n", ctx->meta, "disc");
+    CLOG("Total discs:    %s\n", ctx->meta, "totaldiscs");
     cyanrip_log(ctx, 0, "Disc tracks:    %i\n", ctx->drive->tracks);
     cyanrip_log(ctx, 0, "Tracks to rip:  %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
@@ -186,7 +188,12 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
             mkdir(dirname, 0700);
 
         /* Log file name */
-        char *logfile = av_asprintf("%s/%s.log", dirname, ctx->base_dst_folder);
+        char *logfile;
+        const char *discnumber = dict_get(ctx->meta, "disc");
+        if (discnumber)
+            logfile = av_asprintf("%s/%s CD%s.log", dirname, ctx->base_dst_folder, discnumber);
+        else
+            logfile = av_asprintf("%s/%s.log", dirname, ctx->base_dst_folder);
 
         av_freep(&dirname);
 

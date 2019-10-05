@@ -63,6 +63,8 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     if (ctx->settings.print_info_only)
         ctx->settings.eject_on_success_rip = 0;
 
+    cdio_init();
+
     if (!ctx->settings.dev_path)
         ctx->settings.dev_path = cdio_get_default_device(NULL);
 
@@ -810,12 +812,13 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
+    int discnumber = 0, totaldiscs = 0;
     char *cover_image_path = NULL;
     char *album_metadata_ptr = NULL;
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:")) != -1) {
+    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
@@ -833,6 +836,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
             cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
             cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
+            cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
             cyanrip_log(ctx, 0, "    -D <path>             Base folder name to rip disc to\n");
@@ -921,6 +925,26 @@ int main(int argc, char **argv)
         case 'O':
             settings.overread_leadinout = 1;
             break;
+        case 'C':
+            p = strtok(optarg, "/");
+            discnumber = strtol(p, NULL, 10);
+            if (discnumber <= 0) {
+                cyanrip_log(ctx, 0, "Invalid discnumber %i\n", discnumber);
+                return 1;
+            }
+            p = strtok(NULL, "/");
+            if (!p)
+                break;
+            totaldiscs = strtol(p, NULL, 10);
+            if (totaldiscs <= 0) {
+                cyanrip_log(ctx, 0, "Invalid totaldiscs %i\n", totaldiscs);
+                return 1;
+            }
+            if (discnumber > totaldiscs) {
+                cyanrip_log(ctx, 0, "discnumber %i is larger than totaldiscs %i\n", discnumber, totaldiscs);
+                return 1;
+            }
+            break;
         case 'p':
             p = strtok(optarg, "=");
             int idx = strtol(p, NULL, 10);
@@ -987,6 +1011,12 @@ int main(int argc, char **argv)
     if (cover_image_path)
         av_dict_set(&ctx->meta, "cover_art", cover_image_path, 0);
 
+    if (discnumber)
+        av_dict_set_int(&ctx->meta, "disc", discnumber, 0);
+
+    if (totaldiscs)
+        av_dict_set_int(&ctx->meta, "totaldiscs", totaldiscs, 0);
+
     /* Read user album metadata */
     if (album_metadata_ptr) {
         int err = av_dict_parse_string(&ctx->meta, album_metadata_ptr,
@@ -1005,7 +1035,7 @@ int main(int argc, char **argv)
     else if (dict_get(ctx->meta, "discid"))
         ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "discid"));
     else
-        ctx->base_dst_folder = av_strdup("Untitled CD");
+        ctx->base_dst_folder = av_strdup("Untitled album");
 
     if (!ctx->settings.print_info_only)
         cyanrip_log_init(ctx);
