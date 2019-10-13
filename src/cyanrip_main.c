@@ -490,6 +490,10 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             goto fail;
         }
 
+        /* Flush paranoia cache if overreading into lead-out - no idea why */
+        if ((t->start_lsn + i) > ctx->end_lsn)
+            cdio_paranoia_seek(ctx->paranoia, t->start_lsn + i, SEEK_SET);
+
         int bytes = CDIO_CD_FRAMESIZE_RAW;
         const uint8_t *data = cyanrip_read_frame(ctx, t);
 
