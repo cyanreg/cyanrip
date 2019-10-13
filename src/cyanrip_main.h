@@ -24,6 +24,7 @@
 #include <string.h>
 #include <math.h>
 #include "../config.h"
+#include "version.h"
 
 #include <cdio/paranoia/paranoia.h>
 #include <discid/discid.h>

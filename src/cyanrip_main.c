@@ -821,7 +821,7 @@ int main(int argc, char **argv)
     while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:")) != -1) {
         switch (c) {
         case 'h':
-            cyanrip_log(ctx, 0, "cyanrip %s help:\n", CYANRIP_VERSION_STRING);
+            cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", CYANRIP_VERSION_STRING, vcstag);
             cyanrip_log(ctx, 0, "\n  Ripping options:\n");
             cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
             cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");

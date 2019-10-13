@@ -33,10 +33,15 @@ if cc.links('int wmain(){return 0;}', args: '-municode')
     build_opts += '-municode'
 endif
 
+version_src = vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],
+                      input: 'version.c.in', output: 'version.c',
+                      fallback: 'release')
+
 components = [
     'cyanrip_encode.c',
     'cyanrip_log.c',
     'cyanrip_main.c',
+    version_src,
 ]
 
 executable('cyanrip', install: true, sources: components, dependencies: dependencies)

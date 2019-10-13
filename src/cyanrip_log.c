@@ -26,9 +26,6 @@
 #include "cyanrip_log.h"
 #include "os_compat.h"
 
-/* Bump this on each change */
-#define LOG_VERSION 104
-
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
         cyanrip_log(ctx, 0, FORMAT, dict_get(DICT, TAG));                      \
@@ -80,7 +77,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
-    cyanrip_log(ctx, 0, "cyanrip %s, log version %i\n", CYANRIP_VERSION_STRING, LOG_VERSION);
+    cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", CYANRIP_VERSION_STRING, vcstag);
     cyanrip_log(ctx, 0, "System device:  %s\n", ctx->settings.dev_path);
     if (ctx->drive->drive_model)
         cyanrip_log(ctx, 0, "Device model:   %s\n", ctx->drive->drive_model);
