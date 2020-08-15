@@ -124,41 +124,97 @@ const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? fmt_map[format].folder_suffix : NULL;
 }
 
-static const uint64_t get_codec_channel_layout(AVCodec *codec)
+static const uint64_t pick_codec_channel_layout(AVCodec *codec)
 {
     int i = 0;
+    int max_channels = 0;
+    uint64_t ilayout = AV_CH_LAYOUT_STEREO;
+    int in_channels = av_get_channel_layout_nb_channels(ilayout);
+    uint64_t best_layout = 0;
+
+    /* Supports anything */
     if (!codec->channel_layouts)
-        return AV_CH_LAYOUT_STEREO;
+        return ilayout;
+
+    /* Try to match */
     while (1) {
         if (!codec->channel_layouts[i])
             break;
-        if (codec->channel_layouts[i] == AV_CH_LAYOUT_STEREO)
+        if (codec->channel_layouts[i] == ilayout)
             return codec->channel_layouts[i];
         i++;
     }
-    return codec->channel_layouts[0];
+
+    i = 0;
+
+    /* Try to match channel counts */
+    while (1) {
+        if (!codec->channel_layouts[i])
+            break;
+        int num = av_get_channel_layout_nb_channels(codec->channel_layouts[i]);
+        if (num > max_channels) {
+            max_channels = num;
+            best_layout = codec->channel_layouts[i];
+        }
+        if (num >= in_channels)
+            return codec->channel_layouts[i];
+        i++;
+    }
+
+    /* Whatever */
+    return best_layout;
 }
 
-static enum AVSampleFormat get_codec_sample_fmt(AVCodec *codec, int hdcd)
+static enum AVSampleFormat pick_codec_sample_fmt(AVCodec *codec, int hdcd)
 {
     int i = 0;
+    int max_bps = 0;
+    int ibps = hdcd ? 20 : 16;
+    enum AVSampleFormat ifmt = hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
+    enum AVSampleFormat max_bps_fmt = AV_SAMPLE_FMT_NONE;
+
+    ibps = ibps >> 3;
+
+    /* Accepts anything */
     if (!codec->sample_fmts)
-        return hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
+        return ifmt;
+
+    /* Try to match the input sample format first */
     while (1) {
         if (codec->sample_fmts[i] == -1)
             break;
-        if (av_get_bytes_per_sample(codec->sample_fmts[i]) >= (2 + 2*hdcd))
+        if (codec->sample_fmts[i] == ifmt)
             return codec->sample_fmts[i];
         i++;
     }
-    return codec->sample_fmts[0];
+
+    i = 0;
+
+    /* Try to match bits per sample */
+    while (1) {
+        if (codec->sample_fmts[i] == -1)
+            break;
+        int bps = av_get_bytes_per_sample(codec->sample_fmts[i]);
+        if (bps > max_bps) {
+            max_bps = bps;
+            max_bps_fmt = codec->sample_fmts[i];
+        }
+        if (bps >= ibps)
+            return codec->sample_fmts[i];
+        i++;
+    }
+
+    /* Return the best one */
+    return max_bps_fmt;
 }
 
-static int get_codec_sample_rate(AVCodec *codec)
+static int pick_codec_sample_rate(AVCodec *codec)
 {
     int i = 0, ret;
+    int irate = 44100;
+
     if (!codec->supported_samplerates)
-        return 44100;
+        return irate;
 
     /* Go to the array terminator (0) */
     while (codec->supported_samplerates[++i] > 0);
@@ -167,10 +223,10 @@ static int get_codec_sample_rate(AVCodec *codec)
     memcpy(tmp, codec->supported_samplerates, i*sizeof(int));
     qsort(tmp, i, sizeof(int), cmp_numbers);
 
-    /* Pick lowest one above 44100, otherwise just use the highest one */
+    /* Pick lowest one above the input rate, otherwise just use the highest one */
     for (int j = 0; j < i; j++) {
         ret = tmp[j];
-        if (ret >= 44100)
+        if (ret >= irate)
             break;
     }
 
@@ -188,10 +244,10 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     avctx->opaque            = ctx;
     avctx->bit_rate          = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt        = get_codec_sample_fmt(codec, ctx->settings.decode_hdcd);
-    avctx->channel_layout    = get_codec_channel_layout(codec);
+    avctx->sample_fmt        = pick_codec_sample_fmt(codec, ctx->settings.decode_hdcd);
+    avctx->channel_layout    = pick_codec_channel_layout(codec);
     avctx->compression_level = cfmt->compression_level;
-    avctx->sample_rate       = get_codec_sample_rate(codec);
+    avctx->sample_rate       = pick_codec_sample_rate(codec);
     avctx->time_base         = (AVRational){ 1, avctx->sample_rate };
     avctx->channels          = av_get_channel_layout_nb_channels(avctx->channel_layout);
 
@@ -541,6 +597,96 @@ static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx, i
     return swr;
 }
 
+static int64_t get_next_audio_pts(cyanrip_enc_ctx *ctx, AVFrame *in)
+{
+    const int64_t m = (int64_t)44100 * ctx->out_avctx->sample_rate;
+    const int64_t b = (int64_t)ctx->out_avctx->time_base.num * m;
+    const int64_t c = ctx->out_avctx->time_base.den;
+    const int64_t in_pts = in ? in->pts : AV_NOPTS_VALUE;
+
+    int64_t npts = in_pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE : av_rescale(in_pts, b, c);
+
+    npts = swr_next_pts(ctx->swr, npts);
+
+    int64_t out_pts = av_rescale(npts, c, b);
+
+    return out_pts;
+}
+
+static int audio_process_frame(cyanrip_enc_ctx *ctx, AVFrame **input, int flush)
+{
+    int ret;
+    int frame_size = ctx->out_avctx->frame_size;
+
+    int64_t resampled_frame_pts = get_next_audio_pts(ctx, *input);
+
+    /* Resample the frame, can be NULL */
+    ret = swr_convert_frame(ctx->swr, NULL, *input);
+
+    av_frame_free(input);
+
+    if (ret < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error pushing audio for resampling: %s!\n", av_err2str(ret));
+        return ret;
+    }
+
+    /* Not enough output samples to get a frame */
+    if (!flush) {
+        int out_samples = swr_get_out_samples(ctx->swr, 0);
+        if (!frame_size && out_samples)
+            frame_size = out_samples;
+        else if (!out_samples || ((frame_size) && (out_samples < frame_size)))
+            return AVERROR(EAGAIN);
+    } else if (!frame_size && ctx->swr) {
+        frame_size = swr_get_out_samples(ctx->swr, 0);
+        if (!frame_size)
+            return 0;
+    }
+
+    if (flush && !ctx->swr)
+        return 0;
+
+    AVFrame *out_frame = NULL;
+    if (!(out_frame = av_frame_alloc())) {
+        av_log(ctx, AV_LOG_ERROR, "Error allocating frame!\n");
+        return AVERROR(ENOMEM);
+    }
+
+    out_frame->format                = ctx->out_avctx->sample_fmt;
+    out_frame->channel_layout        = ctx->out_avctx->channel_layout;
+    out_frame->sample_rate           = ctx->out_avctx->sample_rate;
+    out_frame->pts                   = resampled_frame_pts;
+
+    /* SWR sets this field to whatever it can output if it can't this much */
+    out_frame->nb_samples            = frame_size;
+
+    /* Get frame buffer */
+    ret = av_frame_get_buffer(out_frame, 0);
+    if (ret < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error allocating frame: %s!\n", av_err2str(ret));
+        av_frame_free(&out_frame);
+        return ret;
+    }
+
+    /* Resample */
+    ret = swr_convert_frame(ctx->swr, out_frame, NULL);
+    if (ret < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error pulling resampled audio: %s!\n", av_err2str(ret));
+        av_frame_free(&out_frame);
+        return ret;
+    }
+
+    /* swr has been drained */
+    if (!out_frame->nb_samples) {
+        av_frame_free(&out_frame);
+        swr_free(&ctx->swr);
+    }
+
+    *input = out_frame;
+
+    return 0;
+}
+
 int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 {
     cyanrip_enc_ctx *ctx;
@@ -571,69 +717,21 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 static void *cyanrip_track_encoding(void *ctx)
 {
     cyanrip_enc_ctx *s = ctx;
-    int ret = 0, flushing = 0, codec_frame_size = s->out_avctx->frame_size;
-
-    if (!codec_frame_size ||
-        (s->out_avctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE))
-        codec_frame_size = CDIO_CD_FRAMESIZE_RAW >> 1;
+    int ret = 0, flushing = 0;
 
     while (1) {
-        AVFrame *dec_frame = NULL;
+        AVFrame *out_frame = NULL;
 
         if (!flushing) {
-            dec_frame = pop_from_fifo(&s->fifo);
-            flushing = !dec_frame;
+            out_frame = pop_from_fifo(&s->fifo);
+            flushing = !out_frame;
         }
 
-        /* Resample the frame, can be NULL */
-        ret = swr_convert_frame(s->swr, NULL, dec_frame);
-        av_frame_free(&dec_frame);
-        if (ret < 0) {
-            cyanrip_log(s->ctx, 0, "Error resampling: %s!\n", av_err2str(ret));
-            goto fail;
-        }
-
-        /* Not enough output samples to get a frame */
-        if (!flushing && (swr_get_out_samples(s->swr, 0) < codec_frame_size))
+        ret = audio_process_frame(ctx, &out_frame, flushing);
+        if (ret == AVERROR(EAGAIN))
             continue;
-
-        AVFrame *out_frame = NULL;
-        if (!flushing || s->swr) {
-            if (!(out_frame = av_frame_alloc())) {
-                cyanrip_log(s->ctx, 0, "Error allocating memory!\n");
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-
-            out_frame->format         = s->out_avctx->sample_fmt;
-            out_frame->channel_layout = s->out_avctx->channel_layout;
-            out_frame->sample_rate    = s->out_avctx->sample_rate;
-            out_frame->nb_samples     = codec_frame_size;
-            out_frame->pts            = ROUNDED_DIV(swr_next_pts(s->swr, INT64_MIN),
-                                                    44100);
-
-            /* Get frame buffer */
-            ret = av_frame_get_buffer(out_frame, 0);
-            if (ret) {
-                cyanrip_log(s->ctx, 0, "Error allocating: %s!\n", av_err2str(ret));
-                av_frame_free(&out_frame);
-                goto fail;
-            }
-
-            /* Resample */
-            ret = swr_convert_frame(s->swr, out_frame, NULL);
-            if (ret < 0) {
-                cyanrip_log(s->ctx, 0, "Error resampling: %s!\n", av_err2str(ret));
-                av_frame_free(&out_frame);
-                goto fail;
-            }
-
-            /* swr has been drained */
-            if (!out_frame->nb_samples) {
-                av_frame_free(&out_frame);
-                swr_free(&s->swr);
-            }
-        }
+        else if (ret)
+            goto fail;
 
         /* Give frame */
         ret = avcodec_send_frame(s->out_avctx, out_frame);
@@ -659,7 +757,16 @@ static void *cyanrip_track_encoding(void *ctx)
                 goto fail;
             }
 
-            out_pkt.stream_index = 0;
+            int sid = 0;
+            out_pkt.stream_index = sid;
+
+            AVRational src_tb = s->out_avctx->time_base;
+            AVRational dst_tb = s->avf->streams[sid]->time_base;
+
+            /* Rescale timestamps to container */
+            out_pkt.pts = av_rescale_q(out_pkt.pts, src_tb, dst_tb);
+            out_pkt.dts = av_rescale_q(out_pkt.dts, src_tb, dst_tb);
+            out_pkt.duration = av_rescale_q(out_pkt.duration, src_tb, dst_tb);
 
             ret = av_interleaved_write_frame(s->avf, &out_pkt);
             av_packet_unref(&out_pkt);
