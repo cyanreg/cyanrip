@@ -356,7 +356,7 @@ static void copy_album_to_track_meta(cyanrip_ctx *ctx)
         strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
 
         av_dict_set(&ctx->tracks[i].meta, "creation_time", t_s, 0);
-        av_dict_set(&ctx->tracks[i].meta, "comment", "cyanrip "CYANRIP_VERSION_STRING, 0);
+        av_dict_set(&ctx->tracks[i].meta, "comment", "cyanrip "PROJECT_VERSION_STRING, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "track", ctx->tracks[i].number, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "tracktotal", ctx->nb_tracks, 0);
         av_dict_copy(&ctx->tracks[i].meta, ctx->meta, AV_DICT_DONT_OVERWRITE);
@@ -825,7 +825,7 @@ int main(int argc, char **argv)
     while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:")) != -1) {
         switch (c) {
         case 'h':
-            cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", CYANRIP_VERSION_STRING, vcstag);
+            cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
             cyanrip_log(ctx, 0, "\n  Ripping options:\n");
             cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
             cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
@@ -986,7 +986,7 @@ int main(int argc, char **argv)
             settings.base_dst_folder = optarg;
             break;
         case 'V':
-            cyanrip_log(ctx, 0, "cyanrip %s\n", CYANRIP_VERSION_STRING);
+            cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", PROJECT_VERSION_STRING, vcstag);
             return 0;
         case 'd':
             settings.dev_path = optarg;

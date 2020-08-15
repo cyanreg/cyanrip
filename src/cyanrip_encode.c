@@ -568,7 +568,7 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
     return status;
 }
 
-void *cyanrip_track_encoding(void *ctx)
+static void *cyanrip_track_encoding(void *ctx)
 {
     cyanrip_enc_ctx *s = ctx;
     int ret = 0, flushing = 0, codec_frame_size = s->out_avctx->frame_size;
