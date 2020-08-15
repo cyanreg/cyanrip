@@ -20,6 +20,7 @@ dependencies = [
     dependency('libavfilter', version: '>= 7.79.100'),
     dependency('libavutil', version: '>= 56.43.100'),
 
+    # other dependencies
     dependency('libcdio', version: '>= 2.0'),
     dependency('libcdio_paranoia', version: '>= 10.2'),
     dependency('libdiscid', version: '>= 0.6'),
@@ -35,6 +36,8 @@ sources = [
     'cyanrip_encode.c',
     'cyanrip_log.c',
     'cyanrip_main.c',
+
+    'fifo_frame.c',
 
     # Version
     vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],

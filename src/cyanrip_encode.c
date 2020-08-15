@@ -28,14 +28,14 @@
 #include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
 
-#include "frame_fifo.h"
+#include "fifo_frame.h"
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 #include "os_compat.h"
 
 struct cyanrip_enc_ctx {
     cyanrip_ctx *ctx;
-    AVFrameFIFO fifo;
+    AVBufferRef *fifo;
     pthread_t thread;
     AVFormatContext *avf;
     SwrContext *swr;
@@ -475,7 +475,7 @@ static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         if (status < 0)
             return status;
 
-        ret = push_to_fifo(&enc_ctx[i]->fifo, frame ? av_frame_clone(frame) : NULL);
+        ret = cr_frame_fifo_push(enc_ctx[i]->fifo, frame ? av_frame_clone(frame) : NULL);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
             return ret;
@@ -695,7 +695,7 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     ctx = *s;
 
-    push_to_fifo(&ctx->fifo, NULL);
+    cr_frame_fifo_push(ctx->fifo, NULL);
     pthread_join(ctx->thread, NULL);
 
     swr_free(&ctx->swr);
@@ -706,7 +706,7 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
         avio_closep(&ctx->avf->pb);
     avformat_free_context(ctx->avf);
 
-    free_fifo(&ctx->fifo);
+    av_buffer_unref(&ctx->fifo);
     av_free(ctx->out_avctx);
 
     int status = ctx->status;
@@ -723,7 +723,7 @@ static void *cyanrip_track_encoding(void *ctx)
         AVFrame *out_frame = NULL;
 
         if (!flushing) {
-            out_frame = pop_from_fifo(&s->fifo);
+            out_frame = cr_frame_fifo_pop(s->fifo);
             flushing = !out_frame;
         }
 
@@ -928,7 +928,9 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
 
     /* FIFO */
-    init_fifo(&s->fifo, ctx->settings.enc_fifo_size);
+    s->fifo = cr_frame_fifo_create(ctx->settings.enc_fifo_size, FRAME_FIFO_BLOCK_NO_INPUT | FRAME_FIFO_BLOCK_MAX_OUTPUT);
+    if (!s->fifo)
+        goto fail;
 
     pthread_create(&s->thread, NULL, cyanrip_track_encoding, s);
 
