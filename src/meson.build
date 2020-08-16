@@ -14,11 +14,11 @@ static_build = get_option('default_library') == 'static'
 # Required dependencies
 dependencies = [
     # ffmpeg libs
-    dependency('libavcodec', version: '>= 58.82.100'),
-    dependency('libavformat', version: '>= 58.42.100'),
-    dependency('libswresample', version: '>= 3.6.100'),
-    dependency('libavfilter', version: '>= 7.79.100'),
-    dependency('libavutil', version: '>= 56.43.100'),
+    dependency('libavcodec', version: '>= 58.19.100'),
+    dependency('libavformat', version: '>= 58.13.100'),
+    dependency('libswresample', version: '>= 3.2.100'),
+    dependency('libavfilter', version: '>= 7.16.100'),
+    dependency('libavutil', version: '>= 56.15.100'),
 
     # other dependencies
     dependency('libcdio', version: '>= 2.0'),
