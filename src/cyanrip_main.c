@@ -117,10 +117,6 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
             return AVERROR(EINVAL);
     }
 
-    /* Drives are very slow and burst-y so don't block by default */
-    if (!ctx->settings.enc_fifo_size && (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE))
-        ctx->settings.enc_fifo_size = 16;
-
     ctx->paranoia = cdio_paranoia_init(ctx->drive);
     if (!ctx->paranoia) {
         cyanrip_log(ctx, 0, "Unable to init paranoia!\n");
@@ -807,7 +803,7 @@ int main(int argc, char **argv)
     settings.bitrate = 128.0f;
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
-    settings.enc_fifo_size = 0;
+    settings.enc_fifo_size = 32;
     settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
