@@ -54,6 +54,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -I                   | Only print CD metadata and information, will not rip or eject the CD             |
 | -a `string`          | Album metadata, syntax is described below                                        |
 | -t `number=string`   | Track metadata, syntax is described below                                        |
+| -R `int`             | Sets the MusicBrainz release to use, starting from 1                             |
 | -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below             |
 | -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue      |
 | -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below           |

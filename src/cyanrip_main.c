@@ -219,7 +219,7 @@ end:
     mb5_medium_list_delete(medium_list);
 }
 
-static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
+static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx)
 {
     int ret = 0;
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
@@ -283,11 +283,43 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
         goto end_meta;
     }
 
-    Mb5Release release = mb5_release_list_item(release_list, 0);
-    if (!release) {
+    int num_releases = mb5_release_list_size(release_list);
+    if (!num_releases) {
         cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
         goto end_meta;
+    } else if (num_releases > 1 && !release_idx) {
+        cyanrip_log(ctx, 0, "Multiple releases found in database for discid:\n");
+        for (int i = 0; i < num_releases; i++) {
+            Mb5Release tmp_rel = mb5_release_list_item(release_list, i);
+            READ_MB(mb5_release_get_date, tmp_rel, ctx->meta, "date");
+            READ_MB(mb5_release_get_title, tmp_rel, ctx->meta, "album");
+            cyanrip_log(ctx, 0, "    %i.) %s (%s)", i + 1, dict_get(ctx->meta, "album"), dict_get(ctx->meta, "date"));
+
+            /* Get CD count for the release */
+            Mb5MediumList medium_list = mb5_release_get_mediumlist(tmp_rel);
+            int num_cds = mb5_medium_list_size(medium_list);
+            if (num_cds > 1)
+                cyanrip_log(ctx, 0, " (%i CDs)", num_cds);
+            mb5_medium_list_delete(medium_list);
+
+            cyanrip_log(ctx, 0, "\n");
+            av_dict_set(&ctx->meta, "date", "", 0);
+            av_dict_set(&ctx->meta, "album", "", 0);
+        }
+        cyanrip_log(ctx, 0, "\n");
+        cyanrip_log(ctx, 0, "Please specify which release to use by adding the -R argument with an index.\n");
+        ret = 1;
+        goto end_meta;
+    } else if (release_idx) {
+        if ((release_idx < 1) || (release_idx > num_releases)) {
+            cyanrip_log(ctx, 0, "Invalid release index %i specified, only have %i releases!\n", release_idx, num_releases);
+            ret = 1;
+            goto end_meta;
+        }
+        release_idx -= 1;
     }
+
+    Mb5Release release = mb5_release_list_item(release_list, release_idx);
 
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
@@ -309,7 +341,7 @@ end:
     return ret;
 }
 
-static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
+static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx)
 {
     /* Get disc MCN */
     if (ctx->rcap & CDIO_DRIVE_CAP_READ_MCN) {
@@ -338,7 +370,7 @@ static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified)
 
     /* Get musicbrainz tags */
     if (!ctx->settings.disable_mb)
-        return mb_metadata(ctx, manual_metadata_specified);
+        return mb_metadata(ctx, manual_metadata_specified, release_idx);
 
     return 0;
 }
@@ -812,13 +844,14 @@ int main(int argc, char **argv)
 
     int c;
     char *p;
+    int mb_release_idx = 0;
     int discnumber = 0, totaldiscs = 0;
     char *cover_image_path = NULL;
     char *album_metadata_ptr = NULL;
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:")) != -1) {
+    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -834,6 +867,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
             cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
+            cyanrip_log(ctx, 0, "    -R <int>              Sets the MusicBrainz release to use, starting from 1\n");
             cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
             cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
             cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
@@ -861,6 +895,9 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "Invalid retries amount!\n");
                 return 1;
             }
+            break;
+        case 'R':
+            mb_release_idx = strtol(optarg, NULL, 10);
             break;
         case 's':
             settings.offset = strtol(optarg, NULL, 10);
@@ -1005,7 +1042,7 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
-    if (fill_metadata(ctx, !!album_metadata_ptr || track_metadata_ptr_cnt))
+    if (fill_metadata(ctx, !!album_metadata_ptr || track_metadata_ptr_cnt, mb_release_idx))
         return 1;
 
     if (cover_image_path)
