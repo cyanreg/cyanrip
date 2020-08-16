@@ -1,3 +1,8 @@
+0.5.1
+=====
+ - __No need to rerip anything.__
+ - Reduce FFmpeg library version requirements
+
 0.5.0
 =====
  - __No need to rerip anything.__
