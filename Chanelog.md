@@ -1,3 +1,8 @@
+0.5.2
+=====
+ - __No need to rerip anything.__
+ - Fix encoding while ripping from a real drive (broken by 0.5.0).
+
 0.5.1
 =====
  - __No need to rerip anything.__
