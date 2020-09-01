@@ -1119,8 +1119,48 @@ int main(int argc, char **argv)
             return 1;
         }
 
+        end += 1; /* Move past equal sign */
+
+        /* Copy string with enough space to append extra */
+        char *copy = av_mallocz(strlen(end) + strlen("title=") + strlen("artist=") + 1);
+        memcpy(copy, end, strlen(end));
+
+        int add_title_offset = -1;
+        int add_artist_offset = -1;
+
+        /* Look for keyless entries */
+        int count = 0;
+        p = strtok(end, ":");
+        while(p != NULL) {
+            if (!strstr(p, "=")) {
+                if (count == 0)
+                    add_title_offset = p - end;
+                else if (count == 1)
+                    add_artist_offset = p - end;
+            }
+            p = strtok(NULL, ":");
+            if (++count >= 2)
+                break;
+        }
+
+        /* Prepend track title if missing */
+        if (add_title_offset >= 0) {
+            memmove(&copy[add_title_offset + strlen("title=")], &copy[add_title_offset], strlen(copy) - add_title_offset);
+            memcpy(&copy[add_title_offset], "title=", strlen("title="));
+            if (add_artist_offset >= 0)
+                add_artist_offset += strlen("title=");
+        }
+
+        /* Prepend track artist if missing */
+        if (add_artist_offset >= 0) {
+            memmove(&copy[add_artist_offset + strlen("artist=")], &copy[add_artist_offset], strlen(copy) - add_artist_offset);
+            memcpy(&copy[add_artist_offset], "artist=", strlen("artist="));
+        }
+
+        /* Parse */
         int err = av_dict_parse_string(&ctx->tracks[track_num].meta,
-                                       end + 1, "=", ":", 0);
+                                       copy, "=", ":", 0);
+        av_free(copy);
         if (err) {
             cyanrip_log(ctx, 0, "Error reading track tags: %s\n",
                         av_err2str(err));
