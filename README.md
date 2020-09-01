@@ -40,33 +40,33 @@ CLI
 
 Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
 
-| Argument             | Description                                                                      |
-|----------------------|----------------------------------------------------------------------------------|
-|                      | **Ripping options**                                                              |
-| -d `string`          | The path or name for a specific device, otherwise uses the default device        |
-| -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)             |
-| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)   |
-| -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)             |
-| -p `number=string`   | Specifies what to do with the pregap, syntax is described below                  |
-| -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping |
-| -H                   | Enable HDCD decoding, read below for details                                     |
-|                      | **Metadata options**                                                             |
-| -I                   | Only print CD metadata and information, will not rip or eject the CD             |
-| -a `string`          | Album metadata, syntax is described below                                        |
-| -t `number=string`   | Track metadata, syntax is described below                                        |
-| -R `int`             | Sets the MusicBrainz release to use, starting from 1                             |
-| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below             |
-| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue      |
-| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below           |
-|                      | **Output options**                                                               |
-| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)           |
-| -D `string`          | Base folder name to which to rip into, default is the album name                 |
-| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac      |
-| -b `int`             | Bitrate in kbps for lossy formats                                                |
-|                      | **Misc. options**                                                                |
-| -E                   | Eject CD tray if ripping has been successfully completed                         |
-| -V                   | Print version                                                                    |
-| -h                   | Print usage (this)                                                               |
+| Argument             | Description                                                                             |
+|----------------------|-----------------------------------------------------------------------------------------|
+|                      | **Ripping options**                                                                     |
+| -d `string`          | The path or name for a specific device, otherwise uses the default device               |
+| -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)                    |
+| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)          |
+| -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                    |
+| -p `number=string`   | Specifies what to do with the pregap, syntax is described below                         |
+| -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping        |
+| -H                   | Enable HDCD decoding, read below for details                                            |
+|                      | **Metadata options**                                                                    |
+| -I                   | Only print CD metadata and information, will not rip or eject the CD                    |
+| -a `string`          | Album metadata, syntax is described below                                               |
+| -t `number=string`   | Track metadata, syntax is described below                                               |
+| -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string |
+| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below                    |
+| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue             |
+| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                  |
+|                      | **Output options**                                                                      |
+| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                  |
+| -D `string`          | Base folder name to which to rip into, default is the album name                        |
+| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac             |
+| -b `int`             | Bitrate in kbps for lossy formats                                                       |
+|                      | **Misc. options**                                                                       |
+| -E                   | Eject CD tray if ripping has been successfully completed                                |
+| -V                   | Print version                                                                           |
+| -h                   | Print usage (this)                                                                      |
 
 
 Metadata
