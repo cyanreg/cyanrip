@@ -178,17 +178,41 @@ static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *ke
     }
 }
 
-static void mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
+static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, int discnumber)
 {
-    Mb5MediumList medium_list = mb5_release_media_matching_discid(release, discid);
-    if (!medium_list) {
-        cyanrip_log(ctx, 0, "No mediums matching DiscID.\n");
-        return;
+    /* Set totaldiscs if possible */
+    Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
+    int num_cds = mb5_medium_list_size(medium_list);
+    av_dict_set_int(&ctx->meta, "totaldiscs", num_cds, 0);
+    mb5_medium_list_delete(medium_list);
+
+    if (num_cds == 1 && !discnumber)
+        av_dict_set_int(&ctx->meta, "disc", 1, 0);
+
+    int media_idx;
+    if (discnumber) {
+        if (discnumber < 1 || discnumber > num_cds) {
+            cyanrip_log(ctx, 0, "Invalid disc number %i, release only has %i CDs\n", discnumber, num_cds);
+            return 1;
+        }
+        medium_list = mb5_release_get_mediumlist(release);
+        media_idx = discnumber - 1;
+    } else {
+        medium_list = mb5_release_media_matching_discid(release, discid);
+        if (!medium_list) {
+            cyanrip_log(ctx, 0, "No mediums matching DiscID.\n");
+            return 0;
+        }
+        media_idx = 0;
     }
-    
-    Mb5Medium medium = mb5_medium_list_item(medium_list, 0);
+
+    Mb5Medium medium = mb5_medium_list_item(medium_list, media_idx);
     if (!medium) {
         cyanrip_log(ctx, 0, "Got empty medium list.\n");
+        if (discnumber) {
+            mb5_medium_list_delete(medium_list);
+            return 1;
+        }
         goto end;
     }
 
@@ -217,9 +241,10 @@ static void mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid)
 
 end:
     mb5_medium_list_delete(medium_list);
+    return 0;
 }
 
-static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx)
+static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, int discnumber)
 {
     int ret = 0;
     Mb5Query query = mb5_query_new("cyanrip", NULL, 0);
@@ -331,7 +356,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
                 dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
 
     /* Read track metadata */
-    mb_tracks(ctx, release, discid);
+    mb_tracks(ctx, release, discid, discnumber);
 
 end_meta:
     mb5_metadata_delete(metadata);
@@ -341,7 +366,7 @@ end:
     return ret;
 }
 
-static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx)
+static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, int discnumber)
 {
     /* Get disc MCN */
     if (ctx->rcap & CDIO_DRIVE_CAP_READ_MCN) {
@@ -370,7 +395,7 @@ static int fill_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int re
 
     /* Get musicbrainz tags */
     if (!ctx->settings.disable_mb)
-        return mb_metadata(ctx, manual_metadata_specified, release_idx);
+        return mb_metadata(ctx, manual_metadata_specified, release_idx, discnumber);
 
     return 0;
 }
@@ -1042,7 +1067,7 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
-    if (fill_metadata(ctx, !!album_metadata_ptr || track_metadata_ptr_cnt, mb_release_idx))
+    if (fill_metadata(ctx, !!album_metadata_ptr || track_metadata_ptr_cnt, mb_release_idx, discnumber))
         return 1;
 
     if (cover_image_path)
