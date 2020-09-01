@@ -47,6 +47,7 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
     else if (ctx->cdio)
         cdio_destroy(ctx->cdio);
 
+    free(ctx->settings.dev_path);
     av_dict_free(&ctx->meta);
     av_freep(&ctx->base_dst_folder);
     av_freep(&ctx);
@@ -1095,7 +1096,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", PROJECT_VERSION_STRING, vcstag);
             return 0;
         case 'd':
-            settings.dev_path = optarg;
+            settings.dev_path = strdup(optarg);
             break;
         case '?':
             return 1;
