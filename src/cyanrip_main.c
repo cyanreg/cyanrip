@@ -171,18 +171,12 @@ static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *ke
             READ_MB(mb5_namecredit_get_name, namecredit, dict, key);
         } else {
             Mb5Artist artist = mb5_namecredit_get_artist(namecredit);
-            if (artist) {
+            if (artist)
                 READ_MB(mb5_artist_get_name, artist, dict, key);
-                mb5_artist_delete(artist);
-            }
         }
 
         READ_MB(mb5_namecredit_get_joinphrase, namecredit, dict, key);
-
-        mb5_namecredit_delete(namecredit);
     }
-
-    mb5_namecredit_list_delete(namecredit_list);
 }
 
 static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, int discnumber)
@@ -191,7 +185,6 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
     int num_cds = mb5_medium_list_size(medium_list);
     av_dict_set_int(&ctx->meta, "totaldiscs", num_cds, 0);
-    mb5_medium_list_delete(medium_list);
 
     if (num_cds == 1 && !discnumber)
         av_dict_set_int(&ctx->meta, "disc", 1, 0);
@@ -216,10 +209,8 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     Mb5Medium medium = mb5_medium_list_item(medium_list, media_idx);
     if (!medium) {
         cyanrip_log(ctx, 0, "Got empty medium list.\n");
-        if (discnumber) {
-            mb5_medium_list_delete(medium_list);
+        if (discnumber)
             return 1;
-        }
         goto end;
     }
 
@@ -242,17 +233,11 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title");
             credit = mb5_track_get_artistcredit(track);
         }
-        if (credit) {
+        if (credit)
             mb_credit(credit, ctx->tracks[i].meta, "artist");
-            mb5_artistcredit_delete(credit);
-        }
-        if (recording)
-            mb5_recording_delete(recording);
-        mb5_track_delete(track);
     }
 
 end:
-    mb5_medium_list_delete(medium_list);
     return 0;
 }
 
@@ -342,8 +327,6 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             int num_cds = mb5_medium_list_size(medium_list);
             if (num_cds > 1)
                 cyanrip_log(ctx, 0, " (%i CDs)", num_cds);
-            mb5_medium_list_delete(medium_list);
-            mb5_release_delete(tmp_rel);
 
             cyanrip_log(ctx, 0, "\n");
             av_dict_set(&ctx->meta, "date", "", 0);
@@ -369,7 +352,6 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             Mb5Release tmp_rel = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
             READ_MB(mb5_release_get_id, tmp_rel, tmp_dict, "id");
-            mb5_release_delete(tmp_rel);
             if (dict_get(tmp_dict, "id") && strcmp(release_str, dict_get(tmp_dict, "id"))) {
                 chosen_id = i;
                 break;
@@ -390,21 +372,17 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
-    if (artistcredit) {
+    if (artistcredit)
         mb_credit(artistcredit, ctx->meta, "album_artist");
-        mb5_artistcredit_delete(artistcredit);
-    }
 
     cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
                 dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
 
     /* Read track metadata */
     mb_tracks(ctx, release, discid, discnumber);
-    mb5_release_delete(release);
 
 end_meta:
-    mb5_release_list_delete(release_list);
-    mb5_metadata_delete(metadata);
+    mb5_metadata_delete(metadata); /* This frees _all_ metadata */
 
 end:
     mb5_query_delete(query);
