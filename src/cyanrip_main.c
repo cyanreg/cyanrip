@@ -170,12 +170,18 @@ static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *ke
             READ_MB(mb5_namecredit_get_name, namecredit, dict, key);
         } else {
             Mb5Artist artist = mb5_namecredit_get_artist(namecredit);
-            if (artist)
+            if (artist) {
                 READ_MB(mb5_artist_get_name, artist, dict, key);
+                mb5_artist_delete(artist);
+            }
         }
 
         READ_MB(mb5_namecredit_get_joinphrase, namecredit, dict, key);
+
+        mb5_namecredit_delete(namecredit);
     }
+
+    mb5_namecredit_list_delete(namecredit_list);
 }
 
 static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, int discnumber)
@@ -235,8 +241,13 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title");
             credit = mb5_track_get_artistcredit(track);
         }
-        if (credit)
+        if (credit) {
             mb_credit(credit, ctx->tracks[i].meta, "artist");
+            mb5_artistcredit_delete(credit);
+        }
+        if (recording)
+            mb5_recording_delete(recording);
+        mb5_track_delete(track);
     }
 
 end:
@@ -296,13 +307,14 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         goto end;
     }
 
+    Mb5ReleaseList release_list = NULL;
     Mb5Disc disc = mb5_metadata_get_disc(metadata);
     if (!disc) {
         cyanrip_log(ctx, 0, "DiscID not found in MusicBrainz\n");
         goto end_meta;
     }
 
-    Mb5ReleaseList release_list = mb5_disc_get_releaselist(disc);
+    release_list = mb5_disc_get_releaselist(disc);
     if (!release_list) {
         cyanrip_log(ctx, 0, "DiscID has no associated releases.\n");
         goto end_meta;
@@ -349,8 +361,10 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
-    if (artistcredit)
+    if (artistcredit) {
         mb_credit(artistcredit, ctx->meta, "album_artist");
+        mb5_artistcredit_delete(artistcredit);
+    }
 
     cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
                 dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
@@ -359,6 +373,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     mb_tracks(ctx, release, discid, discnumber);
 
 end_meta:
+    mb5_release_list_delete(release_list);
     mb5_metadata_delete(metadata);
 
 end:
