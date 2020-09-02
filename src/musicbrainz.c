@@ -134,6 +134,8 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
         }
     }
 
+    READ_MB(mb5_medium_get_title, medium, ctx->meta, "discname");
+
     Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
     if (!track_list) {
         cyanrip_log(ctx, 0, "Medium has no track list.\n");
