@@ -699,6 +699,9 @@ int main(int argc, char **argv)
             if (p != NULL && p[0] != ' ') {
                 mb_release_str = optarg;
                 mb_release_idx = -1;
+            } else if (mb_release_idx <= 0) {
+                cyanrip_log(ctx, 0, "Invalid release index %i!\n", mb_release_idx);
+                return 1;
             }
             break;
         case 's':

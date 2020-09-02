@@ -174,68 +174,64 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         goto end_meta;
     }
 
+    Mb5Release release = NULL;
     int num_releases = mb5_release_list_size(release_list);
     if (!num_releases) {
         cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
         goto end_meta;
     } else if (num_releases > 1 && ((release_idx < 0) && !release_str)) {
-        cyanrip_log(ctx, 0, "Multiple releases found in database for discid:\n");
+        cyanrip_log(ctx, 0, "Multiple releases found in database for DiscID:\n");
         for (int i = 0; i < num_releases; i++) {
-            Mb5Release tmp_rel = mb5_release_list_item(release_list, i);
+            release = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
-            READ_MB(mb5_release_get_date, tmp_rel, tmp_dict, "date");
-            READ_MB(mb5_release_get_title, tmp_rel, tmp_dict, "album");
-            READ_MB(mb5_release_get_id, tmp_rel, tmp_dict, "id");
-            cyanrip_log(ctx, 0, "    %i (id %s): %s (%s)", i + 1,
-                        dict_get(tmp_dict, "id") ? dict_get(tmp_dict, "id") : "unknown id",
+            READ_MB(mb5_release_get_date, release, tmp_dict, "date");
+            READ_MB(mb5_release_get_title, release, tmp_dict, "album");
+            READ_MB(mb5_release_get_id, release, tmp_dict, "id");
+            cyanrip_log(ctx, 0, "    %i (ID: %s): %s (%s)", i + 1,
+                        dict_get(tmp_dict, "id")    ? dict_get(tmp_dict, "id")    : "unknown id",
                         dict_get(tmp_dict, "album") ? dict_get(tmp_dict, "album") : "unknown album",
-                        dict_get(tmp_dict, "date") ? dict_get(tmp_dict, "date") : "unknown date");
+                        dict_get(tmp_dict, "date")  ? dict_get(tmp_dict, "date")  : "unknown date");
+            av_dict_free(&tmp_dict);
 
             /* Get CD count for the release */
-            Mb5MediumList medium_list = mb5_release_get_mediumlist(tmp_rel);
+            Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
             int num_cds = mb5_medium_list_size(medium_list);
             if (num_cds > 1)
                 cyanrip_log(ctx, 0, " (%i CDs)", num_cds);
 
             cyanrip_log(ctx, 0, "\n");
-            av_dict_free(&tmp_dict);
         }
         cyanrip_log(ctx, 0, "\n");
-        cyanrip_log(ctx, 0, "Please specify which release to use by adding the -R argument with an index or id.\n");
+        cyanrip_log(ctx, 0, "Please specify which release to use by adding the -R argument with an index or ID.\n");
         ret = 1;
         goto end_meta;
-    } else if ((release_idx < 0) && !release_str) { /* Both unspecified, but only one release, so w/e */
-        release_idx = 0;
     } else if (release_idx >= 0) { /* Release index specified */
         if ((release_idx < 1) || (release_idx > num_releases)) {
             cyanrip_log(ctx, 0, "Invalid release index %i specified, only have %i releases!\n", release_idx, num_releases);
             ret = 1;
             goto end_meta;
         }
-        release_idx -= 1;
+        release = mb5_release_list_item(release_list, release_idx - 1);
     } else if (release_str) { /* Release ID specified */
-        int chosen_id = -1;
-        for (int i = 0; i < num_releases; i++) {
-            Mb5Release tmp_rel = mb5_release_list_item(release_list, i);
+        int i = 0;
+        for (; i < num_releases; i++) {
+            release = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
-            READ_MB(mb5_release_get_id, tmp_rel, tmp_dict, "id");
-            if (dict_get(tmp_dict, "id") && strcmp(release_str, dict_get(tmp_dict, "id"))) {
+            READ_MB(mb5_release_get_id, release, tmp_dict, "id");
+            if (dict_get(tmp_dict, "id") && !strcmp(release_str, dict_get(tmp_dict, "id"))) {
                 av_dict_free(&tmp_dict);
-                chosen_id = i;
                 break;
             }
             av_dict_free(&tmp_dict);
         }
-        if (chosen_id < 0) {
-            cyanrip_log(ctx, 0, "Release id %s not found!\n", release_str);
+        if (i == num_releases) {
+            cyanrip_log(ctx, 0, "Release ID %s not found!\n", release_str);
             ret = 1;
             goto end_meta;
         }
-
-        release_idx = chosen_id;
+    } else {
+        release = mb5_release_list_item(release_list, 0);
     }
-
-    Mb5Release release = mb5_release_list_item(release_list, release_idx);
 
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
