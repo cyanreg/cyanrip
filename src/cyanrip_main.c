@@ -693,8 +693,10 @@ int main(int argc, char **argv)
         case 'R':
             p = NULL;
             mb_release_idx = strtol(optarg, &p, 10);
-            if (p != NULL && p[0] != ' ')
+            if (p != NULL && p[0] != ' ') {
                 mb_release_str = optarg;
+                mb_release_idx = -1;
+            }
             break;
         case 's':
             settings.offset = strtol(optarg, NULL, 10);
