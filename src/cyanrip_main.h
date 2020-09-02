@@ -27,8 +27,6 @@
 #include "version.h"
 
 #include <cdio/paranoia/paranoia.h>
-#include <discid/discid.h>
-#include <musicbrainz5/mb5_c.h>
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>

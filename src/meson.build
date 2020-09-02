@@ -25,6 +25,7 @@ dependencies = [
     dependency('libcdio_paranoia', version: '>= 10.2'),
     dependency('libdiscid', version: '>= 0.6'),
     dependency('libmusicbrainz5', version: '>= 5.1', static: static_build),
+    dependency('libcurl', version: '>=7.66.0'),
 
     # misc
     dependency('threads'),
@@ -38,6 +39,9 @@ sources = [
     'cyanrip_main.c',
 
     'fifo_frame.c',
+
+    'discid.c',
+    'musicbrainz.c',
 
     # Version
     vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],
