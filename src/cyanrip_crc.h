@@ -19,7 +19,7 @@
 #pragma once
 
 #include "cyanrip_main.h"
-#include "libavutil/crc.h"
+#include <libavutil/crc.h>
 
 typedef struct cyanrip_crc_ctx {
     const AVCRC *eac_ctx;
