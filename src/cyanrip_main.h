@@ -56,6 +56,14 @@ enum cyanrip_pregap_action {
     CYANRIP_PREGAP_TRACK,
 };
 
+enum CRIPAccuDBStatus {
+    CYANRIP_ACCUDB_DISABLED = 0,
+    CYANRIP_ACCUDB_NOT_FOUND,
+    CYANRIP_ACCUDB_ERROR,
+    CYANRIP_ACCUDB_MISMATCH,
+    CYANRIP_ACCUDB_FOUND,
+};
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *base_dst_folder;
@@ -67,6 +75,7 @@ typedef struct cyanrip_settings {
     int disable_mb;
     float bitrate;
     int decode_hdcd;
+    int disable_accurip;
     int enc_fifo_size;
     int overread_leadinout;
     int eject_on_success_rip;
@@ -101,8 +110,12 @@ typedef struct cyanrip_track {
 
     int computed_crcs;
     uint32_t eac_crc;
-    uint32_t acurip_crc_v1;
-    uint32_t acurip_crc_v2;
+    uint32_t acurip_checksum_v1;
+    uint32_t acurip_checksum_v2;
+
+    enum CRIPAccuDBStatus ar_db_status;
+    int ar_db_confidence;
+    uint32_t ar_db_checksum; /* We don't know which version it is */
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {
@@ -122,6 +135,7 @@ typedef struct cyanrip_ctx {
 
     /* Metadata */
     AVDictionary *meta;
+    enum CRIPAccuDBStatus ar_db_status;
 
     /* Destination folder */
     const char *base_dst_folder;

@@ -12,7 +12,7 @@ Features
  * Multi-disc album ripping
  * Able to encode to multiple formats in parallel
  * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
- * Provides EAC CRC32, Accurip V1 and V2 checksums (doesn't check or submit them)
+ * Provides and automatically verifies EAC CRC32, Accurip V1 and V2 checksums
 
 
 Compiling
@@ -23,6 +23,7 @@ Complete list of dependencies:
  * libcdio-paranoia
  * libdiscid
  * libmusicbrainz5
+ * libcurl
 
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
@@ -57,6 +58,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string |
 | -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below                    |
 | -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue             |
+| -A                   | Disables AccurateRip database query and comparison                                      |
 | -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                  |
 |                      | **Output options**                                                                      |
 | -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                  |

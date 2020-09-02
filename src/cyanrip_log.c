@@ -36,7 +36,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     cyanrip_samples_to_duration(t->nb_samples, length);
 
     if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "    Data bytes:    %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
+        cyanrip_log(ctx, 0, "    Data bytes:       %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
         return;
     }
 
@@ -47,29 +47,58 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
 
     if (t->preemphasis)
-        cyanrip_log(ctx, 0, "    Preemphasis:   present, deemphasis required\n");
-    cyanrip_log(ctx, 0, "    Duration:      %s\n", length);
-    cyanrip_log(ctx, 0, "    Samples:       %u\n", t->nb_samples);
+        cyanrip_log(ctx, 0, "    Preemphasis:      present, deemphasis required\n");
+    cyanrip_log(ctx, 0, "    Duration:         %s\n", length);
+    cyanrip_log(ctx, 0, "    Samples:          %u\n", t->nb_samples);
 
     if (t->pregap_lsn != CDIO_INVALID_LSN)
-        cyanrip_log(ctx, 0, "    Pregap LSN:    %i\n", t->pregap_lsn);
+        cyanrip_log(ctx, 0, "    Pregap LSN:       %i\n", t->pregap_lsn);
 
     if (t->frames_before_disc_start)
-        cyanrip_log(ctx, 0, "    Silent frames: %i prepended\n", t->frames_before_disc_start);
-    cyanrip_log(ctx, 0, "    Start LSN:     %i\n", t->start_lsn_sig);
+        cyanrip_log(ctx, 0, "    Silent frames:    %i prepended\n", t->frames_before_disc_start);
+    cyanrip_log(ctx, 0, "    Start LSN:        %i\n", t->start_lsn_sig);
     if (t->start_lsn != t->start_lsn_sig)
-        cyanrip_log(ctx, 0, "    Offset start:  %i\n", t->start_lsn);
+        cyanrip_log(ctx, 0, "    Offset start:     %i\n", t->start_lsn);
 
-    cyanrip_log(ctx, 0, "    End LSN:       %i\n", t->end_lsn_sig);
+    cyanrip_log(ctx, 0, "    End LSN:          %i\n", t->end_lsn_sig);
     if (t->end_lsn != t->end_lsn_sig)
-        cyanrip_log(ctx, 0, "    Offset end:    %i\n", t->end_lsn);
+        cyanrip_log(ctx, 0, "    Offset end:       %i\n", t->end_lsn);
     if (t->frames_after_disc_end)
-        cyanrip_log(ctx, 0, "    Silent frames: %i appended\n", t->frames_after_disc_end);
+        cyanrip_log(ctx, 0, "    Silent frames:    %i appended\n", t->frames_after_disc_end);
+
+    int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
+
+    if (!ctx->settings.disable_accurip) {
+        cyanrip_log(ctx, 0, "    Accurip:          %s", has_ar ? "found" : "not found");
+        if (has_ar)
+            cyanrip_log(ctx, 0, " (confidence: %i)\n", t->ar_db_confidence);
+        else
+            cyanrip_log(ctx, 0, "\n");
+    }
 
     if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:     0x%08x\n", t->eac_crc);
-        cyanrip_log(ctx, 0, "    Accurip v1:    0x%08x\n", t->acurip_crc_v1);
-        cyanrip_log(ctx, 0, "    Accurip v2:    0x%08x\n", t->acurip_crc_v2);
+        cyanrip_log(ctx, 0, "    EAC CRC32:        0x%08x\n", t->eac_crc);
+
+        int match_v1 = has_ar ? t->ar_db_checksum == t->acurip_checksum_v1 : 0;
+        int match_v2 = has_ar ? t->ar_db_checksum == t->acurip_checksum_v2 : 0;
+
+        cyanrip_log(ctx, 0, "    Accurip v1:       0x%08x", t->acurip_checksum_v1);
+        if (has_ar && match_v1)
+            cyanrip_log(ctx, 0, " (accurately ripped)\n");
+        else if (has_ar && !match_v2)
+            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->ar_db_checksum);
+        else
+            cyanrip_log(ctx, 0, "\n");
+
+        cyanrip_log(ctx, 0, "    Accurip v2:       0x%08x", t->acurip_checksum_v2);
+        if (has_ar && match_v2)
+            cyanrip_log(ctx, 0, " (accurately ripped)\n");
+        else if (has_ar && !match_v1)
+            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->ar_db_checksum);
+        else
+            cyanrip_log(ctx, 0, "\n");
+    } else if (has_ar) {
+        cyanrip_log(ctx, 0, "    Accurip checksum: 0x%08x (in database)\n", t->ar_db_checksum);
     }
 
     cyanrip_log(ctx, 0, "\n");
@@ -120,9 +149,16 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_frames_to_duration(ctx->duration_frames, duration);
 
     CLOG("DiscID:         %s\n", ctx->meta, "discid")
+    CLOG("CDDB ID:        %s\n", ctx->meta, "cddb")
     CLOG("Disc MCN:       %s\n", ctx->meta, "disc_mcn")
     CLOG("Album:          %s\n", ctx->meta, "album")
     CLOG("Album artist:   %s\n", ctx->meta, "album_artist")
+
+    cyanrip_log(ctx, 0, "AccurateRip:    %s\n", ctx->ar_db_status == CYANRIP_ACCUDB_ERROR ? "error" :
+                                                ctx->ar_db_status == CYANRIP_ACCUDB_NOT_FOUND ? "not found" :
+                                                ctx->ar_db_status == CYANRIP_ACCUDB_FOUND ? "found" :
+                                                ctx->ar_db_status == CYANRIP_ACCUDB_MISMATCH ? "mismatch" :
+                                                "disabled");
 
     cyanrip_log(ctx, 0, "Total time:     %s\n", duration);
 
@@ -135,6 +171,16 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     time_t t_c = time(NULL);
     struct tm *t_l = localtime(&t_c);
     strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
+
+    if (ctx->ar_db_status == CYANRIP_ACCUDB_FOUND) {
+        int accurip_verified = 0;
+        for (int i = 0; i < ctx->nb_tracks; i++) {
+            cyanrip_track *t = &ctx->tracks[i];
+            accurip_verified += t->ar_db_checksum == t->acurip_checksum_v1 ||
+                                t->ar_db_checksum == t->acurip_checksum_v2;
+        }
+        cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n\n", accurip_verified, ctx->nb_tracks);
+    }
 
     cyanrip_log(ctx, 0, "Paranoia status counts:\n");
 

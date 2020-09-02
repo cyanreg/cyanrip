@@ -56,6 +56,7 @@ static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, in
 
     s->eac_crc = av_crc(s->eac_ctx, s->eac_crc, data, bytes);
 
+    /* Loop over samples */
     for (int j = 0; j < (bytes >> 2); j++) {
         if (s->acu_mult >= s->acu_start && s->acu_mult <= s->acu_end) {
             uint32_t val = AV_RL32(&data[j*4]);
@@ -74,6 +75,6 @@ static inline void finalize_crc(cyanrip_crc_ctx *s, cyanrip_track *t)
 {
     t->computed_crcs = 1;
     t->eac_crc = s->eac_crc ^ UINT32_MAX;
-    t->acurip_crc_v1 = s->acu_sum_1;
-    t->acurip_crc_v2 = s->acu_sum_2;
+    t->acurip_checksum_v1 = s->acu_sum_1;
+    t->acurip_checksum_v2 = s->acu_sum_2;
 }

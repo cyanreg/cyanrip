@@ -24,6 +24,7 @@
 #include "cyanrip_crc.h"
 #include "discid.h"
 #include "musicbrainz.h"
+#include "accurip.h"
 #include "cyanrip_encode.h"
 #include "os_compat.h"
 
@@ -628,6 +629,7 @@ int main(int argc, char **argv)
     settings.bitrate = 128.0f;
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
+    settings.disable_accurip = 0;
     settings.enc_fifo_size = 32;
     settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
@@ -645,7 +647,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:")) != -1) {
+    while ((c = getopt(argc, argv, "hnAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -664,6 +666,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -R <int>/<string>     Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string\n");
             cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
             cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
+            cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and comparison\n");
             cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
@@ -761,6 +764,9 @@ int main(int argc, char **argv)
         case 'O':
             settings.overread_leadinout = 1;
             break;
+        case 'A':
+            settings.disable_accurip = 1;
+            break;
         case 'C':
             p = strtok(optarg, "/");
             discnumber = strtol(p, NULL, 10);
@@ -852,6 +858,10 @@ int main(int argc, char **argv)
     if (crip_fill_metadata(ctx,
                            !!album_metadata_ptr || track_metadata_ptr_cnt,
                            mb_release_idx, mb_release_str, discnumber))
+        return 1;
+
+    /* Fill in accurip data */
+    if (crip_fill_accurip(ctx))
         return 1;
 
     if (cover_image_path)

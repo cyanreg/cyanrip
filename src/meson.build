@@ -42,6 +42,7 @@ sources = [
 
     'discid.c',
     'musicbrainz.c',
+    'accurip.c',
 
     # Version
     vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],
