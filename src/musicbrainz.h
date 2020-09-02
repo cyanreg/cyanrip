@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#pragma once
+
 #include <cyanrip_main.h>
 
 /* Returns 0 on success, !0 on hard error */

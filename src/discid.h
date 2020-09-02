@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#pragma once
+
 #include <cyanrip_main.h>
 
 int crip_fill_discid(cyanrip_ctx *ctx);
