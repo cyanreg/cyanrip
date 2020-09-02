@@ -94,18 +94,15 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
 
     /* Format all the data in the needed way */
     uint32_t cddb_id = strtol(cddb_id_str, NULL, 16);
-    char cddb_id_str_no_0x[9] = { 0 };
-    char id_type_1_s[9] = { 0 }, id_type_2_s[9] = { 0 };
-    memcpy(cddb_id_str_no_0x, cddb_id_str + 2*(!strncmp(cddb_id_str, "0x", 2)), 8);
+    char id_type_1_s[9] = { 0 };
     snprintf(id_type_1_s, sizeof(id_type_1_s), "%08x", id_type_1);
-    snprintf(id_type_2_s, sizeof(id_type_2_s), "%08x", id_type_2);
 
     /* Finally compose the URL */
     char request_url[512] = { 0 };
-    snprintf(request_url, sizeof(request_url), "%s/%c/%c/%c/dBAR-%.3d-%s-%s-%s.bin",
+    snprintf(request_url, sizeof(request_url), "%s/%c/%c/%c/dBAR-%.3d-%s-%08x-%08x.bin",
              ACCURIP_DB_BASE_URL,
              id_type_1_s[7], id_type_1_s[6], id_type_1_s[5],
-             ctx->nb_tracks, id_type_1_s, id_type_2_s, cddb_id_str_no_0x);
+             ctx->nb_tracks, id_type_1_s, id_type_2, cddb_id);
 
     curl_easy_setopt(curl_ctx, CURLOPT_URL, request_url);
 
