@@ -122,7 +122,7 @@ The cover_art tag containing the path will not be encoded.
 Multi-disc albums
 -----------------
 
-cyanrip supports ripping multi-disc albums in the same output folder. To enable this, specify the -C argument followed by `disc/totaldiscs`. The album name should not be suffixed with the CD number in that case. *totaldiscs* can be omitted if unknown.
+cyanrip supports ripping multi-disc albums in the same output folder. To enable this manuall, specify the -C argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
 
 The track filenames will be `disc.track - title.ext`. The logfile will be `Album name CD<disc>.log`.
 

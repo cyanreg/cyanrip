@@ -20,6 +20,7 @@
 #include "cyanrip_log.h"
 
 #include <musicbrainz5/mb5_c.h>
+#include <libavutil/crc.h>
 
 #define READ_MB(FUNC, MBCTX, DICT, KEY)                                        \
     do {                                                                       \
@@ -47,6 +48,43 @@ static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *ke
     }
 }
 
+/* This is pretty awful but I blame musicbrainz entirely */
+static uint32_t crc_medium(Mb5Medium medium)
+{
+    uint32_t crc = UINT32_MAX;
+    const AVCRC *crc_tab = av_crc_get_table(AV_CRC_32_IEEE_LE);
+
+    Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
+    if (!track_list)
+        return 0;
+
+    for (int i = 0; i < mb5_track_list_size(track_list); i++) {
+        AVDictionary *tmp_dict = NULL;
+        Mb5Track track = mb5_track_list_item(track_list, i);
+        Mb5Recording recording = mb5_track_get_recording(track);
+        Mb5ArtistCredit credit;
+        if (recording) {
+            READ_MB(mb5_recording_get_title, recording, tmp_dict, "title");
+            credit = mb5_recording_get_artistcredit(recording);
+        } else {
+            READ_MB(mb5_track_get_title, track, tmp_dict, "title");
+            credit = mb5_track_get_artistcredit(track);
+        }
+        if (credit)
+            mb_credit(credit, tmp_dict, "artist");
+
+        if (dict_get(tmp_dict, "artist"))
+            crc = av_crc(crc_tab, crc, dict_get(tmp_dict, "artist"), strlen(dict_get(tmp_dict, "artist")));
+        if (dict_get(tmp_dict, "title"))
+            crc = av_crc(crc_tab, crc, dict_get(tmp_dict, "title"), strlen(dict_get(tmp_dict, "title")));
+
+        av_dict_free(&tmp_dict);
+        crc ^= i;
+    }
+
+    return crc;
+}
+
 static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, int discnumber)
 {
     /* Set totaldiscs if possible */
@@ -57,35 +95,48 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     if (num_cds == 1 && !discnumber)
         av_dict_set_int(&ctx->meta, "disc", 1, 0);
 
-    int media_idx;
+    Mb5Medium medium = NULL;
     if (discnumber) {
         if (discnumber < 1 || discnumber > num_cds) {
             cyanrip_log(ctx, 0, "Invalid disc number %i, release only has %i CDs\n", discnumber, num_cds);
             return 1;
         }
         medium_list = mb5_release_get_mediumlist(release);
-        media_idx = discnumber - 1;
+        medium = mb5_medium_list_item(medium_list, discnumber - 1);
+        if (!medium) {
+            cyanrip_log(ctx, 0, "Got empty medium list.\n");
+            return 1;
+        }
     } else {
         medium_list = mb5_release_media_matching_discid(release, discid);
         if (!medium_list) {
             cyanrip_log(ctx, 0, "No mediums matching DiscID.\n");
             return 0;
         }
-        media_idx = 0;
-    }
 
-    Mb5Medium medium = mb5_medium_list_item(medium_list, media_idx);
-    if (!medium) {
-        cyanrip_log(ctx, 0, "Got empty medium list.\n");
-        if (discnumber)
+        medium = mb5_medium_list_item(medium_list, 0);
+        if (!medium) {
+            cyanrip_log(ctx, 0, "Got empty medium list.\n");
             return 1;
-        goto end;
+        }
+
+        if (num_cds > 1) {
+            uint32_t medium_crc = crc_medium(medium);
+            medium_list = mb5_release_get_mediumlist(release);
+            for (int i = 0; i < num_cds; i++) {
+                Mb5Medium tmp_medium = mb5_medium_list_item(medium_list, i);
+                if (medium_crc == crc_medium(tmp_medium)) {
+                    av_dict_set_int(&ctx->meta, "disc", i + 1, 0);
+                    break;
+                }
+            }
+        }
     }
 
     Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
     if (!track_list) {
         cyanrip_log(ctx, 0, "Medium has no track list.\n");
-        goto end;
+        return 0;
     }
 
     for (int i = 0; i < mb5_track_list_size(track_list); i++) {
@@ -105,7 +156,6 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             mb_credit(credit, ctx->tracks[i].meta, "artist");
     }
 
-end:
     return 0;
 }
 
