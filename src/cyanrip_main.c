@@ -293,7 +293,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             bytes = -offs;
         }
 
-        process_crc(&crc_ctx, data, bytes);
+        process_checksums(&crc_ctx, data, bytes);
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
         if (ret) {
@@ -342,7 +342,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         }
 
         /* Update CRCs */
-        process_crc(&crc_ctx, data, bytes);
+        process_checksums(&crc_ctx, data, bytes);
 
         /* Decode and encode */
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
@@ -367,7 +367,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         if ((i == (frames_after_disc_end - 1)) && offs)
             bytes = offs;
 
-        process_crc(&crc_ctx, data, bytes);
+        process_checksums(&crc_ctx, data, bytes);
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
         if (ret) {

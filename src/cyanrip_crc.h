@@ -36,7 +36,7 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
     s->eac_ctx   = av_crc_get_table(AV_CRC_32_IEEE_LE);
     s->eac_crc   = UINT32_MAX;
     s->acu_start = 0;
-    s->acu_end   = t->nb_samples >> 1;
+    s->acu_end   = t->nb_samples;
     s->acu_mult  = 1;
     s->acu_sum_1 = 0x0;
     s->acu_sum_2 = 0x0;
@@ -49,7 +49,7 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
         s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
 }
 
-static inline void process_crc(cyanrip_crc_ctx *s, const uint8_t *data, int bytes)
+static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, int bytes)
 {
     if (!bytes)
         return;
