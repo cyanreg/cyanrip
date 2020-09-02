@@ -79,6 +79,7 @@ static uint32_t crc_medium(Mb5Medium medium)
             crc = av_crc(crc_tab, crc, dict_get(tmp_dict, "title"), strlen(dict_get(tmp_dict, "title")));
 
         av_dict_free(&tmp_dict);
+        crc ^= mb5_track_get_length(track);
         crc ^= i;
     }
 
