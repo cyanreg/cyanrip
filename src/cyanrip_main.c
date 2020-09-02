@@ -630,7 +630,6 @@ int main(int argc, char **argv)
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
     settings.disable_accurip = 0;
-    settings.enc_fifo_size = 32;
     settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;

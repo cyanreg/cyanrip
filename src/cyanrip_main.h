@@ -76,7 +76,6 @@ typedef struct cyanrip_settings {
     float bitrate;
     int decode_hdcd;
     int disable_accurip;
-    int enc_fifo_size;
     int overread_leadinout;
     int eject_on_success_rip;
     enum cyanrip_pregap_action pregap_action[99];

@@ -928,7 +928,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
 
     /* FIFO */
-    s->fifo = cr_frame_fifo_create(ctx->settings.enc_fifo_size, FRAME_FIFO_BLOCK_NO_INPUT | FRAME_FIFO_BLOCK_MAX_OUTPUT);
+    s->fifo = cr_frame_fifo_create(-1, FRAME_FIFO_BLOCK_NO_INPUT);
     if (!s->fifo)
         goto fail;
 
