@@ -182,13 +182,14 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         cyanrip_log(ctx, 0, "Multiple releases found in database for discid:\n");
         for (int i = 0; i < num_releases; i++) {
             Mb5Release tmp_rel = mb5_release_list_item(release_list, i);
-            READ_MB(mb5_release_get_date, tmp_rel, ctx->meta, "date");
-            READ_MB(mb5_release_get_title, tmp_rel, ctx->meta, "album");
-            READ_MB(mb5_release_get_id, tmp_rel, ctx->meta, "id");
+            AVDictionary *tmp_dict = NULL;
+            READ_MB(mb5_release_get_date, tmp_rel, tmp_dict, "date");
+            READ_MB(mb5_release_get_title, tmp_rel, tmp_dict, "album");
+            READ_MB(mb5_release_get_id, tmp_rel, tmp_dict, "id");
             cyanrip_log(ctx, 0, "    %i (id %s): %s (%s)", i + 1,
-                        dict_get(ctx->meta, "id") ? dict_get(ctx->meta, "id") : "unknown id",
-                        dict_get(ctx->meta, "album") ? dict_get(ctx->meta, "album") : "unknown album",
-                        dict_get(ctx->meta, "date") ? dict_get(ctx->meta, "date") : "unknown date");
+                        dict_get(tmp_dict, "id") ? dict_get(tmp_dict, "id") : "unknown id",
+                        dict_get(tmp_dict, "album") ? dict_get(tmp_dict, "album") : "unknown album",
+                        dict_get(tmp_dict, "date") ? dict_get(tmp_dict, "date") : "unknown date");
 
             /* Get CD count for the release */
             Mb5MediumList medium_list = mb5_release_get_mediumlist(tmp_rel);
@@ -197,9 +198,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
                 cyanrip_log(ctx, 0, " (%i CDs)", num_cds);
 
             cyanrip_log(ctx, 0, "\n");
-            av_dict_set(&ctx->meta, "date", "", 0);
-            av_dict_set(&ctx->meta, "album", "", 0);
-            av_dict_set(&ctx->meta, "id", "", 0);
+            av_dict_free(&tmp_dict);
         }
         cyanrip_log(ctx, 0, "\n");
         cyanrip_log(ctx, 0, "Please specify which release to use by adding the -R argument with an index or id.\n");
