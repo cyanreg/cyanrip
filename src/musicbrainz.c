@@ -221,6 +221,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             AVDictionary *tmp_dict = NULL;
             READ_MB(mb5_release_get_id, tmp_rel, tmp_dict, "id");
             if (dict_get(tmp_dict, "id") && strcmp(release_str, dict_get(tmp_dict, "id"))) {
+                av_dict_free(&tmp_dict);
                 chosen_id = i;
                 break;
             }
