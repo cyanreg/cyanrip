@@ -128,6 +128,8 @@ The track filenames will be `disc.track - title.ext`. The logfile will be `Album
 
 As well as using the -C argument, you can also specify the `disc=number:totaldiscs=number` in the album/track metadata.
 
+If each disc has a title, you should use the `discname` tag if you're manually setting tags, which is what MusicBrainz will set if available.
+
 
 HDCD decoding
 -------------
