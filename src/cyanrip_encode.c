@@ -475,7 +475,7 @@ static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         if (status < 0)
             return status;
 
-        ret = cr_frame_fifo_push(enc_ctx[i]->fifo, frame ? av_frame_clone(frame) : NULL);
+        ret = cr_frame_fifo_push(enc_ctx[i]->fifo, frame);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error pushing frame to FIFO: %s!\n", av_err2str(ret));
             return ret;
