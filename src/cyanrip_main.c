@@ -666,7 +666,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -R <int>/<string>     Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string\n");
             cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
             cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
-            cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and comparison\n");
+            cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
             cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
