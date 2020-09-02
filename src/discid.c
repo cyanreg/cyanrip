@@ -37,6 +37,11 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     /* Set metadata */
     const char *disc_id_str = discid_get_id(discid);
     av_dict_set(&ctx->meta, "discid", disc_id_str, 0);
+
+    const char *cddb_id_str = discid_get_freedb_id(discid);
+    av_dict_set(&ctx->meta, "cddb", "0x", 0);
+    av_dict_set(&ctx->meta, "cddb", cddb_id_str, AV_DICT_APPEND);
+
     discid_free(discid);
 
     return 0;
