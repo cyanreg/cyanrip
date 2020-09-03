@@ -131,9 +131,9 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "HDCD decoding:  %s\n", ctx->settings.decode_hdcd ? "enabled" : "disabled");
     CLOG("Album Art:      %s\n", ctx->meta, "cover_art")
     cyanrip_log(ctx, 0, "Base folder:    %s\n", ctx->base_dst_folder);
-    cyanrip_log(NULL, 0, "Outputs:        ");
+    cyanrip_log(ctx, 0, "Outputs:        ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
-        cyanrip_log(NULL, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
+        cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");
     cyanrip_log(ctx, 0, "\n");
     CLOG("Disc number:    %s\n", ctx->meta, "disc");
     CLOG("Total discs:    %s\n", ctx->meta, "totaldiscs");
