@@ -147,3 +147,14 @@ HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_
 ```
 
 Should a track be detected as HDCD, it would be safe to proceed decoding all of the disc. The resulting encoded files will have a bit depth of at least 24 bits.
+
+
+Paranoia status count
+---------------------
+
+At the end of the ripping process, cyanrip will print and log a summary of cdparanoia's status during ripping. This can be used to estimate the disc/drive's health.
+
+An idealized disc and drive will only log `READ: $number$` and nothing else. This happens while ripping from a file. In general `READ`/`VERIFY`/`OVERLAP` are normal and will happen when
+ripping a brand new CD with a new drive. `FIXUP_EDGE`/`FIXUP_ATOM` usually happen if cdparanoia is somewhat struggling, but both are recoverable and lossless. `FIXUP_DROPPED`/`FIXUP_DUPED`
+indicate more severe errors, but are still recoverable and lossless, though a hard read error will often follow. `READERR` indicates that cdparanoia gave up after all retries and
+outputted zeroes for all samples it couldn't recover.
