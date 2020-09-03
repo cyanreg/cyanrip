@@ -4,7 +4,7 @@ Rips and encodes audio CDs with the least effort required from user. Cross platf
 
 Features
 --------
- * Automatic tag lookup from the musicbrainz database
+ * Automatic tag lookup from the MusicBrainz database
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation and error recovery via cd-paranoia
  * Full pregap handling
@@ -12,7 +12,7 @@ Features
  * Multi-disc album ripping
  * Able to encode to multiple formats in parallel
  * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
- * Provides and automatically verifies EAC CRC32, Accurip V1 and V2 checksums
+ * Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums
 
 
 Compiling
@@ -39,7 +39,7 @@ cyanrip can be also built and ran under Windows using MinGW
 CLI
 ---
 
-Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a musicbrainz lookup.
+Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a MusicBrainz lookup.
 
 | Argument             | Description                                                                             |
 |----------------------|-----------------------------------------------------------------------------------------|
@@ -74,7 +74,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 Metadata
 --------
 
-In case the Musicbrainz database doesn't contain the disc information, is incomplete, or incorrect, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
+In case the MusicBrainz database doesn't contain the disc information, is incomplete, or incorrect, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
 
 `-a album="Name":album_artist="Artist":date="2018":random_tag="Value"`
 
@@ -85,7 +85,7 @@ All key=value pair tags must be separated by *:*. For track tags, the syntax is 
 For convenience, if any of the first 2 metadata tags of tracks are missing a key, such as with `-t 2=some_title:some_artist:key=value`, cyanrip will automatically prepend `title=` and `artist=` such that it becomes `-t title=some_title:artist=some_artist:key=value`.
 A missing key in tag 1 is always considered a title while a missing key in tag 2 is always considered artist, so either can be skipped with no effect.
 
-The precedence of tags is Track tags > Album tags > Musicbrainz tags.
+The precedence of tags is Track tags > Album tags > MusicBrainz tags.
 
 
 Pregap handling
@@ -122,7 +122,7 @@ The cover_art tag containing the path will not be encoded.
 Multi-disc albums
 -----------------
 
-cyanrip supports ripping multi-disc albums in the same output folder. To enable this manuall, specify the -C argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
+cyanrip supports ripping multi-disc albums in the same output folder. To enable this manually, specify the -C argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
 
 The track filenames will be `disc.track - title.ext`. The logfile will be `Album name CD<disc>.log`.
 
