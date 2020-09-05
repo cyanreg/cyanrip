@@ -174,15 +174,21 @@ static void crip_fill_mcn(cyanrip_ctx *ctx)
     }
 }
 
+static void track_set_creation_time(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    if (dict_get(t->meta, "creation_time"))
+        return;
+
+    char t_s[64];
+    time_t t_c = time(NULL);
+    struct tm *t_l = localtime(&t_c);
+    strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
+    av_dict_set(&t->meta, "creation_time", t_s, 0);
+}
+
 static void copy_album_to_track_meta(cyanrip_ctx *ctx)
 {
     for (int i = 0; i < ctx->nb_tracks; i++) {
-        char t_s[64];
-        time_t t_c = time(NULL);
-        struct tm *t_l = localtime(&t_c);
-        strftime(t_s, sizeof(t_s), "%Y-%m-%dT%H:%M:%S", t_l);
-
-        av_dict_set(&ctx->tracks[i].meta, "creation_time", t_s, 0);
         av_dict_set(&ctx->tracks[i].meta, "comment", "cyanrip "PROJECT_VERSION_STRING, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "track", ctx->tracks[i].number, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "tracktotal", ctx->nb_tracks, 0);
@@ -266,6 +272,9 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     track_read_extra(ctx, t);
 
     cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
+
+    /* Set creation time at the start of ripping */
+    track_set_creation_time(ctx, t);
 
     cyanrip_dec_ctx *dec_ctx = { NULL };
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
