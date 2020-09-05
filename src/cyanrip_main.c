@@ -915,6 +915,22 @@ int main(int argc, char **argv)
                         av_err2str(err));
             return 1;
         }
+
+        /* Fixup title tag mistake */
+        const char *title = dict_get(ctx->meta, "title");
+        const char *album = dict_get(ctx->meta, "album");
+        if (title && !album) {
+            av_dict_set(&ctx->meta, "album", title, 0);
+            av_dict_set(&ctx->meta, "title", "", 0);
+        }
+
+        /* Populate artist tag if missing/unspecified */
+        const char *album_artist = dict_get(ctx->meta, "album_artist");
+        const char *artist = dict_get(ctx->meta, "artist");
+        if (album_artist && !artist)
+            av_dict_set(&ctx->meta, "artist", album_artist, 0);
+        else if (artist && !album_artist)
+            av_dict_set(&ctx->meta, "album_artist", artist, 0);
     }
 
     if (ctx->settings.base_dst_folder)

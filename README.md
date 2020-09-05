@@ -86,6 +86,8 @@ All key=value pair tags must be separated by *:*. For track tags, the syntax is 
 For convenience, if any of the first 2 metadata tags of tracks are missing a key, such as with `-t 2=some_title:some_artist:key=value`, cyanrip will automatically prepend `title=` and `artist=` such that it becomes `-t title=some_title:artist=some_artist:key=value`.
 A missing key in tag 1 is always considered a title while a missing key in tag 2 is always considered artist, so either can be skipped with no effect.
 
+For album tags, if either `artist` or `album_artist` are unset, their values will be mirrored if one is available.
+
 The precedence of tags is Track tags > Album tags > MusicBrainz tags.
 
 
