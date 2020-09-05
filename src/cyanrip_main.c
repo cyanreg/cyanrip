@@ -58,6 +58,14 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
     *s = NULL;
 }
 
+static const paranoia_mode_t paranoia_level_map[] = {
+    [0] = PARANOIA_MODE_DISABLE, /* Disable everything */
+    [1] = PARANOIA_MODE_OVERLAP, /* Perform overlapped reads */
+    [2] = PARANOIA_MODE_OVERLAP | PARANOIA_MODE_VERIFY, /* Perform and verify overlapped reads */
+    [3] = PARANOIA_MODE_FULL ^ PARANOIA_MODE_NEVERSKIP, /* Maximum, but do allow skipping sectors */
+};
+const int crip_max_paranoia_level = (sizeof(paranoia_level_map) / sizeof(paranoia_level_map[0])) - 1;
+
 static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 {
     cyanrip_ctx *ctx = av_mallocz(sizeof(cyanrip_ctx));
@@ -128,10 +136,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return AVERROR(EINVAL);
     }
 
-    if (ctx->mcap & CDIO_DRIVE_CAP_MISC_FILE)
-        cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_DISABLE);
-    else
-        cdio_paranoia_modeset(ctx->paranoia, PARANOIA_MODE_FULL);
+    cdio_paranoia_modeset(ctx->paranoia, paranoia_level_map[settings->paranoia_level]);
 
     ctx->start_lsn = 0;
 
@@ -633,6 +638,7 @@ int main(int argc, char **argv)
     settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
+    settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
 
     memset(settings.pregap_action, 0, sizeof(settings.pregap_action));
 
@@ -646,7 +652,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
 
-    while ((c = getopt(argc, argv, "hnAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:")) != -1) {
+    while ((c = getopt(argc, argv, "hnAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -656,6 +662,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries to read a frame (default: 25)\n");
             cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
             cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
+            cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
             cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
             cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
             cyanrip_log(ctx, 0, "\n  Metadata options:\n");
@@ -682,6 +689,19 @@ int main(int argc, char **argv)
             settings.speed = abs((int)strtol(optarg, NULL, 10));
             if (settings.speed < 0) {
                 cyanrip_log(ctx, 0, "Invalid drive speed!\n");
+                return 1;
+            }
+            break;
+        case 'P':
+            if (!strcmp(optarg, "none"))
+                settings.paranoia_level = 0;
+            else if (!strcmp(optarg, "max"))
+                settings.paranoia_level = crip_max_paranoia_level;
+            else
+                settings.paranoia_level = (int)strtol(optarg, NULL, 10);
+            if (settings.paranoia_level < 0 || settings.paranoia_level > crip_max_paranoia_level) {
+                cyanrip_log(ctx, 0, "Invalid paranoia level %i must be between 0 and %i!\n",
+                            settings.paranoia_level, crip_max_paranoia_level);
                 return 1;
             }
             break;

@@ -49,6 +49,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)          |
 | -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                    |
 | -p `number=string`   | Specifies what to do with the pregap, syntax is described below                         |
+| -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely  |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping        |
 | -H                   | Enable HDCD decoding, read below for details                                            |
 |                      | **Metadata options**                                                                    |

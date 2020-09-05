@@ -127,6 +127,12 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                     (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
     cyanrip_log(ctx, 0, "C2 errors:      %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
+    if (ctx->settings.paranoia_level == crip_max_paranoia_level)
+        cyanrip_log(ctx, 0, "Paranoia level: %s\n", "max");
+    else if (ctx->settings.paranoia_level == 0)
+        cyanrip_log(ctx, 0, "Paranoia level: %s\n", "none");
+    else
+        cyanrip_log(ctx, 0, "Paranoia level: %i\n", ctx->settings.paranoia_level);
     cyanrip_log(ctx, 0, "Frame retries:  %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "HDCD decoding:  %s\n", ctx->settings.decode_hdcd ? "enabled" : "disabled");
     CLOG("Album Art:      %s\n", ctx->meta, "cover_art")

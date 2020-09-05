@@ -81,6 +81,7 @@ typedef struct cyanrip_settings {
     enum cyanrip_pregap_action pregap_action[99];
     int rip_indices_count;
     int rip_indices[99];
+    int paranoia_level;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -147,6 +148,7 @@ typedef struct cyanrip_ctx {
 } cyanrip_ctx;
 
 extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
+extern const int crip_max_paranoia_level;
 
 static inline const char *dict_get(AVDictionary *dict, const char *key)
 {
