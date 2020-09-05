@@ -88,7 +88,8 @@ typedef struct cyanrip_settings {
 } cyanrip_settings;
 
 typedef struct cyanrip_track {
-    int number;
+    int number; /* Human readable track number, may be 0 */
+    int cd_track_number; /* Actual track on the CD, may be 0 */
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
 
     int track_is_data;
@@ -126,7 +127,8 @@ typedef struct cyanrip_ctx {
     cyanrip_settings   settings;
 
     cyanrip_track tracks[99];
-    int nb_tracks;
+    int nb_tracks; /* Total number of output tracks */
+    int nb_cd_tracks; /* Total tracks the CD signals */
 
     /* Drive caps */
     cdio_drive_read_cap_t  rcap;

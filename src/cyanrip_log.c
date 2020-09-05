@@ -143,7 +143,7 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "\n");
     CLOG("Disc number:    %s\n", ctx->meta, "disc");
     CLOG("Total discs:    %s\n", ctx->meta, "totaldiscs");
-    cyanrip_log(ctx, 0, "Disc tracks:    %i\n", ctx->nb_tracks);
+    cyanrip_log(ctx, 0, "Disc tracks:    %i\n", ctx->nb_cd_tracks);
     cyanrip_log(ctx, 0, "Tracks to rip:  %s", (ctx->settings.rip_indices_count == -1) ? "all" : !ctx->settings.rip_indices_count ? "none" : "");
     if (ctx->settings.rip_indices_count != -1) {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++)
@@ -182,8 +182,10 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
         int accurip_verified = 0;
         for (int i = 0; i < ctx->nb_tracks; i++) {
             cyanrip_track *t = &ctx->tracks[i];
-            accurip_verified += t->ar_db_checksum == t->acurip_checksum_v1 ||
-                                t->ar_db_checksum == t->acurip_checksum_v2;
+            if (t->ar_db_status == CYANRIP_ACCUDB_FOUND &&
+                (t->ar_db_checksum == t->acurip_checksum_v1 ||
+                 t->ar_db_checksum == t->acurip_checksum_v2))
+                accurip_verified++;
         }
         cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n\n", accurip_verified, ctx->nb_tracks);
     }

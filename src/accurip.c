@@ -29,7 +29,7 @@ static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_t
     uint64_t idt1 = 0x0;
     uint64_t idt2 = 0x0;
 
-    for (int i = 0; i < ctx->nb_tracks; i++) {
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         uint64_t nb = i + 1;
 
         if (!cdio_cddap_track_audiop(ctx->drive, nb))
@@ -42,7 +42,7 @@ static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_t
 
     uint64_t last = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
     idt1 += last;
-    idt2 += last * (ctx->nb_tracks + 1);
+    idt2 += last * (ctx->nb_cd_tracks + 1);
 
     idt1 &= 0xffffffff;
     idt2 &= 0xffffffff;
@@ -102,7 +102,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     snprintf(request_url, sizeof(request_url), "%s/%c/%c/%c/dBAR-%.3d-%s-%08x-%08x.bin",
              ACCURIP_DB_BASE_URL,
              id_type_1_s[7], id_type_1_s[6], id_type_1_s[5],
-             ctx->nb_tracks, id_type_1_s, id_type_2, cddb_id);
+             ctx->nb_cd_tracks, id_type_1_s, id_type_2, cddb_id);
 
     curl_easy_setopt(curl_ctx, CURLOPT_URL, request_url);
 
@@ -162,7 +162,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     GetByteContext gbc = { 0 };
     bytestream2_init(&gbc, rctx.data, rctx.size);
 
-    if (bytestream2_get_byte(&gbc) != ctx->nb_tracks ||
+    if (bytestream2_get_byte(&gbc) != ctx->nb_cd_tracks ||
         bytestream2_get_le32(&gbc) != id_type_1 ||
         bytestream2_get_le32(&gbc) != id_type_2 ||
         bytestream2_get_le32(&gbc) != cddb_id) {
@@ -173,7 +173,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
 
     ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
 
-    for (int i = 0; i < ctx->nb_tracks; i++) {
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         ctx->tracks[i].ar_db_status = CYANRIP_ACCUDB_FOUND;
         ctx->tracks[i].ar_db_confidence = bytestream2_get_byte(&gbc);
         ctx->tracks[i].ar_db_checksum = bytestream2_get_le32(&gbc);

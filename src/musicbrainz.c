@@ -143,7 +143,7 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     }
 
     for (int i = 0; i < mb5_track_list_size(track_list); i++) {
-        if (i >= ctx->nb_tracks)
+        if (i >= ctx->nb_cd_tracks)
             break;
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);

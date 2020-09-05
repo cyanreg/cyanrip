@@ -143,7 +143,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     ctx->end_lsn = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK) - 1;
     ctx->duration_frames = ctx->end_lsn - ctx->start_lsn + 1;
 
-    ctx->nb_tracks = cdio_cddap_tracks(ctx->drive);
+    ctx->nb_tracks = ctx->nb_cd_tracks = cdio_cddap_tracks(ctx->drive);
     if ((ctx->nb_tracks < 1) || (ctx->nb_tracks > CDIO_CD_MAX_TRACKS)) {
         cyanrip_log(ctx, 0, "Invalid number of tracks: %i!\n", ctx->nb_tracks);
         ctx->nb_tracks = 0;
@@ -152,7 +152,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     }
 
     for (int i = 0; i < ctx->nb_tracks; i++)
-        ctx->tracks[i].number = i + 1;
+        ctx->tracks[i].number = ctx->tracks[i].cd_track_number = i + 1;
 
     /* For hot removal detection - init this so we can detect changes */
     cdio_get_media_changed(ctx->cdio);
@@ -232,12 +232,12 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
 static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (!t->track_is_data) {
-        t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->number);
+        t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->cd_track_number);
         if (t->preemphasis)
             av_dict_set(&t->meta, "deemphasis", "required", 0);
 
         if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
-            const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->number);
+            const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);
             if (isrc_str) {
                 if (strlen(isrc_str))
                     av_dict_set(&t->meta, "isrc", isrc_str, 0);
@@ -540,13 +540,14 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
                 lt->end_lsn = ct->pregap_lsn - 1;
             break;
         case CYANRIP_PREGAP_TRACK:
-            cyanrip_log(ctx, 0, "splitting off into a new track, number %i\n", ct->number);
+            cyanrip_log(ctx, 0, "splitting off into a new track, number %i\n", ct->number > 1 ? ct->number : 0);
 
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
 
-            for (int j = i; j < ctx->nb_tracks; j++)
-                ctx->tracks[j].number++;
+            if (ct->number > 1) /* Push all track numbers up if needed */
+                for (int j = i; j < ctx->nb_tracks; j++)
+                    ctx->tracks[j].number++;
 
             memmove(&ctx->tracks[i + 1], &ctx->tracks[i],
                     sizeof(cyanrip_track)*(ctx->nb_tracks - i));
@@ -562,6 +563,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
             nt->pregap_lsn = CDIO_INVALID_LSN;
             nt->start_lsn = ct->pregap_lsn;
             nt->end_lsn = ct->start_lsn - 1;
+            nt->cd_track_number = ct->cd_track_number;
 
             ct->pregap_lsn = CDIO_INVALID_LSN;
         }
@@ -929,9 +931,17 @@ int main(int argc, char **argv)
             continue;
 
         char *end = NULL;
-        int track_num = strtol(track_metadata_ptr[i], &end, 10) - 1;
-        if (track_num < 0 || track_num >= ctx->nb_tracks) {
-            cyanrip_log(ctx, 0, "Invalid track number %i\n", track_num + 1);
+        int u_nb = strtol(track_metadata_ptr[i], &end, 10);
+
+        /* Verify all indices */
+        int track_idx = 0;
+        for (; track_idx < ctx->nb_tracks; track_idx++) {
+            if (ctx->tracks[track_idx].number == u_nb)
+                break;
+        }
+        if (track_idx >= ctx->nb_tracks) {
+            cyanrip_log(ctx, 0, "Invalid track number %i, list has %i tracks!\n",
+                        u_nb, ctx->nb_tracks);
             return 1;
         }
 
@@ -974,7 +984,7 @@ int main(int argc, char **argv)
         }
 
         /* Parse */
-        int err = av_dict_parse_string(&ctx->tracks[track_num].meta,
+        int err = av_dict_parse_string(&ctx->tracks[track_idx].meta,
                                        copy, "=", ":", 0);
         av_free(copy);
         if (err) {
@@ -1010,17 +1020,31 @@ int main(int argc, char **argv)
         }
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
-            int index = ctx->settings.rip_indices[i] - 1;
-            if (index < 0 || index >= ctx->nb_tracks) {
-                cyanrip_log(ctx, 0, "Invalid rip index %i, disc has %i tracks!\n",
-                            index + 1, ctx->nb_tracks);
+            int idx = ctx->settings.rip_indices[i];
+
+            /* Verify all indices */
+            int j = 0;
+            for (; j < ctx->nb_tracks; j++) {
+                if (ctx->tracks[j].number == idx)
+                    break;
+            }
+            if (j >= ctx->nb_tracks) {
+                cyanrip_log(ctx, 0, "Invalid rip index %i, list has %i tracks!\n",
+                            idx, ctx->nb_tracks);
                 ctx->total_error_count++;
                 goto end;
             }
         }
+
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
-            int index = ctx->settings.rip_indices[i] - 1;
-            if (cyanrip_rip_track(ctx, &ctx->tracks[index]))
+            int idx = ctx->settings.rip_indices[i];
+            int j = 0;
+            for (; j < ctx->nb_tracks; j++) {
+                if (ctx->tracks[j].number == idx)
+                    break;
+            }
+
+            if (cyanrip_rip_track(ctx, &ctx->tracks[j]))
                 break;
             if (quit_now)
                 break;
