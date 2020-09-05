@@ -686,7 +686,7 @@ int main(int argc, char **argv)
             return 0;
             break;
         case 'S':
-            settings.speed = abs((int)strtol(optarg, NULL, 10));
+            settings.speed = (int)strtol(optarg, NULL, 10);
             if (settings.speed < 0) {
                 cyanrip_log(ctx, 0, "Invalid drive speed!\n");
                 return 1;
