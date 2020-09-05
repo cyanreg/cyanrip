@@ -7,11 +7,11 @@ Features
  * Automatic tag lookup from the MusicBrainz database
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation and error recovery via cd-paranoia
- * Full pregap handling
- * HDCD decoding
- * Multi-disc album ripping
+ * [Full pregap handling](#pregap-handling)
+ * [HDCD detection and decoding](#hdcd-decoding)
+ * [Multi-disc album ripping](#multi-disc-albums)
  * Able to encode to multiple formats in parallel
- * Able to embed in cover images to mp3, flac, aac and opus (both in mp4)
+ * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
  * Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums
 
 
