@@ -624,6 +624,48 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "%s\n", gaps ? "" : "    None signalled\n");
 }
 
+/* Key 1 and 2 must be set, and src will be modified */
+static char *append_missing_keys(char *src, const char *key1, const char *key2)
+{
+    /* Copy string with enough space to append extra */
+    char *copy = av_mallocz(strlen(src) + strlen(key1) + strlen(key2) + 1);
+    memcpy(copy, src, strlen(src));
+
+    int add_key1_offset = -1;
+    int add_key2_offset = -1;
+
+    /* Look for keyless entries */
+    int count = 0;
+    char *p = strtok(src, ":");
+    while (p != NULL) {
+        if (!strstr(p, "=")) {
+            if (count == 0)
+                add_key1_offset = p - src;
+            else if (count == 1)
+                add_key2_offset = p - src;
+        }
+        p = strtok(NULL, ":");
+        if (++count >= 2)
+            break;
+    }
+
+    /* Prepend key1 if missing */
+    if (add_key1_offset >= 0) {
+        memmove(&copy[add_key1_offset + strlen(key1)], &copy[add_key1_offset], strlen(copy) - add_key1_offset);
+        memcpy(&copy[add_key1_offset], key1, strlen(key1));
+        if (add_key2_offset >= 0)
+            add_key2_offset += strlen(key1);
+    }
+
+    /* Prepend key2 if missing */
+    if (add_key2_offset >= 0) {
+        memmove(&copy[add_key2_offset + strlen(key2)], &copy[add_key2_offset], strlen(copy) - add_key2_offset);
+        memcpy(&copy[add_key2_offset], key2, strlen(key2));
+    }
+
+    return copy;
+}
+
 int main(int argc, char **argv)
 {
     cyanrip_ctx *ctx = NULL;
@@ -908,8 +950,12 @@ int main(int argc, char **argv)
 
     /* Read user album metadata */
     if (album_metadata_ptr) {
-        int err = av_dict_parse_string(&ctx->meta, album_metadata_ptr,
-                                       "=", ":", 0);
+        /* Fixup */
+        char *copy = append_missing_keys(album_metadata_ptr, "album=", "album_artist=");
+
+        /* Parse */
+        int err = av_dict_parse_string(&ctx->meta, copy, "=", ":", 0);
+        av_free(copy);
         if (err) {
             cyanrip_log(ctx, 0, "Error reading album tags: %s\n",
                         av_err2str(err));
@@ -972,41 +1018,8 @@ int main(int argc, char **argv)
 
         end += 1; /* Move past equal sign */
 
-        /* Copy string with enough space to append extra */
-        char *copy = av_mallocz(strlen(end) + strlen("title=") + strlen("artist=") + 1);
-        memcpy(copy, end, strlen(end));
-
-        int add_title_offset = -1;
-        int add_artist_offset = -1;
-
-        /* Look for keyless entries */
-        int count = 0;
-        p = strtok(end, ":");
-        while(p != NULL) {
-            if (!strstr(p, "=")) {
-                if (count == 0)
-                    add_title_offset = p - end;
-                else if (count == 1)
-                    add_artist_offset = p - end;
-            }
-            p = strtok(NULL, ":");
-            if (++count >= 2)
-                break;
-        }
-
-        /* Prepend track title if missing */
-        if (add_title_offset >= 0) {
-            memmove(&copy[add_title_offset + strlen("title=")], &copy[add_title_offset], strlen(copy) - add_title_offset);
-            memcpy(&copy[add_title_offset], "title=", strlen("title="));
-            if (add_artist_offset >= 0)
-                add_artist_offset += strlen("title=");
-        }
-
-        /* Prepend track artist if missing */
-        if (add_artist_offset >= 0) {
-            memmove(&copy[add_artist_offset + strlen("artist=")], &copy[add_artist_offset], strlen(copy) - add_artist_offset);
-            memcpy(&copy[add_artist_offset], "artist=", strlen("artist="));
-        }
+        /* Fixup */
+        char *copy = append_missing_keys(end, "title=", "artist=");
 
         /* Parse */
         int err = av_dict_parse_string(&ctx->tracks[track_idx].meta,
