@@ -1,6 +1,6 @@
-cyanrip
-=======
-Rips and encodes audio CDs with the least effort required from user. Cross platform and very accurate.
+[cyanrip](#cyanrip)
+===================
+Fully featured CD ripping program able to take out most of the tedium. Fully accurate, has advanced features most rippers don't, yet has no bloat and is cross-platform.
 
 Features
 --------
@@ -13,6 +13,7 @@ Features
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
  * Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums
+ * Accurate ripping verification of partially damaged tracks
  * Automatic drive offset finding
 
 

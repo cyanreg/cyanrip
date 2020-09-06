@@ -28,6 +28,7 @@ typedef struct cyanrip_crc_ctx {
     uint32_t acu_end;
     uint32_t acu_mult;
     uint32_t acu_sum_1;
+    uint32_t acu_sum_1_450;
     uint32_t acu_sum_2;
 } cyanrip_crc_ctx;
 
@@ -39,6 +40,7 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
     s->acu_end   = t->nb_samples;
     s->acu_mult  = 1;
     s->acu_sum_1 = 0x0;
+    s->acu_sum_1_450 = 0x0;
     s->acu_sum_2 = 0x0;
 
     t->computed_crcs = 0;
@@ -67,6 +69,11 @@ static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, in
             s->acu_sum_2 += hi;
             s->acu_sum_2 += lo;
         }
+        if (((s->acu_mult - 1) >= (450 * (CDIO_CD_FRAMESIZE_RAW >> 2))) &&
+            ((s->acu_mult - 1)  < (451 * (CDIO_CD_FRAMESIZE_RAW >> 2)))) {
+            uint32_t mult = s->acu_mult - (450 * (CDIO_CD_FRAMESIZE_RAW >> 2));
+            s->acu_sum_1_450 += AV_RL32(&data[j*4]) * mult;
+        }
         s->acu_mult++;
     }
 }
@@ -76,5 +83,6 @@ static inline void finalize_crc(cyanrip_crc_ctx *s, cyanrip_track *t)
     t->computed_crcs = 1;
     t->eac_crc = s->eac_crc ^ UINT32_MAX;
     t->acurip_checksum_v1 = s->acu_sum_1;
+    t->acurip_checksum_v1_450 = s->acu_sum_1_450;
     t->acurip_checksum_v2 = s->acu_sum_2;
 }

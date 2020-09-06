@@ -112,6 +112,7 @@ typedef struct cyanrip_track {
     int computed_crcs;
     uint32_t eac_crc;
     uint32_t acurip_checksum_v1;
+    uint32_t acurip_checksum_v1_450;
     uint32_t acurip_checksum_v2;
 
     enum CRIPAccuDBStatus ar_db_status;

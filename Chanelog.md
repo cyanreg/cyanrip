@@ -1,3 +1,9 @@
+Next
+====
+ - Automated CD drive offset finding
+ - Verification of partially damaged tracks
+ - Tagging usability improvements
+
 0.6.0
 =====
  - __No change in actual audio data ripped, rerip if you want to verify with accurip.__

@@ -97,6 +97,16 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
             cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->ar_db_checksum);
         else
             cyanrip_log(ctx, 0, "\n");
+
+        if (!has_ar || (!match_v1 && !match_v2)) {
+            cyanrip_log(ctx, 0, "    Accurip v1 450:   0x%08x", t->ar_db_checksum_450);
+            if (has_ar && t->acurip_checksum_v1_450 == t->ar_db_checksum_450)
+                cyanrip_log(ctx, 0, " (matches Accurip DB, track is partially accurately ripped)\n");
+            else if (has_ar)
+                cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->acurip_checksum_v1_450);
+            else
+                cyanrip_log(ctx, 0, "\n");
+        }
     } else if (has_ar) {
         cyanrip_log(ctx, 0, "    Accurip checksum: 0x%08x (in database)\n", t->ar_db_checksum);
     }
@@ -180,14 +190,22 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 
     if (ctx->ar_db_status == CYANRIP_ACCUDB_FOUND) {
         int accurip_verified = 0;
+        int accurip_partial = 0;
         for (int i = 0; i < ctx->nb_tracks; i++) {
             cyanrip_track *t = &ctx->tracks[i];
-            if (t->ar_db_status == CYANRIP_ACCUDB_FOUND &&
-                (t->ar_db_checksum == t->acurip_checksum_v1 ||
-                 t->ar_db_checksum == t->acurip_checksum_v2))
-                accurip_verified++;
+            if (t->ar_db_status == CYANRIP_ACCUDB_FOUND) {
+                if (t->ar_db_checksum == t->acurip_checksum_v1 ||
+                    t->ar_db_checksum == t->acurip_checksum_v2)
+                    accurip_verified++;
+                else if (t->ar_db_checksum_450 == t->acurip_checksum_v1_450)
+                    accurip_partial++;
+            }
         }
-        cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n\n", accurip_verified, ctx->nb_tracks);
+        cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n", accurip_verified, ctx->nb_tracks);
+        if (accurip_partial)
+            cyanrip_log(ctx, 0, "Tracks ripped partially accurately: %i/%i\n",
+                        accurip_partial, ctx->nb_tracks - accurip_verified);
+        cyanrip_log(ctx, 0, "\n");
     }
 
     cyanrip_log(ctx, 0, "Paranoia status counts:\n");
