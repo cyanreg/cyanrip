@@ -13,6 +13,7 @@ Features
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
  * Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums
+ * Automatic drive offset finding
 
 
 Compiling
@@ -70,6 +71,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -E                   | Eject CD tray if ripping has been successfully completed                                |
 | -V                   | Print version                                                                           |
 | -h                   | Print usage (this)                                                                      |
+| -F                   | Find drive offset (requires a disc with an AccuRip DB entry)                            |
 
 
 Metadata

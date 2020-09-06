@@ -117,6 +117,7 @@ typedef struct cyanrip_track {
     enum CRIPAccuDBStatus ar_db_status;
     int ar_db_confidence;
     uint32_t ar_db_checksum; /* We don't know which version it is */
+    uint32_t ar_db_checksum_450;
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {

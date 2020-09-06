@@ -177,7 +177,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
         ctx->tracks[i].ar_db_status = CYANRIP_ACCUDB_FOUND;
         ctx->tracks[i].ar_db_confidence = bytestream2_get_byte(&gbc);
         ctx->tracks[i].ar_db_checksum = bytestream2_get_le32(&gbc);
-        bytestream2_skip(&gbc, 4); /* Checksum of frame 450, for some odd reason? */
+        ctx->tracks[i].ar_db_checksum_450 = bytestream2_get_le32(&gbc);
     }
 
 end:

@@ -206,7 +206,7 @@ static void status_cb(long int n, paranoia_cb_mode_t status)
         paranoia_status[status]++;
 }
 
-static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
+static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx)
 {
     int err = 0;
     char *msg = NULL;
@@ -233,6 +233,123 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx, cyanrip_track *t)
     ctx->total_error_count += err;
 
     return data;
+}
+
+static int search_for_offset(int *offset_found, const uint8_t *mem, int dir,
+                             int bytes, uint32_t ar_db_checksum_450)
+{
+    for (int byte_off = ((dir < 0) * 4); byte_off < bytes; byte_off += 4) {
+        if (quit_now)
+            return 0;
+
+        const uint8_t *start_addr = mem + dir * byte_off;
+
+        uint32_t accurip_v1 = 0x0;
+        for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
+            accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
+
+        if (accurip_v1 == ar_db_checksum_450) {
+            *offset_found = dir * (byte_off >> 2);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void search_for_drive_offset(cyanrip_ctx *ctx, int range)
+{
+    int had_ar = 0, did_check = 0;
+    int offset_found = 0, offset_found_samples = 0;
+    uint8_t *mem = av_malloc(2 * range * CDIO_CD_FRAMESIZE_RAW);
+
+    if (ctx->ar_db_status != CYANRIP_ACCUDB_FOUND)
+        goto end;
+
+    for (int t_idx = 0; t_idx < ctx->nb_tracks; t_idx++) {
+        lsn_t start = cdio_get_track_lsn(ctx->cdio, t_idx + 1);
+        lsn_t end = cdio_get_track_last_lsn(ctx->cdio, t_idx + 1);
+
+        if (ctx->tracks[t_idx].ar_db_status != CYANRIP_ACCUDB_FOUND)
+            continue;
+        else
+            had_ar |= 1;
+
+        if ((end - start) < (450 + range))
+            continue;
+
+        did_check |= 1;
+
+        /* Set start/end ranges */
+        start += 450 - range;
+        end = start + 2*range;
+
+        size_t bytes = 0;
+
+        cyanrip_log(ctx, 0, "Loading data for track %i...\n", t_idx + 1);
+        cdio_paranoia_seek(ctx->paranoia, start, SEEK_SET);
+        for (int i = 0; i < 2*range; i++) {
+            const uint8_t *data = cyanrip_read_frame(ctx);
+            memcpy(mem + bytes, data, CDIO_CD_FRAMESIZE_RAW);
+            bytes += CDIO_CD_FRAMESIZE_RAW;
+            if (quit_now) {
+                cyanrip_log(ctx, 0, "Stopping, offset finding incomplete!\n");
+                goto end;
+            }
+        }
+
+        int found, offset;
+        int dir = (offset_found && (offset_found_samples < 0)) ? -1 : +1;
+
+        cyanrip_log(ctx, 0, "Data loaded, searching for offsets...\n");
+
+        found = search_for_offset(&offset, mem + (bytes >> 1), dir,
+                                  range * CDIO_CD_FRAMESIZE_RAW,
+                                  ctx->tracks[t_idx].ar_db_checksum_450);
+        if (!found)
+            found = search_for_offset(&offset, mem + (bytes >> 1), -dir,
+                                      range * CDIO_CD_FRAMESIZE_RAW,
+                                      ctx->tracks[t_idx].ar_db_checksum_450);
+
+        if (!found) {
+            cyanrip_log(ctx, 0, "Nothing found for track %i%s\n", t_idx + 1,
+                        t_idx != (ctx->nb_tracks - 1) ? ", trying another track" : "");
+        } else if (!offset_found) {
+            offset_found_samples = offset;
+            offset_found++;
+            cyanrip_log(ctx, 0, "Offset of %c%i found in track %i%s\n",
+                        offset >= 0 ? '+' : '-', abs(offset), t_idx + 1,
+                        t_idx != (ctx->nb_tracks - 1) ? ", trying to confirm with another track" : "");
+        } else if (offset_found_samples == offset) {
+            offset_found++;
+            cyanrip_log(ctx, 0, "Offset of %c%i confirmed (confidence: %i) in track %i%s\n",
+                        offset >= 0 ? '+' : '-', abs(offset), offset_found, t_idx + 1,
+                        t_idx != (ctx->nb_tracks - 1) ? ", trying to confirm with another track" : "");
+        } else {
+            cyanrip_log(ctx, 0, "New offset of %c%i found at track %i, scrapping old offset of %c%i%s\n",
+                        offset >= 0 ? '+' : '-', abs(offset), t_idx + 1,
+                        offset_found_samples >= 0 ? '+' : '-', abs(offset_found_samples),
+                        t_idx != (ctx->nb_tracks - 1) ? ", trying to confirm with another track" : "");
+            offset_found_samples = offset;
+            offset_found = 1;
+        }
+    }
+
+end:
+    av_free(mem);
+
+    if (!offset_found) {
+        if (!had_ar)
+            cyanrip_log(ctx, 0, "No track had AccuRip entry, cannot find offset!\n");
+        else if (had_ar && !did_check)
+            cyanrip_log(ctx, 0, "No track was long enough, unable to find drive offset!\n");
+        else
+            cyanrip_log(ctx, 0, "Was not able to find drive offset!\n");
+        return;
+    } else {
+        cyanrip_log(ctx, 0, "Drive offset of %c%i found (confidence: %i)!\n",
+                    offset_found_samples >= 0 ? '+' : '-', abs(offset_found_samples), offset_found);
+    }
 }
 
 static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -331,7 +448,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             cdio_paranoia_seek(ctx->paranoia, t->start_lsn + i, SEEK_SET);
 
         int bytes = CDIO_CD_FRAMESIZE_RAW;
-        const uint8_t *data = cyanrip_read_frame(ctx, t);
+        const uint8_t *data = cyanrip_read_frame(ctx);
 
         /* Account for partial frames caused by the offset */
         if (offs > 0) {
@@ -704,8 +821,9 @@ int main(int argc, char **argv)
     char *album_metadata_ptr = NULL;
     char *track_metadata_ptr[99] = { NULL };
     int track_metadata_ptr_cnt = 0;
+    int find_drive_offset_range = 0;
 
-    while ((c = getopt(argc, argv, "hnAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:")) != -1) {
+    while ((c = getopt(argc, argv, "hnFAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -736,6 +854,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -E                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
             cyanrip_log(ctx, 0, "    -h                    Print options help\n");
+            cyanrip_log(ctx, 0, "    -F                    Find drive offset (requires a disc with an AccuRip DB entry)\n");
             return 0;
             break;
         case 'S':
@@ -842,6 +961,9 @@ int main(int argc, char **argv)
         case 'A':
             settings.disable_accurip = 1;
             break;
+        case 'F':
+            find_drive_offset_range = 6;
+            break;
         case 'C':
             p = strtok(optarg, "/");
             discnumber = strtol(p, NULL, 10);
@@ -919,6 +1041,13 @@ int main(int argc, char **argv)
         }
     }
 
+    if (find_drive_offset_range) {
+        settings.disable_accurip = 0;
+        settings.disable_mb = 1;
+        settings.offset = 0;
+        cyanrip_log(ctx, 0, "Searching for drive offset, enabling AccuRip and disabling MusicBrainz\n");
+    }
+
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
@@ -938,6 +1067,11 @@ int main(int argc, char **argv)
     /* Fill in accurip data */
     if (crip_fill_accurip(ctx))
         return 1;
+
+    if (find_drive_offset_range) {
+        search_for_drive_offset(ctx, find_drive_offset_range);
+        goto end;
+    }
 
     if (cover_image_path)
         av_dict_set(&ctx->meta, "cover_art", cover_image_path, 0);
