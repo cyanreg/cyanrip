@@ -99,7 +99,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
             cyanrip_log(ctx, 0, "\n");
 
         if (!has_ar || (!match_v1 && !match_v2)) {
-            cyanrip_log(ctx, 0, "    Accurip v1 450:   0x%08x", t->ar_db_checksum_450);
+            cyanrip_log(ctx, 0, "    Accurip v1 450:   0x%08x", t->acurip_checksum_v1_450);
             if (has_ar && t->acurip_checksum_v1_450 == t->ar_db_checksum_450)
                 cyanrip_log(ctx, 0, " (matches Accurip DB, track is partially accurately ripped)\n");
             else if (has_ar)
