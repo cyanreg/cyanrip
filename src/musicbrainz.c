@@ -238,7 +238,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
         goto end_meta;
     } else if (num_releases > 1 && ((release_idx < 0) && !release_str)) {
-        cyanrip_log(ctx, 0, "Multiple releases found in database for DiscID:\n");
+        cyanrip_log(ctx, 0, "Multiple releases found in database for DiscID %s:\n", discid);
         for (int i = 0; i < num_releases; i++) {
             release = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
