@@ -174,6 +174,11 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     char *names[] = { "inc" };
     char *values[] = { "recordings artist-credits" };
     const char *discid = dict_get(ctx->meta, "discid");
+    if (!discid) {
+        cyanrip_log(ctx, 0, "Missing DiscID!\n");
+        return 0;
+    }
+
     Mb5Metadata metadata = mb5_query_query(query, "discid", discid, 0, 1, names, values);
     if (!metadata) {
         tQueryResult res = mb5_query_get_lastresult(query);
