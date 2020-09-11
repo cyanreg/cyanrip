@@ -361,7 +361,7 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
         if (t->preemphasis)
             av_dict_set(&t->meta, "deemphasis", "required", 0);
 
-        if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) {
+        if (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC && !dict_get(t->meta, "isrc")) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);
             if (isrc_str) {
                 if (strlen(isrc_str))
