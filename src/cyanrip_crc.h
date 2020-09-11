@@ -45,10 +45,10 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
 
     t->computed_crcs = 0;
 
-    if (t->number == 1)
-        s->acu_start += (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
-    else if (t->number == ctx->drive->tracks)
-        s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW*5) >> 2;
+    if (t->cd_track_number == 1)
+        s->acu_start += (CDIO_CD_FRAMESIZE_RAW * 5) >> 2;
+    if (t->cd_track_number == ctx->nb_cd_tracks)
+        s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW * 5) >> 2;
 }
 
 static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, int bytes)
