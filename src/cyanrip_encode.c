@@ -852,6 +852,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
         st_img->time_base = (AVRational){ 1, 25 };
         s->avf->oformat->video_codec = st_img->codecpar->codec_id;
+        av_dict_set(&st_img->metadata, "title", "Front", 0);
     }
 
     /* Find encoder */
