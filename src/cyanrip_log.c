@@ -77,12 +77,12 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:        0x%08x\n", t->eac_crc);
+        cyanrip_log(ctx, 0, "    EAC CRC32:        %08X\n", t->eac_crc);
 
         int match_v1 = has_ar ? t->ar_db_checksum == t->acurip_checksum_v1 : 0;
         int match_v2 = has_ar ? t->ar_db_checksum == t->acurip_checksum_v2 : 0;
 
-        cyanrip_log(ctx, 0, "    Accurip v1:       0x%08x", t->acurip_checksum_v1);
+        cyanrip_log(ctx, 0, "    Accurip v1:       %08X", t->acurip_checksum_v1);
         if (has_ar && match_v1)
             cyanrip_log(ctx, 0, " (accurately ripped)\n");
         else if (has_ar && !match_v2)
@@ -90,25 +90,25 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         else
             cyanrip_log(ctx, 0, "\n");
 
-        cyanrip_log(ctx, 0, "    Accurip v2:       0x%08x", t->acurip_checksum_v2);
+        cyanrip_log(ctx, 0, "    Accurip v2:       %08X", t->acurip_checksum_v2);
         if (has_ar && match_v2)
             cyanrip_log(ctx, 0, " (accurately ripped)\n");
         else if (has_ar && !match_v1)
-            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->ar_db_checksum);
+            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of %08X)\n", t->ar_db_checksum);
         else
             cyanrip_log(ctx, 0, "\n");
 
         if (!has_ar || (!match_v1 && !match_v2)) {
-            cyanrip_log(ctx, 0, "    Accurip v1 450:   0x%08x", t->acurip_checksum_v1_450);
+            cyanrip_log(ctx, 0, "    Accurip v1 450:   %08X", t->acurip_checksum_v1_450);
             if (has_ar && t->acurip_checksum_v1_450 == t->ar_db_checksum_450)
                 cyanrip_log(ctx, 0, " (matches Accurip DB, track is partially accurately ripped)\n");
             else if (has_ar)
-                cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->acurip_checksum_v1_450);
+                cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of %08X)\n", t->acurip_checksum_v1_450);
             else
                 cyanrip_log(ctx, 0, "\n");
         }
-    } else if (has_ar) {
-        cyanrip_log(ctx, 0, "    Accurip checksum: 0x%08x (in database)\n", t->ar_db_checksum);
+    } else if (has_ar) { /* When listing info */
+        cyanrip_log(ctx, 0, "    Accurip checksum: %08X (in database)\n", t->ar_db_checksum);
     }
 
     cyanrip_log(ctx, 0, "\n");
