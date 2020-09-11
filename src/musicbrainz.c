@@ -22,12 +22,15 @@
 #include <musicbrainz5/mb5_c.h>
 #include <libavutil/crc.h>
 
-#define READ_MB(FUNC, MBCTX, DICT, KEY)                                        \
-    do {                                                                       \
-        int len = FUNC(MBCTX, NULL, 0) + 1;                                    \
-        char *str = av_mallocz(4*len);                                         \
-        FUNC(MBCTX, str, len);                                                 \
-        av_dict_set(&DICT, KEY, str, AV_DICT_DONT_STRDUP_VAL | AV_DICT_APPEND);\
+#define READ_MB(FUNC, MBCTX, DICT, KEY)                                             \
+    do {                                                                            \
+        int len = FUNC(MBCTX, NULL, 0) + 1;                                         \
+        char *str = av_mallocz(4*len);                                              \
+        FUNC(MBCTX, str, len);                                                      \
+        if (str[0] == '\0')                                                         \
+            av_free(str);                                                           \
+        else                                                                        \
+            av_dict_set(&DICT, KEY, str, AV_DICT_DONT_STRDUP_VAL | AV_DICT_APPEND); \
     } while (0)
 
 static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *key)
