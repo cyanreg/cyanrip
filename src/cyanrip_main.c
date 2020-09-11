@@ -40,6 +40,8 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
     for (int i = 0; i < ctx->nb_tracks; i++)
         av_dict_free(&ctx->tracks[i].meta);
 
+    av_free(ctx->mb_submission_url);
+
     if (ctx->paranoia)
         cdio_paranoia_free(ctx->paranoia);
     if (ctx->drive)

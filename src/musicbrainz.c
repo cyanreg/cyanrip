@@ -204,10 +204,14 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             if (manual_metadata_specified) {
                 cyanrip_log(ctx, 0, "Unable to find metadata for this CD, but "
                             "metadata has been manually specified, continuing.\n");
+                cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
+                            "submitting the disc info to the following URL:\n%s\n", ctx->mb_submission_url);
                 goto end;
             } else {
                 cyanrip_log(ctx, 0, "Unable to find release info for this CD, "
                             "and metadata hasn't been manually added!\n");
+                cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
+                            "submitting the disc info to the following URL:\n%s\n", ctx->mb_submission_url);
                 cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -n!\n");
             }
             break;

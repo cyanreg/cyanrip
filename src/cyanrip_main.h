@@ -132,6 +132,8 @@ typedef struct cyanrip_ctx {
     int nb_tracks; /* Total number of output tracks */
     int nb_cd_tracks; /* Total tracks the CD signals */
 
+    char *mb_submission_url;
+
     /* Drive caps */
     cdio_drive_read_cap_t  rcap;
     cdio_drive_write_cap_t wcap;

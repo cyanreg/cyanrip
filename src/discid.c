@@ -42,6 +42,9 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     av_dict_set(&ctx->meta, "cddb", "0x", 0);
     av_dict_set(&ctx->meta, "cddb", cddb_id_str, AV_DICT_APPEND);
 
+    const char *mb_submission_url = discid_get_submission_url(discid);
+    ctx->mb_submission_url = av_strdup(mb_submission_url);
+
     discid_free(discid);
 
     return 0;
