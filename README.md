@@ -37,6 +37,15 @@ All are available on any up-to-date Linux distribution's package repositories. T
 cyanrip can be also built and ran under Windows using MinGW
 
 
+Automated Windows builds ![Windows CI](https://github.com/cyanreg/cyanrip/workflows/CI/badge.svg)
+--------------
+[Latest release Windows build](https://github.com/cyanreg/cyanrip/releases/latest/download/cyanrip-win64.exe)
+
+[Latest Windows build](https://github.com/cyanreg/cyanrip/releases/download/nightly/cyanrip-win64-latest.exe)
+
+If the latest build is broken, you can find older ones in the [nightly release page](https://github.com/cyanreg/cyanrip/releases/tag/nightly)
+
+
 CLI
 ---
 Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a MusicBrainz lookup.

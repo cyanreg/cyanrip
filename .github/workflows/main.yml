@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, workflow ]
+  release:
+    types: [ released ]
+
+jobs:
+  mingw:
+    runs-on: windows-latest
+    env:
+      MSYSTEM: MINGW64
+    defaults:
+       run:
+          shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: msys2/setup-msys2@v2
+        with:
+          install: git base-devel zip mingw-w64-x86_64-toolchain mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake mingw-w64-x86_64-nasm mingw-w64-x86_64-libcdio-paranoia mingw-w64-x86_64-opus mingw-w64-x86_64-lame mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libxml2 mingw-w64-x86_64-nghttp2
+          update: true
+
+      - name: Build
+        run: |
+          .github/mingw-build.sh
+          zip cyanrip cyanrip.exe
+
+      - name: "Upload artifact"
+        uses: actions/upload-artifact@v2
+        with:
+          name: cyanrip
+          path: cyanrip.exe
+
+      - name: Get Release
+        id: get_release
+        shell: bash
+        run: |
+          echo "::set-output name=upload_url_release::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/$(cut -d/ -f3 <<< ${{ github.ref }}) | jq -r ."upload_url")"
+          echo "::set-output name=upload_url_nightly::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly | jq -r ."upload_url")"
+          echo "::set-output name=nightly_id::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly | jq -r ."id")"
+
+      - name: Upload a Release Asset
+        if: steps.get_release.outputs.upload_url_release != 'null'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url_release }}
+          asset_path: ./cyanrip.exe
+          asset_name: cyanrip-win64.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
+
+      - name: Upload versioned Nightly asset
+        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        uses: WebFreak001/deploy-nightly@v1.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url_nightly }}
+          release_id: ${{ steps.get_release.outputs.nightly_id }}
+          asset_path: ./cyanrip.exe
+          asset_name: cyanrip-win64-$$.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
+          max_releases: 4
+
+      - name: Delete existing nightly latest
+        id: del_nightly_release
+        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        uses: mknejp/delete-release-assets@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: nightly
+          assets: cyanrip-win64-latest.exe
+          fail-if-no-assets: false
+
+      - name: Upload latest Nightly Asset
+        if: steps.del_nightly_release.conclusion == 'success' && steps.get_release.outputs.upload_url_nightly != 'null'
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url_nightly }}
+          asset_path: ./cyanrip.exe
+          asset_name: cyanrip-win64-latest.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
