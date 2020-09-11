@@ -1075,6 +1075,9 @@ int main(int argc, char **argv)
         goto end;
     }
 
+    if (mb_release_str && !dict_get(ctx->meta, "release_id"))
+        av_dict_set(&ctx->meta, "release_id", mb_release_str, 0);
+
     if (cover_image_path)
         av_dict_set(&ctx->meta, "cover_art", cover_image_path, 0);
 
