@@ -167,9 +167,9 @@ static inline void cyanrip_frames_to_duration(uint32_t frames, char *str)
     if (!str)
         return;
     const double tot = frames/75.0; /* 75 frames per second */
-    const int hr    = tot/3600.0f;
-    const int min   = (tot/60.0f) - (hr * 60);
-    const int sec   = tot - ((hr * 3600) + min * 60);
+    const int hr    = tot/3600.0;
+    const int min   = (tot/60.0) - (hr * 60.0);
+    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
     const int msec  = tot - sec;
     snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
 }
@@ -179,9 +179,9 @@ static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
     if (!str)
         return;
     const double tot = samples/44100.0; /* 44100 samples per second */
-    const int hr    = tot/3600.0f;
-    const int min   = (tot/60.0f) - (hr * 60);
-    const int sec   = tot - ((hr * 3600) + min * 60);
+    const int hr    = tot/3600.0;
+    const int min   = (tot/60.0) - (hr * 60.0);
+    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
     const int msec  = tot - sec;
     snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
 }
