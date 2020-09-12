@@ -153,8 +153,45 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return AVERROR(EINVAL);
     }
 
-    for (int i = 0; i < ctx->nb_tracks; i++)
-        ctx->tracks[i].number = ctx->tracks[i].cd_track_number = i + 1;
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+
+        t->number = t->cd_track_number = i + 1;
+        t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
+        t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
+        t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
+        t->end_lsn = cdio_get_track_last_lsn(ctx->cdio, t->number);
+
+        t->start_lsn_sig = t->start_lsn;
+        t->end_lsn_sig = t->end_lsn;
+
+        if (t->track_is_data) {
+            if (ctx->settings.pregap_action[t->number - 1] == CYANRIP_PREGAP_DEFAULT)
+                ctx->settings.pregap_action[t->number - 1] = CYANRIP_PREGAP_DROP;
+            if (ctx->settings.pregap_action[t->number - 0] == CYANRIP_PREGAP_DEFAULT)
+                ctx->settings.pregap_action[t->number - 0] = CYANRIP_PREGAP_DROP;
+            if (i == (ctx->nb_cd_tracks - 1)) {
+                ctx->tracks[i - 1].end_lsn -= 11400;
+                t->pregap_lsn = ctx->tracks[i - 1].end_lsn + 1;
+            }
+        }
+    }
+
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+        if (t->track_is_data)
+            continue;
+        t->acurip_track_is_first = 1;
+        break;
+    }
+
+    for (int i = ctx->nb_cd_tracks - 1; i >= 0; i--) {
+        cyanrip_track *t = &ctx->tracks[i];
+        if (t->track_is_data)
+            continue;
+        t->acurip_track_is_last = 1;
+        break;
+    }
 
     /* For hot removal detection - init this so we can detect changes */
     cdio_get_media_changed(ctx->cdio);
@@ -380,7 +417,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     const ptrdiff_t offs = t->partial_frame_byte_offs;
 
     if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "Track %i is data, skipping:\n", t->number);
+        cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
         cyanrip_log_track_end(ctx, t);
         return 0;
     }
@@ -599,23 +636,6 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
 {
     int gaps = 0;
 
-    for (int i = 0; i < ctx->nb_tracks; i++) {
-        cyanrip_track *t = &ctx->tracks[i];
-
-        t->number = i + 1;
-        t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
-        if (t->track_is_data) {
-            ctx->settings.pregap_action[t->number - 1] = CYANRIP_PREGAP_MERGE;
-            ctx->settings.pregap_action[t->number - 0] = CYANRIP_PREGAP_DROP;
-        }
-        t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
-        t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
-        t->end_lsn = cdio_get_track_last_lsn(ctx->cdio, t->number);
-
-        t->start_lsn_sig = t->start_lsn;
-        t->end_lsn_sig = t->end_lsn;
-    }
-
     cyanrip_log(ctx, 0, "Gaps:\n");
 
     /* Before pregap */
@@ -719,7 +739,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
 
     /* After last track */
     cyanrip_track *lt = &ctx->tracks[ctx->nb_tracks - 1];
-    if (ctx->end_lsn > lt->end_lsn) {
+    if (ctx->end_lsn > lt->end_lsn && !lt->track_is_data) {
         int discont_frames = ctx->end_lsn - lt->end_lsn;
         cyanrip_log(ctx, 0, "    %i frame gap between last track and lead-out, padding track\n",
                     discont_frames);
@@ -810,7 +830,7 @@ int main(int argc, char **argv)
     settings.outputs_num = 1;
     settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
 
-    memset(settings.pregap_action, 0, sizeof(settings.pregap_action));
+    memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, sizeof(settings.pregap_action));
 
     int c;
     char *p;

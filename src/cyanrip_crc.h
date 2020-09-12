@@ -45,9 +45,9 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
 
     t->computed_crcs = 0;
 
-    if (t->cd_track_number == 1)
+    if (t->acurip_track_is_first)
         s->acu_start += (CDIO_CD_FRAMESIZE_RAW * 5) >> 2;
-    if (t->cd_track_number == ctx->nb_cd_tracks)
+    if (t->acurip_track_is_last)
         s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW * 5) >> 2;
 }
 

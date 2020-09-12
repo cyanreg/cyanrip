@@ -114,6 +114,8 @@ typedef struct cyanrip_track {
     uint32_t acurip_checksum_v1;
     uint32_t acurip_checksum_v1_450;
     uint32_t acurip_checksum_v2;
+    int acurip_track_is_first;
+    int acurip_track_is_last;
 
     enum CRIPAccuDBStatus ar_db_status;
     int ar_db_confidence;

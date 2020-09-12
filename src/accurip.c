@@ -26,23 +26,23 @@
 
 static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_type_2)
 {
+    int audio_tracks = 0;
     uint64_t idt1 = 0x0;
     uint64_t idt2 = 0x0;
 
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
-        uint64_t nb = i + 1;
-
-        if (!cdio_cddap_track_audiop(ctx->drive, nb))
+        cyanrip_track *t = &ctx->tracks[i];
+        if (t->track_is_data)
             continue;
 
-        uint64_t offset = cdio_get_track_lsn(ctx->cdio, nb);
-        idt1 += offset;
-        idt2 += (offset ? offset : 1) * nb;
+        idt1 += t->start_lsn;
+        idt2 += (t->start_lsn ? t->start_lsn : 1) * t->number;
+        audio_tracks++;
     }
 
-    uint64_t last = cdio_get_track_lsn(ctx->cdio, CDIO_CDROM_LEADOUT_TRACK);
+    lsn_t last = ctx->tracks[audio_tracks - 1].end_lsn + 1;
     idt1 += last;
-    idt2 += last * (ctx->nb_cd_tracks + 1);
+    idt2 += last * (audio_tracks + 1);
 
     idt1 &= 0xffffffff;
     idt2 &= 0xffffffff;
@@ -50,7 +50,7 @@ static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_t
     *id_type_1 = idt1;
     *id_type_2 = idt2;
 
-    return 0;
+    return audio_tracks;
 }
 
 typedef struct RecvCtx {
@@ -83,7 +83,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
 
     /* Get both accurip disc IDs */
     uint32_t id_type_1, id_type_2;
-    get_accurip_ids(ctx, &id_type_1, &id_type_2);
+    int audio_tracks = get_accurip_ids(ctx, &id_type_1, &id_type_2);
 
     /* Get CDDB ID */
     const char *cddb_id_str = dict_get(ctx->meta, "cddb");
@@ -102,7 +102,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     snprintf(request_url, sizeof(request_url), "%s/%c/%c/%c/dBAR-%.3d-%s-%08x-%08x.bin",
              ACCURIP_DB_BASE_URL,
              id_type_1_s[7], id_type_1_s[6], id_type_1_s[5],
-             ctx->nb_cd_tracks, id_type_1_s, id_type_2, cddb_id);
+             audio_tracks, id_type_1_s, id_type_2, cddb_id);
 
     curl_easy_setopt(curl_ctx, CURLOPT_URL, request_url);
 
@@ -162,7 +162,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     GetByteContext gbc = { 0 };
     bytestream2_init(&gbc, rctx.data, rctx.size);
 
-    if (bytestream2_get_byte(&gbc) != ctx->nb_cd_tracks ||
+    if (bytestream2_get_byte(&gbc) != audio_tracks ||
         bytestream2_get_le32(&gbc) != id_type_1 ||
         bytestream2_get_le32(&gbc) != id_type_2 ||
         bytestream2_get_le32(&gbc) != cddb_id) {
@@ -174,6 +174,9 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
 
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
+        if (ctx->tracks[i].track_is_data)
+            continue;
+
         ctx->tracks[i].ar_db_status = CYANRIP_ACCUDB_FOUND;
         ctx->tracks[i].ar_db_confidence = bytestream2_get_byte(&gbc);
         ctx->tracks[i].ar_db_checksum = bytestream2_get_le32(&gbc);
