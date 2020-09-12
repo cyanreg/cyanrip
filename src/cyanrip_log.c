@@ -30,27 +30,8 @@
     if (dict_get(DICT, TAG))                                                   \
         cyanrip_log(ctx, 0, FORMAT, dict_get(DICT, TAG));                      \
 
-void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
+static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 {
-    char length[16];
-    cyanrip_samples_to_duration(t->nb_samples, length);
-
-    if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "    Data bytes:       %i\n\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
-        return;
-    }
-
-    cyanrip_log(ctx, 0, "    Metadata:\n", length);
-
-    const AVDictionaryEntry *d = NULL;
-    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
-        cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
-
-    if (t->preemphasis)
-        cyanrip_log(ctx, 0, "    Preemphasis:      present, deemphasis required\n");
-    cyanrip_log(ctx, 0, "    Duration:         %s\n", length);
-    cyanrip_log(ctx, 0, "    Samples:          %u\n", t->nb_samples);
-
     if (t->pregap_lsn != CDIO_INVALID_LSN)
         cyanrip_log(ctx, 0, "    Pregap LSN:       %i\n", t->pregap_lsn);
 
@@ -65,6 +46,32 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "    Offset end:       %i\n", t->end_lsn);
     if (t->frames_after_disc_end)
         cyanrip_log(ctx, 0, "    Silent frames:    %i appended\n", t->frames_after_disc_end);
+}
+
+void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    char length[16];
+    cyanrip_samples_to_duration(t->nb_samples, length);
+
+    if (t->track_is_data) {
+        cyanrip_log(ctx, 0, "    Data bytes:       %i\n", t->frames*CDIO_CD_FRAMESIZE_RAW);
+        print_offsets(ctx, t);
+        cyanrip_log(ctx, 0, "\n");
+        return;
+    }
+
+    cyanrip_log(ctx, 0, "    Metadata:\n", length);
+
+    const AVDictionaryEntry *d = NULL;
+    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
+        cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
+
+    if (t->preemphasis)
+        cyanrip_log(ctx, 0, "    Preemphasis:      present, deemphasis required\n");
+    cyanrip_log(ctx, 0, "    Duration:         %s\n", length);
+    cyanrip_log(ctx, 0, "    Samples:          %u\n", t->nb_samples);
+
+    print_offsets(ctx, t);
 
     int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
 
