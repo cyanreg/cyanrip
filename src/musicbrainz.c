@@ -252,19 +252,30 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             READ_MB(mb5_release_get_date, release, tmp_dict, "date");
             READ_MB(mb5_release_get_title, release, tmp_dict, "album");
             READ_MB(mb5_release_get_id, release, tmp_dict, "id");
-            cyanrip_log(ctx, 0, "    %i (ID: %s): %s (%s)", i + 1,
-                        dict_get(tmp_dict, "id")    ? dict_get(tmp_dict, "id")    : "unknown id",
-                        dict_get(tmp_dict, "album") ? dict_get(tmp_dict, "album") : "unknown album",
-                        dict_get(tmp_dict, "date")  ? dict_get(tmp_dict, "date")  : "unknown date");
-            av_dict_free(&tmp_dict);
+            READ_MB(mb5_release_get_disambiguation, release, tmp_dict, "disambiguation");
 
-            /* Get CD count for the release */
             Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
             int num_cds = mb5_medium_list_size(medium_list);
             if (num_cds > 1)
-                cyanrip_log(ctx, 0, " (%i CDs)", num_cds);
+                av_dict_set_int(&tmp_dict, "num_cds", num_cds, 0);
 
-            cyanrip_log(ctx, 0, "\n");
+#define PROP(key, postamble)                                    \
+    (!!dict_get(tmp_dict, key)) ? " (" : "",                    \
+    (!!dict_get(tmp_dict, key)) ? dict_get(tmp_dict, key) : "", \
+    (!!dict_get(tmp_dict, key)) ? postamble : "",               \
+    (!!dict_get(tmp_dict, key)) ? ")" : ""
+
+            cyanrip_log(ctx, 0, "    %i (ID: %s): %s" "%s%s%s%s" "%s%s%s%s" "%s%s%s%s" "%s", i + 1,
+                        dict_get(tmp_dict, "id")    ? dict_get(tmp_dict, "id")    : "unknown id",
+                        dict_get(tmp_dict, "album") ? dict_get(tmp_dict, "album") : "unknown album",
+                        PROP("disambiguation", ""),
+                        PROP("num_cds", "CDs"),
+                        PROP("date", ""),
+                        "\n");
+
+#undef PROP
+
+            av_dict_free(&tmp_dict);
         }
         cyanrip_log(ctx, 0, "\n");
         cyanrip_log(ctx, 0, "Please specify which release to use by adding the -R argument with an index or ID.\n");
@@ -299,6 +310,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     }
 
     READ_MB(mb5_release_get_id, release, ctx->meta, "release_id");
+    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "release");
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
