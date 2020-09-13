@@ -97,7 +97,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         if (has_ar && match_v1)
             cyanrip_log(ctx, 0, " (accurately ripped)\n");
         else if (has_ar && !match_v2)
-            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of 0x%x)\n", t->ar_db_checksum);
+            cyanrip_log(ctx, 0, " (doesn't match checksum in Accurip DB of %08X)\n", t->ar_db_checksum);
         else
             cyanrip_log(ctx, 0, "\n");
 
