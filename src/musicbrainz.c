@@ -301,7 +301,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             av_dict_free(&tmp_dict);
         }
         if (i == num_releases) {
-            cyanrip_log(ctx, 0, "Release ID %s not found!\n", release_str);
+            cyanrip_log(ctx, 0, "Release ID %s not found in release list for DiscID %s!\n", release_str, discid);
             ret = 1;
             goto end_meta;
         }
