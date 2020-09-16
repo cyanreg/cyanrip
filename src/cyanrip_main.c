@@ -1196,26 +1196,24 @@ int main(int argc, char **argv)
     }
 
     cyanrip_log(ctx, 0, "Tracks:\n");
-    if (ctx->settings.print_info_only) {
+    if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->nb_tracks; i++) {
             cyanrip_track *t = &ctx->tracks[i];
-            cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
-            track_read_extra(ctx, t);
-            av_dict_set(&t->meta, "cover_art", NULL, 0);
-            cyanrip_log_track_end(ctx, t);
+            if (ctx->settings.print_info_only) {
+                cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
+                track_read_extra(ctx, t);
+                av_dict_set(&t->meta, "cover_art", NULL, 0);
+                cyanrip_log_track_end(ctx, t);
 
-            if (cdio_get_media_changed(ctx->cdio)) {
-                cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
-                break;
+                if (cdio_get_media_changed(ctx->cdio)) {
+                    cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
+                    break;
+                }
+            } else {
+                if (cyanrip_rip_track(ctx, t))
+                    break;
             }
 
-            if (quit_now)
-                break;
-        }
-    } else if (ctx->settings.rip_indices_count == -1) {
-        for (int i = 0; i < ctx->nb_tracks; i++) {
-            if (cyanrip_rip_track(ctx, &ctx->tracks[i]))
-                break;
             if (quit_now)
                 break;
         }
@@ -1245,8 +1243,21 @@ int main(int argc, char **argv)
                     break;
             }
 
-            if (cyanrip_rip_track(ctx, &ctx->tracks[j]))
-                break;
+            if (ctx->settings.print_info_only) {
+                cyanrip_log(ctx, 0, "Track %i info:\n", ctx->tracks[j].number);
+                track_read_extra(ctx, &ctx->tracks[j]);
+                av_dict_set(&ctx->tracks[j].meta, "cover_art", NULL, 0);
+                cyanrip_log_track_end(ctx, &ctx->tracks[j]);
+
+                if (cdio_get_media_changed(ctx->cdio)) {
+                    cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
+                    break;
+                }
+            } else {
+                if (cyanrip_rip_track(ctx, &ctx->tracks[j]))
+                    break;
+            }
+
             if (quit_now)
                 break;
         }
