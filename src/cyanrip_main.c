@@ -175,8 +175,6 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
                 ctx->tracks[i - 1].end_lsn -= 11400;
                 t->pregap_lsn = ctx->tracks[i - 1].end_lsn + 1;
             }
-        } else {
-            ctx->last_audio_track_idx = i;
         }
     }
 
