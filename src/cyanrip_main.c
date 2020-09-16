@@ -288,7 +288,7 @@ static int search_for_offset(int *offset_found, const uint8_t *mem, int dir,
         for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
             accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
 
-        if (accurip_v1 == ar_db_checksum_450) {
+        if (accurip_v1 == ar_db_checksum_450 && accurip_v1) {
             *offset_found = dir * (byte_off >> 2);
             return 1;
         }
@@ -1066,6 +1066,7 @@ int main(int argc, char **argv)
         settings.disable_accurip = 0;
         settings.disable_mb = 1;
         settings.offset = 0;
+        settings.eject_on_success_rip = 0;
         cyanrip_log(ctx, 0, "Searching for drive offset, enabling AccuRip and disabling MusicBrainz\n");
     }
 
