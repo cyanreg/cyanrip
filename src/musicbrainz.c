@@ -149,6 +149,7 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     }
 
     READ_MB(mb5_medium_get_title, medium, ctx->meta, "discname");
+    READ_MB(mb5_medium_get_format, medium, ctx->meta, "format");
 
     Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
     if (!track_list) {
@@ -333,6 +334,9 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode");
+    READ_MB(mb5_release_get_packaging, release, ctx->meta, "packaging");
+    READ_MB(mb5_release_get_country, release, ctx->meta, "country");
+    READ_MB(mb5_release_get_status, release, ctx->meta, "status");
 
     /* Label info */
     Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
