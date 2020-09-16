@@ -93,6 +93,8 @@ static uint32_t crc_medium(Mb5Medium medium)
 
 static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, int discnumber)
 {
+    int free_list = 0;
+
     /* Set totaldiscs if possible */
     Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
     int num_cds = mb5_medium_list_size(medium_list);
@@ -114,6 +116,7 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             return 1;
         }
     } else {
+        free_list = 1;
         medium_list = mb5_release_media_matching_discid(release, discid);
         if (!medium_list) {
             cyanrip_log(ctx, 0, "No mediums matching DiscID.\n");
@@ -123,6 +126,7 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
         medium = mb5_medium_list_item(medium_list, 0);
         if (!medium) {
             cyanrip_log(ctx, 0, "Got empty medium list.\n");
+            mb5_medium_list_delete(medium_list);
             return 1;
         }
 
@@ -144,6 +148,8 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
     if (!track_list) {
         cyanrip_log(ctx, 0, "Medium has no track list.\n");
+        if (free_list)
+            mb5_medium_list_delete(medium_list);
         return 0;
     }
 
@@ -163,6 +169,9 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
         if (credit)
             mb_credit(credit, ctx->tracks[i].meta, "artist");
     }
+
+    if (free_list)
+        mb5_medium_list_delete(medium_list);
 
     return 0;
 }
