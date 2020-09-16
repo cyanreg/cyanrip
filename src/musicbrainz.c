@@ -24,6 +24,8 @@
 
 #define READ_MB(FUNC, MBCTX, DICT, KEY)                                             \
     do {                                                                            \
+        if (!MBCTX)                                                                 \
+            break;                                                                  \
         int len = FUNC(MBCTX, NULL, 0) + 1;                                         \
         char *str = av_mallocz(4*len);                                              \
         FUNC(MBCTX, str, len);                                                      \
@@ -313,6 +315,18 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "release");
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
+    READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode");
+
+    /* Label info */
+    Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
+    if (mb5_labelinfo_list_get_count(labelinfolist) == 1) {
+        Mb5LabelInfo *labelinfo = mb5_label_list_item(labelinfolist, 0);
+        READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalog");
+
+        Mb5Label *label = mb5_labelinfo_get_label(labelinfo);
+        READ_MB(mb5_label_get_name, label, ctx->meta, "label");
+    }
+
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
     if (artistcredit)
         mb_credit(artistcredit, ctx->meta, "album_artist");
