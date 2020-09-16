@@ -276,20 +276,33 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx)
 }
 
 static int search_for_offset(int *offset_found, const uint8_t *mem, int dir,
-                             int bytes, uint32_t ar_db_checksum_450)
+                             int guess, int bytes, uint32_t ar_db_checksum_450)
 {
+    if (guess) {
+        const uint8_t *start_addr = mem + guess*4;
+        uint32_t accurip_v1 = 0x0;
+        for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
+            accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
+        if (accurip_v1 == ar_db_checksum_450 && accurip_v1) {
+            *offset_found = guess;
+            return 1;
+        }
+    }
+
     for (int byte_off = ((dir < 0) * 4); byte_off < bytes; byte_off += 4) {
         if (quit_now)
             return 0;
 
-        const uint8_t *start_addr = mem + dir * byte_off;
+        int offset = dir * (byte_off >> 2);
+        if (guess == offset)
+            continue;
 
+        const uint8_t *start_addr = mem + dir * byte_off;
         uint32_t accurip_v1 = 0x0;
         for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
             accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
-
         if (accurip_v1 == ar_db_checksum_450 && accurip_v1) {
-            *offset_found = dir * (byte_off >> 2);
+            *offset_found = offset;
             return 1;
         }
     }
@@ -343,11 +356,11 @@ static void search_for_drive_offset(cyanrip_ctx *ctx, int range)
 
         cyanrip_log(ctx, 0, "Data loaded, searching for offsets...\n");
 
-        found = search_for_offset(&offset, mem + (bytes >> 1), dir,
+        found = search_for_offset(&offset, mem + (bytes >> 1), dir, offset_found_samples,
                                   range * CDIO_CD_FRAMESIZE_RAW,
                                   ctx->tracks[t_idx].ar_db_checksum_450);
         if (!found)
-            found = search_for_offset(&offset, mem + (bytes >> 1), -dir,
+            found = search_for_offset(&offset, mem + (bytes >> 1), -dir, 0,
                                       range * CDIO_CD_FRAMESIZE_RAW,
                                       ctx->tracks[t_idx].ar_db_checksum_450);
 
