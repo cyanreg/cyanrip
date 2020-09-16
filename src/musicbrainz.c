@@ -328,7 +328,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
 
     /* Label info */
     Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
-    if (mb5_labelinfo_list_get_count(labelinfolist) == 1) {
+    if (mb5_labelinfo_list_size(labelinfolist) == 1) {
         Mb5LabelInfo *labelinfo = mb5_label_list_item(labelinfolist, 0);
         READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalog");
 
