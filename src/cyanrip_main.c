@@ -1085,6 +1085,10 @@ int main(int argc, char **argv)
                            mb_release_idx, mb_release_str, discnumber))
         return 1;
 
+    /* Print this for easy access */
+    if (ctx->settings.print_info_only)
+        cyanrip_log(ctx, 0, "MusicBrainz URL:\n%s\n", ctx->mb_submission_url);
+
     /* Fill in accurip data */
     if (crip_fill_accurip(ctx))
         return 1;
