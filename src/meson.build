@@ -23,7 +23,6 @@ dependencies = [
     # other dependencies
     dependency('libcdio', version: '>= 2.0'),
     dependency('libcdio_paranoia', version: '>= 10.2'),
-    dependency('libdiscid', version: '>= 0.6'),
     dependency('libmusicbrainz5', version: '>= 5.1', static: static_build),
     dependency('libcurl', version: '>=7.66.0'),
 

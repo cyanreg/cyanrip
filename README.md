@@ -23,7 +23,6 @@ Complete list of dependencies:
 
  * FFmpeg (at least 4.0, libavcodec, libswresample, libavutil, libavformat, libavfilter)
  * libcdio-paranoia
- * libdiscid
  * libmusicbrainz5
  * libcurl
 

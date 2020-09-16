@@ -153,10 +153,11 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return AVERROR(EINVAL);
     }
 
+    int first_track_nb = cdio_get_first_track_num(ctx->cdio);
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
-        t->number = t->cd_track_number = i + 1;
+        t->number = t->cd_track_number = i + first_track_nb;
         t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
         t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
@@ -174,6 +175,8 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
                 ctx->tracks[i - 1].end_lsn -= 11400;
                 t->pregap_lsn = ctx->tracks[i - 1].end_lsn + 1;
             }
+        } else {
+            ctx->last_audio_track_idx = i;
         }
     }
 

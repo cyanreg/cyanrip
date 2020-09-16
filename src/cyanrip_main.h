@@ -130,9 +130,10 @@ typedef struct cyanrip_ctx {
     FILE              *logfile[CYANRIP_FORMATS_NB];
     cyanrip_settings   settings;
 
-    cyanrip_track tracks[99];
+    cyanrip_track tracks[198];
     int nb_tracks; /* Total number of output tracks */
     int nb_cd_tracks; /* Total tracks the CD signals */
+    int last_audio_track_idx;
 
     char *mb_submission_url;
 
