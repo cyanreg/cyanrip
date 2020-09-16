@@ -67,6 +67,9 @@ static uint32_t crc_medium(Mb5Medium medium)
         AVDictionary *tmp_dict = NULL;
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);
+
+        READ_MB(mb5_recording_get_id, recording, tmp_dict, "mbid");
+
         Mb5ArtistCredit credit;
         if (recording) {
             READ_MB(mb5_recording_get_title, recording, tmp_dict, "title");
@@ -78,6 +81,8 @@ static uint32_t crc_medium(Mb5Medium medium)
         if (credit)
             mb_credit(credit, tmp_dict, "artist");
 
+        if (dict_get(tmp_dict, "mbid"))
+            crc = av_crc(crc_tab, crc, dict_get(tmp_dict, "mbid"), strlen(dict_get(tmp_dict, "mbid")));
         if (dict_get(tmp_dict, "artist"))
             crc = av_crc(crc_tab, crc, dict_get(tmp_dict, "artist"), strlen(dict_get(tmp_dict, "artist")));
         if (dict_get(tmp_dict, "title"))
@@ -158,6 +163,9 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             break;
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);
+
+        READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid");
+
         Mb5ArtistCredit credit;
         if (recording) {
             READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title");
