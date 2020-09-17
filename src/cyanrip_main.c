@@ -792,15 +792,15 @@ static char *append_missing_keys(char *src, const char *key1, const char *key2)
 
     /* Look for keyless entries */
     int count = 0;
-    char *p = strtok(src, ":");
-    while (p != NULL) {
+    char *p_save, *p = av_strtok(src, ":", &p_save);
+    while (p) {
         if (!strstr(p, "=")) {
             if (count == 0)
                 add_key1_offset = p - src;
             else if (count == 1)
                 add_key2_offset = p - src;
         }
-        p = strtok(NULL, ":");
+        p = av_strtok(NULL, ":", &p_save);
         if (++count >= 2)
             break;
     }
@@ -852,7 +852,7 @@ int main(int argc, char **argv)
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, sizeof(settings.pregap_action));
 
     int c;
-    char *p;
+    char *p_save, *p;
     int mb_release_idx = -1;
     char *mb_release_str = NULL;
     int discnumber = 0, totaldiscs = 0;
@@ -948,8 +948,8 @@ int main(int argc, char **argv)
             break;
         case 'l':
             settings.rip_indices_count = 0;
-            p = strtok(optarg, ",");
-            while(p != NULL) {
+            p = av_strtok(optarg, ",", &p_save);
+            while (p) {
                 int idx = strtol(p, NULL, 10);
                 for (int i = 0; i < settings.rip_indices_count; i++) {
                     if (settings.rip_indices[i] == idx) {
@@ -958,7 +958,7 @@ int main(int argc, char **argv)
                     }
                 }
                 settings.rip_indices[settings.rip_indices_count++] = idx;
-                p = strtok(NULL, ",");
+                p = av_strtok(NULL, ",", &p_save);
             }
             qsort(settings.rip_indices, settings.rip_indices_count,
                   sizeof(int), cmp_numbers);
@@ -970,8 +970,8 @@ int main(int argc, char **argv)
                 cyanrip_print_codecs();
                 return 0;
             }
-            p = strtok(optarg, ",");
-            while (p != NULL) {
+            p = av_strtok(optarg, ",", &p_save);
+            while (p) {
                 int res = cyanrip_validate_fmt(p);
                 for (int i = 0; i < settings.outputs_num; i++) {
                     if (settings.outputs[i] == res) {
@@ -985,7 +985,7 @@ int main(int argc, char **argv)
                     cyanrip_log(ctx, 0, "Invalid format \"%s\"\n", p);
                     return 1;
                 }
-                p = strtok(NULL, ",");
+                p = av_strtok(NULL, ",", &p_save);
             }
             break;
         case 'I':
@@ -1000,17 +1000,17 @@ int main(int argc, char **argv)
         case 'A':
             settings.disable_accurip = 1;
             break;
-        case 'F':
+        case 'f':
             find_drive_offset_range = 6;
             break;
         case 'C':
-            p = strtok(optarg, "/");
+            p = av_strtok(optarg, "/", &p_save);
             discnumber = strtol(p, NULL, 10);
             if (discnumber <= 0) {
                 cyanrip_log(ctx, 0, "Invalid discnumber %i\n", discnumber);
                 return 1;
             }
-            p = strtok(NULL, "/");
+            p = av_strtok(NULL, "/", &p_save);
             if (!p)
                 break;
             totaldiscs = strtol(p, NULL, 10);
@@ -1024,14 +1024,14 @@ int main(int argc, char **argv)
             }
             break;
         case 'p':
-            p = strtok(optarg, "=");
+            p = av_strtok(optarg, "=", &p_save);
             int idx = strtol(p, NULL, 10);
             if (idx < 1 || idx > 99) {
                 cyanrip_log(ctx, 0, "Invalid track idx %i\n", idx);
                 return 1;
             }
             enum cyanrip_pregap_action act = CYANRIP_PREGAP_DEFAULT;
-            p = strtok(NULL, "=");
+            p = av_strtok(NULL, "=", &p_save);
             if (!p) {
                 cyanrip_log(ctx, 0, "Missing pregap action\n");
                 return 1;
