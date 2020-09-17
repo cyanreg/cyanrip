@@ -1095,22 +1095,28 @@ int main(int argc, char **argv)
     crip_fill_mcn(ctx);
 
     /* Fill discid */
-    if (crip_fill_discid(ctx))
-        return 1;
+    if (crip_fill_discid(ctx)) {
+        ctx->total_error_count++;
+        goto end;
+    }
 
     /* Fill musicbrainz metadata */
     if (crip_fill_metadata(ctx,
                            !!album_metadata_ptr || track_metadata_ptr_cnt,
-                           mb_release_idx, mb_release_str, discnumber))
-        return 1;
+                           mb_release_idx, mb_release_str, discnumber)) {
+        ctx->total_error_count++;
+        goto end;
+    }
 
     /* Print this for easy access */
     if (ctx->settings.print_info_only)
         cyanrip_log(ctx, 0, "MusicBrainz URL:\n%s\n", ctx->mb_submission_url);
 
     /* Fill in accurip data */
-    if (crip_fill_accurip(ctx))
-        return 1;
+    if (crip_fill_accurip(ctx)) {
+        ctx->total_error_count++;
+        goto end;
+    }
 
     if (find_drive_offset_range) {
         search_for_drive_offset(ctx, find_drive_offset_range);
@@ -1140,7 +1146,8 @@ int main(int argc, char **argv)
         if (err) {
             cyanrip_log(ctx, 0, "Error reading album tags: %s\n",
                         av_err2str(err));
-            return 1;
+            ctx->total_error_count++;
+            goto end;
         }
 
         /* Fixup title tag mistake */
@@ -1194,7 +1201,8 @@ int main(int argc, char **argv)
         if (track_idx >= ctx->nb_tracks) {
             cyanrip_log(ctx, 0, "Invalid track number %i, list has %i tracks!\n",
                         u_nb, ctx->nb_tracks);
-            return 1;
+            ctx->total_error_count++;
+            goto end;
         }
 
         end += 1; /* Move past equal sign */
@@ -1209,7 +1217,8 @@ int main(int argc, char **argv)
         if (err) {
             cyanrip_log(ctx, 0, "Error reading track tags: %s\n",
                         av_err2str(err));
-            return 1;
+            ctx->total_error_count++;
+            goto end;
         }
     }
 
