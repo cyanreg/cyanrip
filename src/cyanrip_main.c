@@ -394,12 +394,15 @@ end:
     av_free(mem);
 
     if (!offset_found) {
-        if (!had_ar)
+        if (!had_ar) {
             cyanrip_log(ctx, 0, "No track had AccuRip entry, cannot find offset!\n");
-        else if (had_ar && !did_check)
+        } else if (had_ar && !did_check) {
             cyanrip_log(ctx, 0, "No track was long enough, unable to find drive offset!\n");
-        else
-            cyanrip_log(ctx, 0, "Was not able to find drive offset!\n");
+        } else {
+            cyanrip_log(ctx, 0, "Was not able to find drive offset with a radius of %i frames"
+                        ", trying again with a larger radius...\n", range);
+            search_for_drive_offset(ctx, 2*range);
+        }
         return;
     } else {
         cyanrip_log(ctx, 0, "Drive offset of %c%i found (confidence: %i)!\n",
