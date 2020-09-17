@@ -16,11 +16,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <accurip.h>
+#include <stdlib.h>
+#include <curl/curl.h>
+
+#include "accurip.h"
 #include "cyanrip_log.h"
 #include "bytestream.h"
-
-#include <curl/curl.h>
 
 #define ACCURIP_DB_BASE_URL "http://www.accuraterip.com/accuraterip"
 
@@ -68,6 +69,11 @@ static size_t receive_data(void *buffer, size_t size, size_t nb, void *opaque)
     rctx->size += size * nb;
 
     return size * nb;
+}
+
+static int cmp_conf(const void *a, const void *b)
+{
+    return ((CRIPAccuDBEntry *)a)->confidence - ((CRIPAccuDBEntry *)b)->confidence;
 }
 
 int crip_fill_accurip(cyanrip_ctx *ctx)
@@ -162,25 +168,51 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     GetByteContext gbc = { 0 };
     bytestream2_init(&gbc, rctx.data, rctx.size);
 
-    if (bytestream2_get_byte(&gbc) != audio_tracks ||
-        bytestream2_get_le32(&gbc) != id_type_1 ||
-        bytestream2_get_le32(&gbc) != id_type_2 ||
-        bytestream2_get_le32(&gbc) != cddb_id) {
-        cyanrip_log(ctx, 0, "AccuRIP DB error: mismatching entry found!\n");
-        ctx->ar_db_status = CYANRIP_ACCUDB_MISMATCH;
-        goto end;
-    }
-
     ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
 
-    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
-        if (ctx->tracks[i].track_is_data)
-            continue;
+    int entry_size = 1 + 12 + audio_tracks * (1 + 8);
+    float nb_entries = rctx.size / entry_size;
 
-        ctx->tracks[i].ar_db_status = CYANRIP_ACCUDB_FOUND;
-        ctx->tracks[i].ar_db_confidence = bytestream2_get_byte(&gbc);
-        ctx->tracks[i].ar_db_checksum = bytestream2_get_le32(&gbc);
-        ctx->tracks[i].ar_db_checksum_450 = bytestream2_get_le32(&gbc);
+    for (int i = 0; i < nb_entries; i++) {
+        if (bytestream2_get_byte(&gbc) != audio_tracks ||
+            bytestream2_get_le32(&gbc) != id_type_1 ||
+            bytestream2_get_le32(&gbc) != id_type_2 ||
+            bytestream2_get_le32(&gbc) != cddb_id) {
+            if (ctx->ar_db_status != CYANRIP_ACCUDB_FOUND)
+                ctx->ar_db_status = CYANRIP_ACCUDB_MISMATCH;
+            bytestream2_skip(&gbc, bytestream2_tell(&gbc) % entry_size);
+            continue;
+        }
+
+        ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
+
+        for (int j = 0; j < audio_tracks; j++) {
+            cyanrip_track *t = &ctx->tracks[j];
+
+            int confidence = bytestream2_get_byte(&gbc);
+            uint32_t checksum = bytestream2_get_le32(&gbc);
+            uint32_t checksum_450 = bytestream2_get_le32(&gbc);
+
+            if (t->track_is_data)
+                continue;
+
+            t->ar_db_entries = av_realloc(t->ar_db_entries,
+                                          sizeof(CRIPAccuDBEntry) * (t->ar_db_nb_entries + 1));
+
+            t->ar_db_status = CYANRIP_ACCUDB_FOUND;
+            t->ar_db_entries[t->ar_db_nb_entries].confidence = confidence;
+            t->ar_db_entries[t->ar_db_nb_entries].checksum = checksum;
+            t->ar_db_entries[t->ar_db_nb_entries].checksum_450 = checksum_450;
+            t->ar_db_max_confidence = FFMAX(confidence, t->ar_db_max_confidence);
+
+            t->ar_db_nb_entries++;
+        }
+    }
+
+    for (int i = 0; i < audio_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+        if (t->ar_db_nb_entries)
+            qsort(t->ar_db_entries, t->ar_db_nb_entries, sizeof(CRIPAccuDBEntry), cmp_conf);
     }
 
 end:
@@ -188,4 +220,21 @@ end:
     av_free(rctx.data);
 
     return ret;
+}
+
+int crip_find_ar(cyanrip_track *t, uint32_t checksum, int is_450)
+{
+    if (t->ar_db_status != CYANRIP_ACCUDB_FOUND)
+        return 0;
+
+    for (int i = 0; i < t->ar_db_nb_entries; i++) {
+        CRIPAccuDBEntry *e = &t->ar_db_entries[i];
+        if (is_450 && e->checksum_450 == checksum) {
+            return e->confidence;
+        } else if (e->checksum == checksum) {
+            return e->confidence;
+        }
+    }
+
+    return -1;
 }

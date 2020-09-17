@@ -87,6 +87,12 @@ typedef struct cyanrip_settings {
     int outputs_num;
 } cyanrip_settings;
 
+typedef struct CRIPAccuDBEntry {
+    int confidence;
+    uint32_t checksum; /* We don't know which version it is */
+    uint32_t checksum_450;
+} CRIPAccuDBEntry;
+
 typedef struct cyanrip_track {
     int number; /* Human readable track number, may be 0 */
     int cd_track_number; /* Actual track on the CD, may be 0 */
@@ -118,9 +124,9 @@ typedef struct cyanrip_track {
     int acurip_track_is_last;
 
     enum CRIPAccuDBStatus ar_db_status;
-    int ar_db_confidence;
-    uint32_t ar_db_checksum; /* We don't know which version it is */
-    uint32_t ar_db_checksum_450;
+    CRIPAccuDBEntry *ar_db_entries;
+    int ar_db_nb_entries;
+    int ar_db_max_confidence;
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {

@@ -21,3 +21,4 @@
 #include <cyanrip_main.h>
 
 int crip_fill_accurip(cyanrip_ctx *ctx);
+int crip_find_ar(cyanrip_track *t, uint32_t checksum, int is_450);

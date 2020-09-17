@@ -37,8 +37,10 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
         return;
     ctx = *s;
 
-    for (int i = 0; i < ctx->nb_tracks; i++)
+    for (int i = 0; i < ctx->nb_tracks; i++) {
         av_dict_free(&ctx->tracks[i].meta);
+        av_free(ctx->tracks[i].ar_db_entries);
+    }
 
     av_free(ctx->mb_submission_url);
 
@@ -275,15 +277,16 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx)
     return data;
 }
 
-static int search_for_offset(int *offset_found, const uint8_t *mem, int dir,
-                             int guess, int bytes, uint32_t ar_db_checksum_450)
+static int search_for_offset(cyanrip_track *t, int *offset_found,
+                             const uint8_t *mem, int dir,
+                             int guess, int bytes)
 {
     if (guess) {
         const uint8_t *start_addr = mem + guess*4;
         uint32_t accurip_v1 = 0x0;
         for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
             accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
-        if (accurip_v1 == ar_db_checksum_450 && accurip_v1) {
+        if (crip_find_ar(t, accurip_v1, 1) == t->ar_db_max_confidence && accurip_v1) {
             *offset_found = guess;
             return 1;
         }
@@ -301,7 +304,7 @@ static int search_for_offset(int *offset_found, const uint8_t *mem, int dir,
         uint32_t accurip_v1 = 0x0;
         for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
             accurip_v1 += AV_RL32(&start_addr[j*4]) * (j + 1);
-        if (accurip_v1 == ar_db_checksum_450 && accurip_v1) {
+        if (crip_find_ar(t, accurip_v1, 1) == t->ar_db_max_confidence && accurip_v1) {
             *offset_found = offset;
             return 1;
         }
@@ -320,6 +323,7 @@ static void search_for_drive_offset(cyanrip_ctx *ctx, int range)
         goto end;
 
     for (int t_idx = 0; t_idx < ctx->nb_tracks; t_idx++) {
+        cyanrip_track *t = &ctx->tracks[t_idx];
         lsn_t start = cdio_get_track_lsn(ctx->cdio, t_idx + 1);
         lsn_t end = cdio_get_track_last_lsn(ctx->cdio, t_idx + 1);
 
@@ -356,13 +360,11 @@ static void search_for_drive_offset(cyanrip_ctx *ctx, int range)
 
         cyanrip_log(ctx, 0, "Data loaded, searching for offsets...\n");
 
-        found = search_for_offset(&offset, mem + (bytes >> 1), dir, offset_found_samples,
-                                  range * CDIO_CD_FRAMESIZE_RAW,
-                                  ctx->tracks[t_idx].ar_db_checksum_450);
+        found = search_for_offset(t, &offset, mem + (bytes >> 1), dir, offset_found_samples,
+                                  range * CDIO_CD_FRAMESIZE_RAW);
         if (!found)
-            found = search_for_offset(&offset, mem + (bytes >> 1), -dir, 0,
-                                      range * CDIO_CD_FRAMESIZE_RAW,
-                                      ctx->tracks[t_idx].ar_db_checksum_450);
+            found = search_for_offset(t, &offset, mem + (bytes >> 1), -dir, 0,
+                                      range * CDIO_CD_FRAMESIZE_RAW);
 
         if (!found) {
             cyanrip_log(ctx, 0, "Nothing found for track %i%s\n", t_idx + 1,
