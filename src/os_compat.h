@@ -62,3 +62,47 @@ static inline int win32_stat(const char *filename_utf8, struct stat* statbuf)
 #define mkdir(path, mode) win32_mkdir(path)
 #define stat(path, statbuf) win32_stat(path, statbuf)
 #endif
+
+#if defined(__MACH__)
+#define HAS_COLUMN 0
+#endif
+
+#if defined(HAVE_WMAIN)
+#define HAS_CH_LESS 0
+#define HAS_CH_MORE 0
+#define HAS_CH_COLUMN 0
+#define HAS_CH_OR 0
+#define HAS_CH_Q 0
+#define HAS_CH_ANY 0
+#define HAS_CH_FWDSLASH 0
+#define HAS_CH_BWDSLASH 0
+#define HAS_CH_QUOTES 0
+#endif
+
+#ifndef HAS_CH_LESS
+#define HAS_CH_LESS 1
+#endif
+#ifndef HAS_CH_MORE
+#define HAS_CH_MORE 1
+#endif
+#ifndef HAS_CH_COLUMN
+#define HAS_CH_COLUMN 1
+#endif
+#ifndef HAS_CH_OR
+#define HAS_CH_OR 1
+#endif
+#ifndef HAS_CH_Q
+#define HAS_CH_Q 1
+#endif
+#ifndef HAS_CH_ANY
+#define HAS_CH_ANY 1
+#endif
+#ifndef HAS_CH_FWDSLASH
+#define HAS_CH_FWDSLASH 0 // default should be 0 here
+#endif
+#ifndef HAS_CH_BWDSLASH
+#define HAS_CH_BWDSLASH 1
+#endif
+#ifndef HAS_CH_QUOTES
+#define HAS_CH_QUOTES 1
+#endif

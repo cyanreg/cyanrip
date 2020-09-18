@@ -18,6 +18,10 @@
 
 #include <time.h>
 #include <getopt.h>
+#include <sys/stat.h>
+
+#include <libavutil/bprint.h>
+#include <libavutil/avstring.h>
 
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
@@ -29,6 +33,21 @@
 #include "os_compat.h"
 
 int quit_now = 0;
+
+const cyanrip_out_fmt crip_fmt_info[] = {
+    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
+    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
+    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
+    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  "ogg",   0, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   "adts",  0,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
+    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
+    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
+    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "ipod",  0,  2, 1, AV_CODEC_ID_ALAC,      },
+    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_NONE,      },
+    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
+    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_NONE,      },
+};
 
 static void cyanrip_ctx_end(cyanrip_ctx **s)
 {
@@ -822,6 +841,297 @@ static char *append_missing_keys(char *src, const char *key1, const char *key2)
     return copy;
 }
 
+static inline int crip_is_integer(const char *src)
+{
+    for (int i = 0; i < strlen(src); i++)
+        if (!av_isdigit(src[i]))
+            return 0;
+    return 1;
+}
+
+struct CRIPCharReplacement {
+    const char from;
+    const char to;
+    const char to_u[5];
+    size_t len_u;
+    int is_avail_locally;
+} crip_char_replacement[] = {
+    { '<', '_', "‹", strlen("‹"), HAS_CH_LESS },
+    { '>', '_', "›", strlen("›"), HAS_CH_MORE },
+    { ':', '_', "∶", strlen("∶"), HAS_CH_COLUMN },
+    { '|', '_', "│", strlen("│"), HAS_CH_OR },
+    { '?', '_', "？", strlen("？"), HAS_CH_Q },
+    { '*', '_', "∗", strlen("∗"), HAS_CH_ANY },
+    { '/', '_', "∕", strlen("∕"), HAS_CH_FWDSLASH },
+    { '\'', '_', "⧹", strlen("⧹"), HAS_CH_BWDSLASH },
+    { '"', '\'', "“", strlen("“"), HAS_CH_QUOTES },
+    { '"', '\'', "”", strlen("”"), HAS_CH_QUOTES },
+    { 0 },
+};
+
+static inline char *crip_sanitize_str(cyanrip_ctx *ctx, char *src_str)
+{
+    int32_t cp, ret, quote_match = 0;
+    char *str_start = av_mallocz(4*strlen(src_str) + 1); /* Worst case */
+    char *end = str_start + strlen(src_str), *str = str_start, *pos = str_start;
+
+    memcpy(str_start, src_str, strlen(src_str));
+
+    while (str < end) {
+        ret = av_utf8_decode(&cp, (const uint8_t **)&str, end, AV_UTF8_FLAG_ACCEPT_ALL);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error parsing string: %s!\n", av_err2str(ret));
+            return str_start;
+        }
+
+        struct CRIPCharReplacement *rep = NULL;
+        for (int i = 0; crip_char_replacement[i].from; i++) {
+            if (cp == crip_char_replacement[i].from) {
+                int is_quote = crip_char_replacement[i].from == '"';
+                rep = &crip_char_replacement[i + (is_quote && quote_match)];
+                quote_match = (quote_match + 1) & 1;
+                break;
+            }
+        }
+
+        if (!rep) {
+            pos = str;
+            continue;
+        }
+
+        switch (ctx->settings.sanitize_method) {
+        case CRIP_SANITIZE_OS_SIMPLE:
+            if (rep->is_avail_locally)
+                break;
+        case CRIP_SANITIZE_SIMPLE:
+            *pos = rep->to;
+            break;
+        case CRIP_SANITIZE_OS_UNICODE:
+            if (rep->is_avail_locally)
+                break;
+        case CRIP_SANITIZE_UNICODE:
+            memmove(pos + rep->len_u, pos + 1, end - pos - 1);
+            memcpy(pos, rep->to_u, rep->len_u);
+            str += rep->len_u;
+            end += rep->len_u;
+            break;
+        }
+
+        pos = str;
+    }
+
+    return str_start;
+}
+
+static char *get_dir_tag_val(cyanrip_ctx *ctx, AVDictionary *meta,
+                             const char *ofmt, const char *key)
+{
+    char *val = NULL;
+    if (!strcmp(key, "year")) {
+        const char *date = dict_get(meta, "date");
+        if (date) {
+            char *save_year, *date_dup = av_strdup(date);
+            val = av_strdup(av_strtok(date_dup, ":-", &save_year));
+            av_free(date_dup);
+        }
+    } else if (!strcmp(key, "format")) {
+        val = av_strdup(ofmt);
+    } else if (!strcmp(key, "track")) {
+        const char *track = dict_get(meta, "track");
+        if (crip_is_integer(track)) {
+            int pad = 0, digits = strlen(track);
+            if (((digits + pad) < 2) && ctx->nb_tracks >  9) pad++;
+            if (((digits + pad) < 3) && ctx->nb_tracks > 99) pad++;
+            val = av_mallocz(pad + digits + 1);
+            for (int i = 0; i < pad; i++)
+                val[i] = '0';
+            memcpy(&val[pad], track, digits);
+        } else {
+            val = av_strdup(track);
+        }
+    } else {
+        val = av_strdup(dict_get(meta, key));
+    }
+
+    return val;
+}
+
+#define BUF_SANITIZE_APPEND(CTX, BUF, STR_IN)         \
+    do {                                              \
+        char *str = crip_sanitize_str(CTX, STR_IN);   \
+        av_bprint_append_data(BUF, str, strlen(str)); \
+        av_free(str);                                 \
+    } while (0)
+
+static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
+                        const char *ofmt, const char *scheme)
+{
+    char *scheme_copy = av_strdup(scheme);
+
+    char *save, *tok = av_strtok(scheme_copy, "$", &save);
+    while (tok) {
+        if (((tok > scheme_copy) && (tok[-1] == '\''))) {
+            BUF_SANITIZE_APPEND(ctx, buf, tok);
+            tok = av_strtok(NULL, "$", &save);
+            continue;
+        }
+
+        if (!strncmp(tok, "if", strlen("if"))) {
+            char *cond = av_strdup(tok);
+            char *cond_save, *cond_tok = av_strtok(cond, "#", &cond_save);
+
+            cond_tok = av_strtok(NULL, "#", &cond_save);
+            if (!cond_tok) {
+                cyanrip_log(ctx, 0, "Invalid scheme syntax, no \"#\"!\n");
+                av_free(cond);
+                goto fail;
+            }
+
+            char *val1 = get_dir_tag_val(ctx, meta, ofmt, cond_tok);
+            if (!val1)
+                val1 = av_strdup(tok);
+
+            cond_tok = av_strtok(NULL, "#", &cond_save);
+            if (!cond_tok) {
+                cyanrip_log(ctx, 0, "Invalid scheme syntax, no terminating \"#\"!\n");
+                av_free(cond);
+                av_free(val1);
+                goto fail;
+            }
+
+            int cond_is_eq = 0, cond_is_not_eq = 0, cond_is_more = 0, cond_is_less = 0;
+            if (strstr(cond_tok, "==")) {
+                cond_is_eq = 1;
+            } else if (strstr(cond_tok, "!=")) {
+                cond_is_not_eq = 1;
+            } else if (strstr(cond_tok, ">")) {
+                cond_is_more = 1;
+            } else if (strstr(cond_tok, "<")) {
+                cond_is_less = 1;
+            } else {
+                cyanrip_log(ctx, 0, "Invalid condition syntax!\n");
+                av_free(cond);
+                av_free(val1);
+                goto fail;
+            }
+
+            cond_tok = av_strtok(NULL, "#", &cond_save);
+            if (!cond_tok) {
+                cyanrip_log(ctx, 0, "Invalid scheme syntax, no terminating \"#\"!\n");
+                goto fail;
+            }
+
+            char *val2 = get_dir_tag_val(ctx, meta, ofmt, cond_tok);
+            if (!val2)
+                val2 = av_strdup(cond_tok);
+
+            cond_tok = av_strtok(NULL, "#", &cond_save);
+            if (!cond_tok) {
+                cyanrip_log(ctx, 0, "Invalid scheme syntax, no terminating \"#\"!\n");
+                goto fail;
+            }
+
+            int cond_true = 0;
+            cond_true |= cond_is_eq && !strcmp(val1, val2);
+            cond_true |= cond_is_not_eq && strcmp(val1, val2);
+
+            if (cond_is_less || cond_is_more) {
+                int64_t val1_dec = crip_is_integer(val1) ? strtol(val1, NULL, 10) : (cond_is_more ? INT64_MIN : INT64_MAX);
+                int64_t val2_dec = crip_is_integer(val1) ? strtol(val2, NULL, 10) : (cond_is_less ? INT64_MIN : INT64_MAX);
+                cond_true |= cond_is_less && val1_dec < val2_dec;
+                cond_true |= cond_is_more && val1_dec > val2_dec;
+            }
+
+            if (cond_true) {
+                char *true_save, *true_tok = av_strtok(cond_tok, "|", &true_save);
+                while (true_tok) {
+                    if (((true_tok > cond_tok) && (true_tok[-1] == '\''))) {
+                        BUF_SANITIZE_APPEND(ctx, buf, true_tok);
+                        true_tok = av_strtok(NULL, "|", &true_save);
+                        continue;
+                    }
+
+                    char *true_val = get_dir_tag_val(ctx, meta, ofmt, true_tok);
+                    if (!true_val)
+                        true_val = av_strdup(true_tok);
+
+                    BUF_SANITIZE_APPEND(ctx, buf, true_val);
+                    av_free(true_val);
+
+                    true_tok = av_strtok(NULL, "|", &true_save);
+                }
+            }
+
+            av_free(val2);
+            av_free(val1);
+            av_free(cond);
+
+            tok = av_strtok(NULL, "$", &save);
+            continue;
+        }
+
+        char *val = get_dir_tag_val(ctx, meta, ofmt, tok);
+        if (!val)
+            val = av_strdup(tok);
+
+        BUF_SANITIZE_APPEND(ctx, buf, val);
+        av_free(val);
+
+        tok = av_strtok(NULL, "$", &save);
+    }
+
+    av_free(scheme_copy);
+    return 0;
+
+fail:
+    av_free(scheme_copy);
+    return AVERROR(EINVAL);
+}
+
+char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type,
+                    const cyanrip_out_fmt *fmt, void *arg)
+{
+    char *ret = NULL, **ret_p = NULL;
+    AVBPrint buf;
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
+
+    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, ctx->settings.folder_name_scheme))
+        goto end;
+
+    if (type == CRIP_PATH_FOLDER) {
+        ret_p = &ret;
+        goto end;
+    }
+
+    av_bprintf(&buf, "/");
+
+    char *ext = NULL;
+    if (type == CRIP_PATH_COVERART) {
+        BUF_SANITIZE_APPEND(ctx, &buf, arg);
+        CRIPArt *art = arg;
+        ext = av_strdup(art->extension);
+    } else if (type == CRIP_PATH_LOG) {
+        if (process_cond(ctx, &buf, ctx->meta, fmt->name, ctx->settings.log_name_scheme))
+            goto end;
+        ext = av_strdup("log");
+    } else {
+        cyanrip_track *t = arg;
+        if (process_cond(ctx, &buf, t->meta, fmt->name, ctx->settings.track_name_scheme))
+            goto end;
+        ext = av_strdup(fmt->ext);
+    }
+
+    if (ext)
+        av_bprintf(&buf, ".%s", ext);
+    av_free(ext);
+
+    ret_p = &ret;
+
+end:
+    av_bprint_finalize(&buf, ret_p);
+    return ret;
+}
+
 int main(int argc, char **argv)
 {
     cyanrip_ctx *ctx = NULL;
@@ -832,7 +1142,10 @@ int main(int argc, char **argv)
 
     /* Default settings */
     settings.dev_path = NULL;
-    settings.base_dst_folder = NULL;
+    settings.folder_name_scheme = "$album$ [$format$]";
+    settings.track_name_scheme = "$if #totaldiscs# > #1#|disc|.$$track$ - $title$";
+    settings.log_name_scheme = "$album$$if #totaldiscs# > #1# CD|disc|$";
+    settings.sanitize_method = CRIP_SANITIZE_UNICODE;
     settings.speed = 0;
     settings.frame_max_retries = 25;
     settings.over_under_read_frames = 0;
@@ -862,7 +1175,7 @@ int main(int argc, char **argv)
     int track_metadata_ptr_cnt = 0;
     int find_drive_offset_range = 0;
 
-    while ((c = getopt(argc, argv, "hnFAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:")) != -1) {
+    while ((c = getopt(argc, argv, "hnfAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -886,14 +1199,17 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
-            cyanrip_log(ctx, 0, "    -D <path>             Base folder name to rip disc to\n");
+            cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
+            cyanrip_log(ctx, 0, "    -F <string>           Track naming scheme, by default its \"%s\"\n", settings.track_name_scheme);
+            cyanrip_log(ctx, 0, "    -L <string>           Log file name scheme, by default its \"%s\"\n", settings.log_name_scheme);
+            cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
             cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
             cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
             cyanrip_log(ctx, 0, "\n  Misc. options:\n");
             cyanrip_log(ctx, 0, "    -E                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
             cyanrip_log(ctx, 0, "    -h                    Print options help\n");
-            cyanrip_log(ctx, 0, "    -F                    Find drive offset (requires a disc with an AccuRip DB entry)\n");
+            cyanrip_log(ctx, 0, "    -f                    Find drive offset (requires a disc with an AccuRip DB entry)\n");
             return 0;
             break;
         case 'S':
@@ -1057,7 +1373,27 @@ int main(int argc, char **argv)
             settings.eject_on_success_rip = 1;
             break;
         case 'D':
-            settings.base_dst_folder = optarg;
+            settings.folder_name_scheme = optarg;
+            break;
+        case 'F':
+            settings.track_name_scheme = optarg;
+            break;
+        case 'L':
+            settings.log_name_scheme = optarg;
+            break;
+        case 'T':
+            if (!strncmp(optarg, "simple", strlen("simple"))) {
+                settings.sanitize_method = CRIP_SANITIZE_SIMPLE;
+            } else if (!strncmp(optarg, "os_simple", strlen("os_simple"))) {
+                settings.sanitize_method = CRIP_SANITIZE_OS_SIMPLE;
+            } else if (!strncmp(optarg, "unicode", strlen("unicode"))) {
+                settings.sanitize_method = CRIP_SANITIZE_UNICODE;
+            } else if (!strncmp(optarg, "os_unicode", strlen("os_unicode"))) {
+                settings.sanitize_method = CRIP_SANITIZE_OS_UNICODE;
+            } else {
+                cyanrip_log(ctx, 0, "Invalid sanitation method %s\n", optarg);
+                return 1;
+            }
             break;
         case 'V':
             cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", PROJECT_VERSION_STRING, vcstag);
@@ -1078,6 +1414,11 @@ int main(int argc, char **argv)
             abort();
             break;
         }
+    }
+
+    if (settings.outputs_num > 1 && !strstr(settings.folder_name_scheme, "$format$")) {
+        cyanrip_log(ctx, 0, "Directory name scheme must contain $format$ with multiple output formats!\n");
+        return 1;
     }
 
     if (find_drive_offset_range) {
@@ -1167,17 +1508,19 @@ int main(int argc, char **argv)
             av_dict_set(&ctx->meta, "album_artist", artist, 0);
     }
 
-    if (ctx->settings.base_dst_folder)
-        ctx->base_dst_folder = av_strdup(ctx->settings.base_dst_folder);
-    else if (dict_get(ctx->meta, "album"))
-        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "album"));
-    else if (dict_get(ctx->meta, "discid"))
-        ctx->base_dst_folder = cyanrip_sanitize_fn(dict_get(ctx->meta, "discid"));
-    else
-        ctx->base_dst_folder = av_strdup("Untitled album");
+    if (!ctx->settings.print_info_only) {
+        /* Create directories */
+        for (int i = 0; i < ctx->settings.outputs_num; i++) {
+            char *dirname = crip_get_path(ctx, CRIP_PATH_FOLDER, &crip_fmt_info[ctx->settings.outputs[i]], NULL);
+            struct stat st_req = { 0 };
+            if (stat(dirname, &st_req) == -1)
+                mkdir(dirname, 0700);
+            av_free(dirname);
+        }
 
-    if (!ctx->settings.print_info_only)
+        /* Create logfile */
         cyanrip_log_init(ctx);
+    }
 
     cyanrip_log_start_report(ctx);
     setup_track_offsets_and_report(ctx);
@@ -1219,6 +1562,15 @@ int main(int argc, char **argv)
                         av_err2str(err));
             ctx->total_error_count++;
             goto end;
+        }
+    }
+
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        for (int f = 0; f < ctx->settings.outputs_num; f++) {
+            char *logfile = crip_get_path(ctx, CRIP_PATH_TRACK,
+                                          &crip_fmt_info[ctx->settings.outputs[f]],
+                                          &ctx->tracks[i]);
+            av_free(logfile);
         }
     }
 

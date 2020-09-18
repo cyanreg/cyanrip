@@ -31,9 +31,11 @@
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
 #include <libavutil/intreadwrite.h>
+#include <libavcodec/packet.h>
+#include <libavcodec/codec_id.h>
 
 enum cyanrip_output_formats {
-    CYANRIP_FORMAT_FLAC,
+    CYANRIP_FORMAT_FLAC = 0,
     CYANRIP_FORMAT_TTA,
     CYANRIP_FORMAT_OPUS,
     CYANRIP_FORMAT_AAC,
@@ -64,9 +66,26 @@ enum CRIPAccuDBStatus {
     CYANRIP_ACCUDB_FOUND,
 };
 
+enum CRIPPathType {
+    CRIP_PATH_COVERART, /* arg must be a CRIPArt * */
+    CRIP_PATH_TRACK, /* arg must be a cyanrip_track * */
+    CRIP_PATH_LOG, /* arg must be NULL */
+    CRIP_PATH_FOLDER, /* arg must be NULL */
+};
+
+enum CRIPSanitize {
+    CRIP_SANITIZE_SIMPLE, /* Replace unacceptable symbols with _ */
+    CRIP_SANITIZE_OS_SIMPLE, /* Same as above, but only replaces symbols not allowed on current OS */
+    CRIP_SANITIZE_UNICODE, /* Replace unacceptable symbols with visually identical unicode equivalents */
+    CRIP_SANITIZE_OS_UNICODE, /* Same as above, but only replaces symbols not allowed on current OS */
+};
+
 typedef struct cyanrip_settings {
     char *dev_path;
-    char *base_dst_folder;
+    char *folder_name_scheme;
+    char *track_name_scheme;
+    char *log_name_scheme;
+    enum CRIPSanitize sanitize_method;
     int speed;
     int frame_max_retries;
     int offset;
@@ -161,8 +180,34 @@ typedef struct cyanrip_ctx {
     lsn_t duration_frames;
 } cyanrip_ctx;
 
-extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
-extern const int crip_max_paranoia_level;
+typedef struct CRIPArt {
+    char *name;
+    char *comment;
+    char *extension;
+
+    AVPacket *pkt;
+    enum AVCodecID codec;
+
+    /* Do not scrap raw file data, write it out as-is without remuxing */
+    uint8_t *data;
+    size_t size;
+} CRIPArt;
+
+typedef struct cyanrip_out_fmt {
+    const char *name;
+    const char *folder_suffix;
+    const char *ext;
+    const char *lavf_name;
+    int coverart_supported;
+    int compression_level;
+    int lossless;
+    enum AVCodecID codec;
+} cyanrip_out_fmt;
+
+extern const cyanrip_out_fmt crip_fmt_info[];
+
+char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type,
+                    const cyanrip_out_fmt *fmt, void *arg);
 
 static inline const char *dict_get(AVDictionary *dict, const char *key)
 {
@@ -199,17 +244,5 @@ static inline int cmp_numbers(const void *a, const void *b)
     return *((int *)a) > *((int *)b);
 }
 
-static inline char *cyanrip_sanitize_fn(const char *src)
-{
-    char *str = av_strdup(src);
-    char forbiddenchars[] = "<>:/\\|?*";
-    char *ret = str;
-    while(*str) {
-        if (*str == '"')
-            *str = '\'';
-        else if (strchr(forbiddenchars, *str))
-            *str = '_';
-        str++;
-    }
-    return ret;
-}
+extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
+extern const int crip_max_paranoia_level;

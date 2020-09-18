@@ -39,44 +39,45 @@ cyanrip can be also built and ran under Windows using MinGW
 
 CLI
 ---
-
 Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a MusicBrainz lookup.
 
-| Argument             | Description                                                                             |
-|----------------------|-----------------------------------------------------------------------------------------|
-|                      | **Ripping options**                                                                     |
-| -d `string`          | The path or name for a specific device, otherwise uses the default device               |
-| -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)                    |
-| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)          |
-| -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                    |
-| -p `number=string`   | Specifies what to do with the pregap, syntax is described below                         |
-| -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely  |
-| -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping        |
-| -H                   | Enable HDCD decoding, read below for details                                            |
-|                      | **Metadata options**                                                                    |
-| -I                   | Only print CD metadata and information, will not rip or eject the CD                    |
-| -a `string`          | Album metadata, syntax is described below                                               |
-| -t `number=string`   | Track metadata, syntax is described below                                               |
-| -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string |
-| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below                    |
-| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue             |
-| -A                   | Disables AccurateRip database query and comparison                                      |
-| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                  |
-|                      | **Output options**                                                                      |
-| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                  |
-| -D `string`          | Base folder name to which to rip into, default is the album name                        |
-| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac             |
-| -b `int`             | Bitrate in kbps for lossy formats                                                       |
-|                      | **Misc. options**                                                                       |
-| -E                   | Eject CD tray if ripping has been successfully completed                                |
-| -V                   | Print version                                                                           |
-| -h                   | Print usage (this)                                                                      |
-| -F                   | Find drive offset (requires a disc with an AccuRip DB entry)                            |
+| Argument             | Description                                                                                 |
+|----------------------|---------------------------------------------------------------------------------------------|
+|                      | **Ripping options**                                                                         |
+| -d `string`          | The path or name for a specific device, otherwise uses the default device                   |
+| -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)                        |
+| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)              |
+| -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                        |
+| -p `number=string`   | Specifies what to do with the pregap, syntax is described below                             |
+| -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
+| -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
+| -H                   | Enable HDCD decoding, read below for details                                                |
+|                      | **Metadata options**                                                                        |
+| -I                   | Only print CD metadata and information, will not rip or eject the CD                        |
+| -a `string`          | Album metadata, syntax is described below                                                   |
+| -t `number=string`   | Track metadata, syntax is described below                                                   |
+| -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string     |
+| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below                        |
+| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
+| -A                   | Disables AccurateRip database query and comparison                                          |
+| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                      |
+|                      | **Output options**                                                                          |
+| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                      |
+| -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
+| -F `string`          | File naming scheme, see [below](#naming-scheme)                                             |
+| -L `string`          | Log naming scheme, see [below](#naming-scheme)                                              |
+| -T `string`          | Filename sanitation, default is unicode, see [below](#naming-scheme)                        |
+| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac                 |
+| -b `int`             | Bitrate in kbps for lossy formats                                                           |
+|                      | **Misc. options**                                                                           |
+| -E                   | Eject CD tray if ripping has been successfully completed                                    |
+| -V                   | Print version                                                                               |
+| -h                   | Print usage (this)                                                                          |
+| -f                   | Find drive offset (requires a disc with an AccuRip DB entry)                                |
 
 
 Metadata
 --------
-
 In case the MusicBrainz database doesn't contain the disc information, is incomplete, or incorrect, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
 
 `-a album="Name":album_artist="Artist":date="2018":random_tag="Value"`
@@ -95,9 +96,29 @@ For album tags, if either `artist` or `album_artist` are unset, their values wil
 The precedence of tags is Track tags > Album tags > MusicBrainz tags.
 
 
+Naming scheme
+-------------
+cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
+
+To adjust the folder naming scheme, you can use the `-F` argument. By default, its set to `$album$ [$format$]`. Each token wrapped in `$` symbols represents metadata substitution.
+Hence, `$album$` replaces the string with the album name, while `$format$` is a special, non-metadata lookup to get the output format. `$format$` must be present when encoding to multiple outputs.
+Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-F directory`.
+
+The track naming scheme is by default, `$if #totaldiscs# > #1#|disc|.$$track$ - $title$`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
+The condition pattern is as follows: `$if` starts a contition, and cyanrip will look for an argument, wrapped in `#` symbols.
+It will then look for a condition, with only `==`, `!=`, `>` or `<` supported for equal, not equal, more, or less, respectively. It will then look for another token wrapped in `#` brackets and execute the condition. If the condition is true, anything after the last token's `#` symbol is subsituted, otherwise nothing is.
+Any token not recognized as metadata will be taken literally, as a string. To further evaluate tokens in a condition, wrap them in `|` symbols.
+
+The log naming scheme is by default `$album$$if #totaldiscs# > #1# CD|disc|$`. This is a reasonable default, but it can be changed.
+
+A useful example is to have separate directories for each disc: `-D "$album$$if #totaldiscs# > #1# CD|disc|$ [$format$]" -F "$track$ - $title$"`.
+
+If invalid symbols are found in a file or a folder, such as `:` or `/`, the symbol is by default substituted with a unicode lookalike, such as `∶` or `∕` respectively. If this is undesirable, this can be overridden via the `-T simple` argument. This will replace all invalid symbols with `_`.
+In case you're on an operating system with more liberal allowance on filenames, you can use the `-T os_unicode` option to allow symbols like `:` not supported on Windows to be passed through. Note that this will make files like these not accessible on Windows, unless renamed, so use this only if you're sure.
+
+
 Pregap handling
 ---------------
-
 By default, track 1 pregap is ignored, while any other track's pregap is merged into the previous track. This is identical to EAC's default behaviour.
 
 You can override what's done with each pregap on a per-track basis using the -p *number*=*action* argument. This argument must be specified separately for each track.
@@ -116,7 +137,6 @@ cyanrip guarantees that there will be no discontinuities between tracks, unless 
 
 Cover art embedding
 -------------------
-
 cyanrip supports embedding album and track cover art, in either jpeg or png formats.
 
 To embed cover art for the whole album, either specify it with the -c *path* parameter, or add the cover_art=*path* tag to the album metadata. *path* can be a URL as well, in which case it will be downloaded once per track.
@@ -128,7 +148,6 @@ The cover_art tag containing the path will not be encoded.
 
 Multi-disc albums
 -----------------
-
 cyanrip supports ripping multi-disc albums in the same output folder. To enable this manually, specify the -C argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
 
 The track filenames will be `disc.track - title.ext`. The logfile will be `Album name CD<disc>.log`.
@@ -140,7 +159,6 @@ If each disc has a title, you should use the `discname` tag if you're manually s
 
 HDCD decoding
 -------------
-
 cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look at the log. A non-HDCD encoded disc will have:
 
 ```
@@ -158,7 +176,6 @@ Should a track be detected as HDCD, it would be safe to proceed decoding all of 
 
 Paranoia status count
 ---------------------
-
 At the end of the ripping process, cyanrip will print and log a summary of cdparanoia's status during ripping. This can be used to estimate the disc/drive's health.
 
 An idealized disc and drive will only log `READ: $number$` and nothing else. This happens while ripping from a file. In general `READ`/`VERIFY`/`OVERLAP` are normal and will happen when

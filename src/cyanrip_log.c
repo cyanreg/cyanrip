@@ -19,14 +19,12 @@
 #include <stdarg.h>
 #include <time.h>
 #include <pthread.h>
-#include <sys/stat.h>
 
 #include <libavutil/avutil.h>
 
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 #include "accurip.h"
-#include "os_compat.h"
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -264,24 +262,9 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        /* Directory name */
-        char *dirname = av_asprintf("%s [%s]", ctx->base_dst_folder,
-                                    cyanrip_fmt_folder(ctx->settings.outputs[i]));
-
-        /* Create if it doesn't exist */
-        struct stat st_req = { 0 };
-        if (stat(dirname, &st_req) == -1)
-            mkdir(dirname, 0700);
-
-        /* Log file name */
-        char *logfile;
-        const char *discnumber = dict_get(ctx->meta, "disc");
-        if (discnumber)
-            logfile = av_asprintf("%s/%s CD%s.log", dirname, ctx->base_dst_folder, discnumber);
-        else
-            logfile = av_asprintf("%s/%s.log", dirname, ctx->base_dst_folder);
-
-        av_freep(&dirname);
+        char *logfile = crip_get_path(ctx, CRIP_PATH_LOG,
+                                      &crip_fmt_info[ctx->settings.outputs[i]],
+                                      NULL);
 
         ctx->logfile[i] = av_fopen_utf8(logfile, "w");
 

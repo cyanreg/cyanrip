@@ -55,36 +55,10 @@ struct cyanrip_dec_ctx {
     AVCodecParameters *cover_image_params;
 };
 
-typedef struct cyanrip_out_fmt {
-    const char *name;
-    const char *folder_suffix;
-    const char *ext;
-    const char *lavf_name;
-    int coverart_supported;
-    int compression_level;
-    int lossless;
-    enum AVCodecID codec;
-} cyanrip_out_fmt;
-
-static const cyanrip_out_fmt fmt_map[] = {
-    [CYANRIP_FORMAT_FLAC]     = { "flac",     "FLAC", "flac",  "flac",  1, 11, 1, AV_CODEC_ID_FLAC,      },
-    [CYANRIP_FORMAT_MP3]      = { "mp3",      "MP3",  "mp3",   "mp3",   1,  0, 0, AV_CODEC_ID_MP3,       },
-    [CYANRIP_FORMAT_TTA]      = { "tta",      "TTA",  "tta",   "tta",   0,  0, 1, AV_CODEC_ID_TTA,       },
-    [CYANRIP_FORMAT_OPUS]     = { "opus",     "OPUS", "opus",  "ogg",   0, 10, 0, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_AAC]      = { "aac",      "AAC",  "m4a",   "adts",  0,  0, 0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_AAC_MP4]  = { "aac_mp4",  "AAC",  "mp4",   "mp4",   1,  0, 0, AV_CODEC_ID_AAC,       },
-    [CYANRIP_FORMAT_WAVPACK]  = { "wavpack",  "WV",   "wv",    "wv",    0,  8, 1, AV_CODEC_ID_WAVPACK,   },
-    [CYANRIP_FORMAT_VORBIS]   = { "vorbis",   "OGG",  "ogg",   "ogg",   0,  0, 0, AV_CODEC_ID_VORBIS,    },
-    [CYANRIP_FORMAT_ALAC]     = { "alac",     "ALAC", "m4a",   "ipod",  0,  2, 1, AV_CODEC_ID_ALAC,      },
-    [CYANRIP_FORMAT_WAV]      = { "wav",      "WAV",  "wav",   "wav",   0,  0, 1, AV_CODEC_ID_NONE,      },
-    [CYANRIP_FORMAT_OPUS_MP4] = { "opus_mp4", "OPUS", "mp4",   "mp4",   1, 10, 0, AV_CODEC_ID_OPUS,      },
-    [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_NONE,      },
-};
-
 void cyanrip_print_codecs(void)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
-        const cyanrip_out_fmt *cfmt = &fmt_map[i];
+        const cyanrip_out_fmt *cfmt = &crip_fmt_info[i];
         if (avcodec_find_encoder(cfmt->codec) ||
             ((cfmt->codec == AV_CODEC_ID_NONE) &&
               avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
@@ -98,7 +72,7 @@ void cyanrip_print_codecs(void)
 int cyanrip_validate_fmt(const char *fmt)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
-        const cyanrip_out_fmt *cfmt = &fmt_map[i];
+        const cyanrip_out_fmt *cfmt = &crip_fmt_info[i];
         if ((!strncasecmp(fmt, cfmt->name, strlen(fmt))) &&
             (strlen(fmt) == strlen(cfmt->name))) {
             if (cfmt->codec == AV_CODEC_ID_NONE &&
@@ -116,12 +90,12 @@ int cyanrip_validate_fmt(const char *fmt)
 
 const char *cyanrip_fmt_desc(enum cyanrip_output_formats format)
 {
-    return format < CYANRIP_FORMATS_NB ? fmt_map[format].name : NULL;
+    return format < CYANRIP_FORMATS_NB ? crip_fmt_info[format].name : NULL;
 }
 
 const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
 {
-    return format < CYANRIP_FORMATS_NB ? fmt_map[format].folder_suffix : NULL;
+    return format < CYANRIP_FORMATS_NB ? crip_fmt_info[format].folder_suffix : NULL;
 }
 
 static const uint64_t pick_codec_channel_layout(AVCodec *codec)
@@ -794,9 +768,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 enum cyanrip_output_formats format)
 {
     int ret = 0;
-    char *prefix = NULL;
-    char *filename = NULL;
-    const cyanrip_out_fmt *cfmt = &fmt_map[format];
+    const cyanrip_out_fmt *cfmt = &crip_fmt_info[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
 
     AVStream *st_aud = NULL;
@@ -806,24 +778,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->ctx = ctx;
     atomic_init(&s->status, 0);
 
-    const char *discnumber = dict_get(t->meta, "disc");
-    if (discnumber)
-        prefix = av_asprintf("%s.%02i", discnumber, t->number);
-    else
-        prefix = av_asprintf("%02i", t->number);
-
-    if (dict_get(t->meta, "title")) {
-        char *sanitized_title = cyanrip_sanitize_fn(dict_get(t->meta, "title"));
-        filename = av_asprintf("%s [%s]/%s - %s.%s", ctx->base_dst_folder,
-                               cfmt->folder_suffix, prefix, sanitized_title,
-                               cfmt->ext);
-        av_freep(&sanitized_title);
-    } else {
-        filename = av_asprintf("%s [%s]/%s.%s", ctx->base_dst_folder,
-                               cfmt->folder_suffix, prefix, cfmt->ext);
-    }
-
-    av_freep(&prefix);
+    char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, cfmt, t);
 
     /* lavf init */
     ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);
