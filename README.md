@@ -66,7 +66,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
 | -F `string`          | File naming scheme, see [below](#naming-scheme)                                             |
 | -L `string`          | Log naming scheme, see [below](#naming-scheme)                                              |
-| -T `string`          | Filename sanitation, default is unicode, see [below](#naming-scheme)                        |
+| -T `string`          | Filename sanitation, default is unicode, see [below](#filename-sanitation)                  |
 | -o `list`            | Comma separated list of output formats, "help" to list all, default is flac                 |
 | -b `int`             | Bitrate in kbps for lossy formats                                                           |
 |                      | **Misc. options**                                                                           |
@@ -94,27 +94,6 @@ The same goes for album tags, with `album=` and `album_artist=` being omitable.
 For album tags, if either `artist` or `album_artist` are unset, their values will be mirrored if one is available.
 
 The precedence of tags is Track tags > Album tags > MusicBrainz tags.
-
-
-Naming scheme
--------------
-cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
-
-To adjust the folder naming scheme, you can use the `-F` argument. By default, its set to `$album$ [$format$]`. Each token wrapped in `$` symbols represents metadata substitution.
-Hence, `$album$` replaces the string with the album name, while `$format$` is a special, non-metadata lookup to get the output format. `$format$` must be present when encoding to multiple outputs.
-Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-F directory`.
-
-The track naming scheme is by default, `$if #totaldiscs# > #1#|disc|.$$track$ - $title$`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
-The condition pattern is as follows: `$if` starts a contition, and cyanrip will look for an argument, wrapped in `#` symbols.
-It will then look for a condition, with only `==`, `!=`, `>` or `<` supported for equal, not equal, more, or less, respectively. It will then look for another token wrapped in `#` brackets and execute the condition. If the condition is true, anything after the last token's `#` symbol is subsituted, otherwise nothing is.
-Any token not recognized as metadata will be taken literally, as a string. To further evaluate tokens in a condition, wrap them in `|` symbols.
-
-The log naming scheme is by default `$album$$if #totaldiscs# > #1# CD|disc|$`. This is a reasonable default, but it can be changed.
-
-A useful example is to have separate directories for each disc: `-D "$album$$if #totaldiscs# > #1# CD|disc|$ [$format$]" -F "$track$ - $title$"`.
-
-If invalid symbols are found in a file or a folder, such as `:` or `/`, the symbol is by default substituted with a unicode lookalike, such as `∶` or `∕` respectively. If this is undesirable, this can be overridden via the `-T simple` argument. This will replace all invalid symbols with `_`.
-In case you're on an operating system with more liberal allowance on filenames, you can use the `-T os_unicode` option to allow symbols like `:` not supported on Windows to be passed through. Note that this will make files like these not accessible on Windows, unless renamed, so use this only if you're sure.
 
 
 Pregap handling
@@ -182,3 +161,27 @@ An idealized disc and drive will only log `READ: $number$` and nothing else. Thi
 ripping a brand new CD with a new drive. `FIXUP_EDGE`/`FIXUP_ATOM` usually happen if cdparanoia is somewhat struggling, but both are recoverable and lossless. `FIXUP_DROPPED`/`FIXUP_DUPED`
 indicate more severe errors, but are still recoverable and lossless, though a hard read error will often follow. `READERR` indicates that cdparanoia gave up after all retries and
 outputted zeroes for all samples it couldn't recover.
+
+
+Naming scheme
+-------------
+cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
+
+To adjust the folder naming scheme, you can use the `-F` argument. By default, its set to `{album} [{format}]`. Each token wrapped in `{` or `}` symbols represents metadata substitution.
+Hence, `{album}` replaces the string with the album name, while `{format}` is a special, non-metadata lookup to get the output format. `{format}` must be present when encoding to multiple outputs.
+Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-F directory`.
+
+The track naming scheme is by default, `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
+The condition pattern is as follows: `{if` starts a contition, and cyanrip will look for an argument, wrapped in `#` symbols.
+It will then look for a condition, with only `==`, `!=`, `>` or `<` supported for equal, not equal, more, or less, respectively. It will then look for another token wrapped in `#` brackets and execute the condition. If the condition is true, anything after the last token's `#` symbol is subsituted, otherwise nothing is.
+Any token not recognized as metadata will be taken literally, as a string. To further evaluate tokens in a condition, wrap them in `|` symbols.
+
+The log naming scheme is by default `{album}{if #totaldiscs# > #1# CD|disc|}`. This is a reasonable default, but it can be changed.
+
+A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
+
+
+Filename sanitation
+===================
+If invalid symbols are found in a file or a folder, such as `:` or `/`, the symbol is by default substituted with a unicode lookalike, such as `∶` or `∕` respectively. If this is undesirable, this can be overridden via the `-T simple` argument. This will replace all invalid symbols with `_`.
+In case you're on an operating system with more liberal allowance on filenames, you can use the `-T os_unicode` option to allow symbols like `:` not supported on Windows to be passed through. Note that this will make files like these not accessible on Windows, unless renamed, so use this only if you're sure.

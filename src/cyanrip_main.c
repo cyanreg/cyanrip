@@ -968,11 +968,11 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
 {
     char *scheme_copy = av_strdup(scheme);
 
-    char *save, *tok = av_strtok(scheme_copy, "$", &save);
+    char *save, *tok = av_strtok(scheme_copy, "{}", &save);
     while (tok) {
         if (((tok > scheme_copy) && (tok[-1] == '\''))) {
             BUF_SANITIZE_APPEND(ctx, buf, tok);
-            tok = av_strtok(NULL, "$", &save);
+            tok = av_strtok(NULL, "{}", &save);
             continue;
         }
 
@@ -1066,7 +1066,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             av_free(val1);
             av_free(cond);
 
-            tok = av_strtok(NULL, "$", &save);
+            tok = av_strtok(NULL, "{}", &save);
             continue;
         }
 
@@ -1077,7 +1077,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
         BUF_SANITIZE_APPEND(ctx, buf, val);
         av_free(val);
 
-        tok = av_strtok(NULL, "$", &save);
+        tok = av_strtok(NULL, "{}", &save);
     }
 
     av_free(scheme_copy);
@@ -1142,9 +1142,9 @@ int main(int argc, char **argv)
 
     /* Default settings */
     settings.dev_path = NULL;
-    settings.folder_name_scheme = "$album$ [$format$]";
-    settings.track_name_scheme = "$if #totaldiscs# > #1#|disc|.$$track$ - $title$";
-    settings.log_name_scheme = "$album$$if #totaldiscs# > #1# CD|disc|$";
+    settings.folder_name_scheme = "{album} [{format}]";
+    settings.track_name_scheme = "{if #totaldiscs# > #1#|disc|.}{track} - {title}";
+    settings.log_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
     settings.sanitize_method = CRIP_SANITIZE_UNICODE;
     settings.speed = 0;
     settings.frame_max_retries = 25;
