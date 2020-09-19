@@ -1416,8 +1416,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (settings.outputs_num > 1 && !strstr(settings.folder_name_scheme, "$format$")) {
-        cyanrip_log(ctx, 0, "Directory name scheme must contain $format$ with multiple output formats!\n");
+    if (settings.outputs_num > 1 && !strstr(settings.folder_name_scheme, "{format}")) {
+        cyanrip_log(ctx, 0, "Directory name scheme must contain {format} with multiple output formats!\n");
         return 1;
     }
 
