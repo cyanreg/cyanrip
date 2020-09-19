@@ -182,6 +182,6 @@ A useful example is to have separate directories for each disc: `-D "{album}{if 
 
 
 Filename sanitation
-===================
+-------------------
 If invalid symbols are found in a file or a folder, such as `:` or `/`, the symbol is by default substituted with a unicode lookalike, such as `∶` or `∕` respectively. If this is undesirable, this can be overridden via the `-T simple` argument. This will replace all invalid symbols with `_`.
 In case you're on an operating system with more liberal allowance on filenames, you can use the `-T os_unicode` option to allow symbols like `:` not supported on Windows to be passed through. Note that this will make files like these not accessible on Windows, unless renamed, so use this only if you're sure.
