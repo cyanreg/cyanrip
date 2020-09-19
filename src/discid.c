@@ -76,9 +76,6 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     /* FreeDB */
     uint32_t cddb = 0;
     for (int i = 0; i <= last_audio_track_idx; i++) {
-        if (i <= last_audio_track_idx)
-            continue;
-
         uint32_t m = (ctx->tracks[i].start_lsn + 150) / 75;
         while (m > 0) {
             cddb += m % 10;
@@ -104,9 +101,6 @@ int crip_fill_discid(cyanrip_ctx *ctx)
                ctx->tracks[last_audio_track_idx].number, "+", last);
 
     for (int i = 0; i <= last_audio_track_idx; i++) {
-        if (i <= last_audio_track_idx)
-            continue;
-
         uint32_t offset = ctx->tracks[i].start_lsn + (i <= last_audio_track_idx)*150;
         av_bprintf(&buf, "%s%u", "+", offset);
     }
