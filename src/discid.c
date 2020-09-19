@@ -51,7 +51,7 @@ int crip_fill_discid(cyanrip_ctx *ctx)
 
     for (int i = 0; i < 99; i++) {
         uint32_t offset = 0;
-        if (!ctx->tracks[i].track_is_data)
+        if (i <= last_audio_track_idx)
             offset = ctx->tracks[i].start_lsn + (i <= last_audio_track_idx)*150;
         snprintf(temp, sizeof(temp), "%08X", offset);
         av_sha_update(sha_ctx, temp, strlen(temp));
@@ -76,7 +76,7 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     /* FreeDB */
     uint32_t cddb = 0;
     for (int i = 0; i <= last_audio_track_idx; i++) {
-        if (ctx->tracks[i].track_is_data)
+        if (i <= last_audio_track_idx)
             continue;
 
         uint32_t m = (ctx->tracks[i].start_lsn + 150) / 75;
@@ -104,7 +104,7 @@ int crip_fill_discid(cyanrip_ctx *ctx)
                ctx->tracks[last_audio_track_idx].number, "+", last);
 
     for (int i = 0; i <= last_audio_track_idx; i++) {
-        if (ctx->tracks[i].track_is_data)
+        if (i <= last_audio_track_idx)
             continue;
 
         uint32_t offset = ctx->tracks[i].start_lsn + (i <= last_audio_track_idx)*150;
