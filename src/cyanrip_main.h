@@ -31,8 +31,7 @@
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
 #include <libavutil/intreadwrite.h>
-#include <libavcodec/packet.h>
-#include <libavcodec/codec_id.h>
+#include <libavcodec/avcodec.h>
 
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC = 0,
