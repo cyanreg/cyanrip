@@ -175,7 +175,7 @@ If you would like something different, read on. If for a one-off you'd like to s
 
 The syntax is as follows: everything not inside `{` or `}` tags gets copied as-is unconditionally.
 Everything inside `{` or `}` tags is interpreted: if what's inside the tags matches a metadata key,
-the tag along with its outer brackets is replaced as-is. Otherwise nothing, including the brackets, remains.
+the tag along with its outer brackets is replaced as-is. Otherwise only the tag brackets are removed and what's inside is copied literally.
 
 Conditions are possible and must follow this syntax: `{if #token1# != #token2#album name is |album|}`. Condition tokens must be wrapped in `#` tags, and both must exist.
 In between the 2 tokens must be either `>` or `<` or `==` or `!=`. If any of the tokens inside the `#` tags matches a metadata key, it is replaced with a value, otherwise its taken literally (so if the `album` tag exists, `#album#` resolves to the album name, otherwise to just `album`).

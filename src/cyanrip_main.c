@@ -1077,11 +1077,15 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                         continue;
                     }
 
+                    int origin_is_tag = 1;
                     char *true_val = get_dir_tag_val(ctx, meta, ofmt, true_tok);
-                    if (true_val) {
-                        crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, 1);
-                        av_free(true_val);
+                    if (!true_val) {
+                        true_val = av_strdup(true_tok);
+                        origin_is_tag = 0;
                     }
+
+                    crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, origin_is_tag);
+                    av_free(true_val);
 
                     true_tok = av_strtok(NULL, "|", &true_save);
                 }
@@ -1095,11 +1099,15 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             continue;
         }
 
+        int origin_is_tag = 1;
         char *val = get_dir_tag_val(ctx, meta, ofmt, tok);
-        if (val) {
-            crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, 1);
-            av_free(val);
+        if (!val) {
+            val = av_strdup(tok);
+            origin_is_tag = 0;
         }
+
+        crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, origin_is_tag);
+        av_free(val);
 
         tok = av_strtok(NULL, "{}", &save);
     }
