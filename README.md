@@ -180,7 +180,7 @@ the tag along with its outer brackets is replaced as-is. Otherwise only the tag 
 Conditions are possible and must follow this syntax: `{if #token1# != #token2#album name is |album|}`. Condition tokens must be wrapped in `#` tags, and both must exist.
 In between the 2 tokens must be either `>` or `<` or `==` or `!=`. If any of the tokens inside the `#` tags matches a metadata key, it is replaced with a value, otherwise its taken literally (so if the `album` tag exists, `#album#` resolves to the album name, otherwise to just `album`).
 
-If the condition is a direct comparison (`==` or `!=`), then the 2 tokens are compared as strings. If arithmetic comparison is used, and the 2 tokens are integers and compared arithmetically.
+If the condition is a direct comparison (`==` or `!=`), then the 2 tokens are compared as strings. If arithmetic comparison is used and the 2 tokens are integers, they're compared arithmetically.
 
 If an arithmetic comparison is used when both tokens are strings, the result of `strcmp` is used. If only one is a string, its pointer (always above 0, __unless__ the token did not match a metadata key, in which case 0) is used.
 
