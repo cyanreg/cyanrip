@@ -167,6 +167,12 @@ Naming scheme
 -------------
 cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
 
+The default naming scheme for albums is `Album name [Format]` if the `release` tag is empty or `Album name (Release) [Format]` if it isn't.
+For tracks, its `Track number - Track title.Extension` if there's a single disc in the album or `Disc Number.Track number - Track title.Extension` if there are multiple.
+The log file will be named `Album name.log` in each of the output folders unless there are multiple CDs in the album, in which case it'll be `Album name CD1.log` for the first CD and so on.
+
+If you would like something different, read on. If for a one-off you'd like to specify a different directory name, you can just use `-D Directory` and not read further.
+
 The syntax is as follows: everything not inside `{` or `}` tags gets copied as-is unconditionally.
 Everything inside `{` or `}` tags is interpreted: if what's inside the tags matches a metadata key,
 the tag along with its outer brackets is replaced as-is. Otherwise nothing, including the brackets, remains.
@@ -185,6 +191,8 @@ Examples are easier to understand, by default the folder value of `{album}{if #r
 The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. So this resolves to `01 - Title.flac` if there's a single CD, or `1.01 - Title.flac` if there are more than 1 CDs and you're ripping the first one.
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
+
+The ripping log name and location can be modified via the `-L` argument. By default its set to `{album}{if #totaldiscs# > #1# CD|disc|}`, which resolves to `Album name.log` for 1 CD and `Album name CD1.log` if there are multiple CDs and you're ripping the first.
 
 
 Filename sanitation
