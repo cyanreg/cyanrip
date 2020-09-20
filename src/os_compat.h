@@ -106,3 +106,6 @@ static inline int win32_stat(const char *filename_utf8, struct stat* statbuf)
 #ifndef HAS_CH_QUOTES
 #define HAS_CH_QUOTES 1
 #endif
+#ifndef OS_DIR_CHAR
+#define OS_DIR_CHAR '/'
+#endif

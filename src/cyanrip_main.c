@@ -871,20 +871,20 @@ static int add_to_dir_list(char ***dir_list, int *dir_list_nb, const char *src)
 
 struct CRIPCharReplacement {
     const char from;
-    const char to[2];
+    const char to;
     const char to_u[5];
     int is_avail_locally;
 } crip_char_replacement[] = {
-    { '<', "_", "‹", HAS_CH_LESS },
-    { '>', "_", "›", HAS_CH_MORE },
-    { ':', "_", "∶", HAS_CH_COLUMN },
-    { '|', "_", "│", HAS_CH_OR },
-    { '?', "_", "？", HAS_CH_Q },
-    { '*', "_", "∗", HAS_CH_ANY },
-    { '/', "_", "∕", HAS_CH_FWDSLASH },
-    { '\'', "_", "⧹", HAS_CH_BWDSLASH },
-    { '"', "\'", "“", HAS_CH_QUOTES },
-    { '"', "\'", "”", HAS_CH_QUOTES },
+    { '<', '_', "‹", HAS_CH_LESS },
+    { '>', '_', "›", HAS_CH_MORE },
+    { ':', '_', "∶", HAS_CH_COLUMN },
+    { '|', '_', "│", HAS_CH_OR },
+    { '?', '_', "？", HAS_CH_Q },
+    { '*', '_', "∗", HAS_CH_ANY },
+    { '/', '_', "∕", HAS_CH_FWDSLASH },
+    { '\'', '_', "⧹", HAS_CH_BWDSLASH },
+    { '"', '\'', "“", HAS_CH_QUOTES },
+    { '"', '\'', "”", HAS_CH_QUOTES },
     { 0 },
 };
 
@@ -916,18 +916,20 @@ static int crip_bprint_sanitize(cyanrip_ctx *ctx, AVBPrint *buf, const char *str
         }
 
         int skip = !rep;
-        int passthrough_slash = rep && (rep->from == '/' && !sanitize_fwdslash);
         int skip_sanitation = rep && (os_sanitize && rep->is_avail_locally);
+        int passthrough_slash = rep && !skip_sanitation && (rep->from == OS_DIR_CHAR && !sanitize_fwdslash);
 
-        if (skip || passthrough_slash || skip_sanitation) {
+        if (skip || skip_sanitation || passthrough_slash) {
             if (passthrough_slash)
                 add_to_dir_list(dir_list, dir_list_nb, buf->str);
             av_bprint_append_data(buf, pos, str - pos);
             pos = str;
             continue;
-        } else if (ctx->settings.sanitize_method == CRIP_SANITIZE_OS_SIMPLE) {
-            av_bprint_append_data(buf, rep->to, strlen(rep->to));
-        } else {
+        } else if (ctx->settings.sanitize_method == CRIP_SANITIZE_SIMPLE ||
+                   ctx->settings.sanitize_method == CRIP_SANITIZE_OS_SIMPLE) {
+            av_bprint_chars(buf, rep->to, 1);
+        } else if (ctx->settings.sanitize_method == CRIP_SANITIZE_UNICODE ||
+                   ctx->settings.sanitize_method == CRIP_SANITIZE_OS_UNICODE) {
             av_bprint_append_data(buf, rep->to_u, strlen(rep->to_u));
         }
 
@@ -1116,7 +1118,7 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
         goto end;
 
     add_to_dir_list(&dir_list, &dir_list_nb, buf.str);
-    av_bprintf(&buf, "/");
+    av_bprint_chars(&buf, OS_DIR_CHAR, 1);
 
     char *ext = NULL;
     if (type == CRIP_PATH_COVERART) {
