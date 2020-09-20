@@ -856,7 +856,7 @@ static inline int crip_is_integer(const char *src)
 static int add_to_dir_list(char ***dir_list, int *dir_list_nb, const char *src)
 {
     int nb = *dir_list_nb;
-    char **new_ptr = av_realloc(*dir_list, nb * sizeof(*new_ptr));
+    char **new_ptr = av_realloc(*dir_list, (nb + 1) * sizeof(*new_ptr));
     if (!new_ptr)
         return AVERROR(ENOMEM);
 
