@@ -167,16 +167,22 @@ Naming scheme
 -------------
 cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
 
-To adjust the folder naming scheme, you can use the `-F` argument. By default, its set to `{album} [{format}]`. Each token wrapped in `{` or `}` symbols represents metadata substitution.
-Hence, `{album}` replaces the string with the album name, while `{format}` is a special, non-metadata lookup to get the output format. `{format}` must be present when encoding to multiple outputs.
-Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-F directory`.
+The syntax is as follows: everything not inside `{` or `}` tags gets copied as-is unconditionally.
+Everything inside `{` or `}` tags is interpreted: if what's inside the tags matches a metadata key,
+the tag along with its outer brackets is replaced as-is. Otherwise nothing, including the brackets, remains.
 
-The track naming scheme is by default, `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
-The condition pattern is as follows: `{if` starts a contition, and cyanrip will look for an argument, wrapped in `#` symbols.
-It will then look for a condition, with only `==`, `!=`, `>` or `<` supported for equal, not equal, more, or less, respectively. It will then look for another token wrapped in `#` brackets and execute the condition. If the condition is true, anything after the last token's `#` symbol is subsituted, otherwise nothing is.
-Any token not recognized as metadata will be taken literally, as a string. To further evaluate tokens in a condition, wrap them in `|` symbols.
+Conditions are possible and must follow this syntax: `{if #token1# != #token2#album name is |album|}`. Condition tokens must be wrapped in `#` tags, and both must exist.
+In between the 2 tokens must be either `>` or `<` or `==` or `!=`. If any of the tokens inside the `#` tags matches a metadata key, it is replaced with a value, otherwise its taken literally (so if the `album` tag exists, `#album#` resolves to the album name, otherwise to just `album`).
 
-The log naming scheme is by default `{album}{if #totaldiscs# > #1# CD|disc|}`. This is a reasonable default, but it can be changed.
+If the condition is a direct comparison (`==` or `!=`), then the 2 tokens are compared as strings. If arithmetic comparison is used, and the 2 tokens are integers and compared arithmetically.
+
+If an arithmetic comparison is used when both tokens are strings, the result of `strcmp` is used. If only one is a string, its pointer (always above 0, __unless__ the token did not match a metadata key, in which case 0) is used.
+
+If the condition is true, everything after the last token's `#` is copied, with any metadata tags there wrapped with `|`. Otherwise, nothing is copied.
+
+Examples are easier to understand, by default the folder value of `{album}{if #release# > #0# (|release|)} [{format}]` is used. This resolves to `Album [FLAC]` if there's nothing in the `release` key, or `Album (Release) [FLAC]` if there is.
+
+The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. So this resolves to `01 - Title.flac` if there's a single CD, or `1.01 - Title.flac` if there are more than 1 CDs and you're ripping the first one.
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
 

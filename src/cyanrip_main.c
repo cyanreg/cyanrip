@@ -997,9 +997,12 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                 goto fail;
             }
 
+            int val1_origin_is_tag = 1;
             char *val1 = get_dir_tag_val(ctx, meta, ofmt, cond_tok);
-            if (!val1)
+            if (!val1) {
                 val1 = av_strdup(tok);
+                val1_origin_is_tag = 0;
+            }
 
             cond_tok = av_strtok(NULL, "#", &cond_save);
             if (!cond_tok) {
@@ -1031,9 +1034,12 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                 goto fail;
             }
 
+            int val2_origin_is_tag = 1;
             char *val2 = get_dir_tag_val(ctx, meta, ofmt, cond_tok);
-            if (!val2)
+            if (!val2) {
                 val2 = av_strdup(cond_tok);
+                val2_origin_is_tag = 0;
+            }
 
             cond_tok = av_strtok(NULL, "#", &cond_save);
             if (!cond_tok) {
@@ -1046,10 +1052,20 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             cond_true |= cond_is_not_eq && strcmp(val1, val2);
 
             if (cond_is_less || cond_is_more) {
-                int64_t val1_dec = crip_is_integer(val1) ? strtol(val1, NULL, 10) : (cond_is_more ? INT64_MIN : INT64_MAX);
-                int64_t val2_dec = crip_is_integer(val1) ? strtol(val2, NULL, 10) : (cond_is_less ? INT64_MIN : INT64_MAX);
-                cond_true |= cond_is_less && val1_dec < val2_dec;
-                cond_true |= cond_is_more && val1_dec > val2_dec;
+                int val1_is_int = crip_is_integer(val1), val2_is_int = crip_is_integer(val2);
+                if (!val1_is_int && (val1_is_int == val2_is_int)) { /* None are int */
+                    cond_true = cond_is_less ? (strcmp(val1, val2) < 0) : (cond_is_more ? strcmp(val1, val2) > 0 : 0);
+                } else if (val1_is_int && (val1_is_int == val2_is_int)) { /* Both are int */
+                    int64_t val1_dec = strtol(val1, NULL, 10);
+                    int64_t val2_dec = strtol(val2, NULL, 10);
+                    cond_true |= cond_is_less && val1_dec < val2_dec;
+                    cond_true |= cond_is_more && val1_dec > val2_dec;
+                } else {
+                    ptrdiff_t val1_dec = val1_is_int ? strtol(val1, NULL, 10) : (!val1_origin_is_tag ? 0 : (ptrdiff_t)val1);
+                    ptrdiff_t val2_dec = val2_is_int ? strtol(val2, NULL, 10) : (!val2_origin_is_tag ? 0 : (ptrdiff_t)val2);
+                    cond_true |= cond_is_less && val1_dec < val2_dec;
+                    cond_true |= cond_is_more && val1_dec > val2_dec;
+                }
             }
 
             if (cond_true) {
@@ -1061,15 +1077,11 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                         continue;
                     }
 
-                    int origin_is_tag = 1;
                     char *true_val = get_dir_tag_val(ctx, meta, ofmt, true_tok);
-                    if (!true_val) {
-                        true_val = av_strdup(true_tok);
-                        origin_is_tag = 0;
+                    if (true_val) {
+                        crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, 1);
+                        av_free(true_val);
                     }
-
-                    crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, origin_is_tag);
-                    av_free(true_val);
 
                     true_tok = av_strtok(NULL, "|", &true_save);
                 }
@@ -1083,15 +1095,11 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             continue;
         }
 
-        int origin_is_tag = 1;
         char *val = get_dir_tag_val(ctx, meta, ofmt, tok);
-        if (!val) {
-            val = av_strdup(tok);
-            origin_is_tag = 0;
+        if (val) {
+            crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, 1);
+            av_free(val);
         }
-
-        crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, origin_is_tag);
-        av_free(val);
 
         tok = av_strtok(NULL, "{}", &save);
     }
@@ -1168,7 +1176,7 @@ int main(int argc, char **argv)
 
     /* Default settings */
     settings.dev_path = NULL;
-    settings.folder_name_scheme = "{album} [{format}]";
+    settings.folder_name_scheme = "{album}{if #release# > #0# (|release|)} [{format}]";
     settings.track_name_scheme = "{if #totaldiscs# > #1#|disc|.}{track} - {title}";
     settings.log_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
     settings.sanitize_method = CRIP_SANITIZE_UNICODE;
