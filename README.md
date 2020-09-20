@@ -167,16 +167,16 @@ Naming scheme
 -------------
 cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
 
-To adjust the folder naming scheme, you can use the `-F` argument. By default, its set to `{album} [{format}]`. Each token wrapped in `{` or `}` symbols represents metadata substitution.
+To adjust the folder naming scheme, you can use the `-D` argument. By default, it's set to `{album} [{format}]`. Each token wrapped in `{` or `}` symbols represents metadata substitution.
 Hence, `{album}` replaces the string with the album name, while `{format}` is a special, non-metadata lookup to get the output format. `{format}` must be present when encoding to multiple outputs.
-Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-F directory`.
+Folder naming scheme has access to album-level tags. Anything that's not a tag is left as-is, so for one-offs you can just specify `-D directory`.
 
-The track naming scheme is by default, `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
+To adjust the file naming scheme, you can use the `-F` argument. By default, it's set to `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. This is a more complicated pattern with a condition. The files produced will follow `track number - track name` syntax, with a disc number prepended in case of multiple discs.
 The condition pattern is as follows: `{if` starts a contition, and cyanrip will look for an argument, wrapped in `#` symbols.
 It will then look for a condition, with only `==`, `!=`, `>` or `<` supported for equal, not equal, more, or less, respectively. It will then look for another token wrapped in `#` brackets and execute the condition. If the condition is true, anything after the last token's `#` symbol is subsituted, otherwise nothing is.
 Any token not recognized as metadata will be taken literally, as a string. To further evaluate tokens in a condition, wrap them in `|` symbols.
 
-The log naming scheme is by default `{album}{if #totaldiscs# > #1# CD|disc|}`. This is a reasonable default, but it can be changed.
+The log naming scheme is by default `{album}{if #totaldiscs# > #1# CD|disc|}`. This is a reasonable default, but it can be changed with the `-L` argument.
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
 
