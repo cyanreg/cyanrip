@@ -853,39 +853,56 @@ static inline int crip_is_integer(const char *src)
     return 1;
 }
 
+static int add_to_dir_list(char ***dir_list, int *dir_list_nb, const char *src)
+{
+    int nb = *dir_list_nb;
+    char **new_ptr = av_realloc(*dir_list, nb * sizeof(*new_ptr));
+    if (!new_ptr)
+        return AVERROR(ENOMEM);
+
+    new_ptr[nb] = av_strdup(src);
+    nb++;
+
+    *dir_list = new_ptr;
+    *dir_list_nb = nb;
+
+    return 0;
+}
+
 struct CRIPCharReplacement {
     const char from;
-    const char to;
+    const char to[2];
     const char to_u[5];
-    size_t len_u;
     int is_avail_locally;
 } crip_char_replacement[] = {
-    { '<', '_', "‹", strlen("‹"), HAS_CH_LESS },
-    { '>', '_', "›", strlen("›"), HAS_CH_MORE },
-    { ':', '_', "∶", strlen("∶"), HAS_CH_COLUMN },
-    { '|', '_', "│", strlen("│"), HAS_CH_OR },
-    { '?', '_', "？", strlen("？"), HAS_CH_Q },
-    { '*', '_', "∗", strlen("∗"), HAS_CH_ANY },
-    { '/', '_', "∕", strlen("∕"), HAS_CH_FWDSLASH },
-    { '\'', '_', "⧹", strlen("⧹"), HAS_CH_BWDSLASH },
-    { '"', '\'', "“", strlen("“"), HAS_CH_QUOTES },
-    { '"', '\'', "”", strlen("”"), HAS_CH_QUOTES },
+    { '<', "_", "‹", HAS_CH_LESS },
+    { '>', "_", "›", HAS_CH_MORE },
+    { ':', "_", "∶", HAS_CH_COLUMN },
+    { '|', "_", "│", HAS_CH_OR },
+    { '?', "_", "？", HAS_CH_Q },
+    { '*', "_", "∗", HAS_CH_ANY },
+    { '/', "_", "∕", HAS_CH_FWDSLASH },
+    { '\'', "_", "⧹", HAS_CH_BWDSLASH },
+    { '"', "\'", "“", HAS_CH_QUOTES },
+    { '"', "\'", "”", HAS_CH_QUOTES },
     { 0 },
 };
 
-static inline char *crip_sanitize_str(cyanrip_ctx *ctx, char *src_str)
+static int crip_bprint_sanitize(cyanrip_ctx *ctx, AVBPrint *buf, const char *str,
+                                char ***dir_list, int *dir_list_nb,
+                                int sanitize_fwdslash)
 {
     int32_t cp, ret, quote_match = 0;
-    char *str_start = av_mallocz(4*strlen(src_str) + 1); /* Worst case */
-    char *end = str_start + strlen(src_str), *str = str_start, *pos = str_start;
+    const char *pos = str, *end = str + strlen(str);
 
-    memcpy(str_start, src_str, strlen(src_str));
+    int os_sanitize = (ctx->settings.sanitize_method == CRIP_SANITIZE_OS_SIMPLE) ||
+                      (ctx->settings.sanitize_method == CRIP_SANITIZE_OS_UNICODE);
 
     while (str < end) {
         ret = av_utf8_decode(&cp, (const uint8_t **)&str, end, AV_UTF8_FLAG_ACCEPT_ALL);
         if (ret < 0) {
             cyanrip_log(ctx, 0, "Error parsing string: %s!\n", av_err2str(ret));
-            return str_start;
+            return ret;
         }
 
         struct CRIPCharReplacement *rep = NULL;
@@ -898,33 +915,26 @@ static inline char *crip_sanitize_str(cyanrip_ctx *ctx, char *src_str)
             }
         }
 
-        if (!rep) {
+        int skip = !rep;
+        int passthrough_slash = rep && (rep->from == '/' && !sanitize_fwdslash);
+        int skip_sanitation = rep && (os_sanitize && rep->is_avail_locally);
+
+        if (skip || passthrough_slash || skip_sanitation) {
+            if (passthrough_slash)
+                add_to_dir_list(dir_list, dir_list_nb, buf->str);
+            av_bprint_append_data(buf, pos, str - pos);
             pos = str;
             continue;
-        }
-
-        switch (ctx->settings.sanitize_method) {
-        case CRIP_SANITIZE_OS_SIMPLE:
-            if (rep->is_avail_locally)
-                break;
-        case CRIP_SANITIZE_SIMPLE:
-            *pos = rep->to;
-            break;
-        case CRIP_SANITIZE_OS_UNICODE:
-            if (rep->is_avail_locally)
-                break;
-        case CRIP_SANITIZE_UNICODE:
-            memmove(pos + rep->len_u, pos + 1, end - pos - 1);
-            memcpy(pos, rep->to_u, rep->len_u);
-            str += rep->len_u;
-            end += rep->len_u;
-            break;
+        } else if (ctx->settings.sanitize_method == CRIP_SANITIZE_OS_SIMPLE) {
+            av_bprint_append_data(buf, rep->to, strlen(rep->to));
+        } else {
+            av_bprint_append_data(buf, rep->to_u, strlen(rep->to_u));
         }
 
         pos = str;
     }
 
-    return str_start;
+    return 0;
 }
 
 static char *get_dir_tag_val(cyanrip_ctx *ctx, AVDictionary *meta,
@@ -960,22 +970,16 @@ static char *get_dir_tag_val(cyanrip_ctx *ctx, AVDictionary *meta,
     return val;
 }
 
-#define BUF_SANITIZE_APPEND(CTX, BUF, STR_IN)         \
-    do {                                              \
-        char *str = crip_sanitize_str(CTX, STR_IN);   \
-        av_bprint_append_data(BUF, str, strlen(str)); \
-        av_free(str);                                 \
-    } while (0)
-
 static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
-                        const char *ofmt, const char *scheme)
+                        const char *ofmt, char ***dir_list, int *dir_list_nb,
+                        const char *scheme)
 {
     char *scheme_copy = av_strdup(scheme);
 
     char *save, *tok = av_strtok(scheme_copy, "{}", &save);
     while (tok) {
         if (((tok > scheme_copy) && (tok[-1] == '\''))) {
-            BUF_SANITIZE_APPEND(ctx, buf, tok);
+            crip_bprint_sanitize(ctx, buf, tok, dir_list, dir_list_nb, 0);
             tok = av_strtok(NULL, "{}", &save);
             continue;
         }
@@ -1050,16 +1054,19 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
                 char *true_save, *true_tok = av_strtok(cond_tok, "|", &true_save);
                 while (true_tok) {
                     if (((true_tok > cond_tok) && (true_tok[-1] == '\''))) {
-                        BUF_SANITIZE_APPEND(ctx, buf, true_tok);
+                        crip_bprint_sanitize(ctx, buf, true_tok, dir_list, dir_list_nb, 0);
                         true_tok = av_strtok(NULL, "|", &true_save);
                         continue;
                     }
 
+                    int origin_is_tag = 1;
                     char *true_val = get_dir_tag_val(ctx, meta, ofmt, true_tok);
-                    if (!true_val)
+                    if (!true_val) {
                         true_val = av_strdup(true_tok);
+                        origin_is_tag = 0;
+                    }
 
-                    BUF_SANITIZE_APPEND(ctx, buf, true_val);
+                    crip_bprint_sanitize(ctx, buf, true_val, dir_list, dir_list_nb, origin_is_tag);
                     av_free(true_val);
 
                     true_tok = av_strtok(NULL, "|", &true_save);
@@ -1074,11 +1081,14 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             continue;
         }
 
+        int origin_is_tag = 1;
         char *val = get_dir_tag_val(ctx, meta, ofmt, tok);
-        if (!val)
+        if (!val) {
             val = av_strdup(tok);
+            origin_is_tag = 0;
+        }
 
-        BUF_SANITIZE_APPEND(ctx, buf, val);
+        crip_bprint_sanitize(ctx, buf, val, dir_list, dir_list_nb, origin_is_tag);
         av_free(val);
 
         tok = av_strtok(NULL, "{}", &save);
@@ -1092,35 +1102,36 @@ fail:
     return AVERROR(EINVAL);
 }
 
-char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type,
+char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg)
 {
     char *ret = NULL, **ret_p = NULL;
     AVBPrint buf;
+    char **dir_list = NULL;
+    int dir_list_nb = 0;
     av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
-    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, ctx->settings.folder_name_scheme))
+    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, &dir_list, &dir_list_nb,
+                     ctx->settings.folder_name_scheme))
         goto end;
 
-    if (type == CRIP_PATH_FOLDER) {
-        ret_p = &ret;
-        goto end;
-    }
-
+    add_to_dir_list(&dir_list, &dir_list_nb, buf.str);
     av_bprintf(&buf, "/");
 
     char *ext = NULL;
     if (type == CRIP_PATH_COVERART) {
-        BUF_SANITIZE_APPEND(ctx, &buf, arg);
+        crip_bprint_sanitize(ctx, &buf, arg, &dir_list, &dir_list_nb, 0);
         CRIPArt *art = arg;
         ext = av_strdup(art->extension);
     } else if (type == CRIP_PATH_LOG) {
-        if (process_cond(ctx, &buf, ctx->meta, fmt->name, ctx->settings.log_name_scheme))
+        if (process_cond(ctx, &buf, ctx->meta, fmt->name, &dir_list, &dir_list_nb,
+                         ctx->settings.log_name_scheme))
             goto end;
         ext = av_strdup("log");
     } else {
         cyanrip_track *t = arg;
-        if (process_cond(ctx, &buf, t->meta, fmt->name, ctx->settings.track_name_scheme))
+        if (process_cond(ctx, &buf, t->meta, fmt->name, &dir_list, &dir_list_nb,
+                         ctx->settings.track_name_scheme))
             goto end;
         ext = av_strdup(fmt->ext);
     }
@@ -1130,6 +1141,15 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type,
     av_free(ext);
 
     ret_p = &ret;
+    for (int i = 0; i < dir_list_nb; i++) {
+        if (create_dirs) {
+            struct stat st_req = { 0 };
+            if (stat(dir_list[i], &st_req) == -1)
+                mkdir(dir_list[i], 0700);
+        }
+        av_free(dir_list[i]);
+    }
+    av_free(dir_list);
 
 end:
     av_bprint_finalize(&buf, ret_p);
@@ -1512,19 +1532,9 @@ int main(int argc, char **argv)
             av_dict_set(&ctx->meta, "album_artist", artist, 0);
     }
 
-    if (!ctx->settings.print_info_only) {
-        /* Create directories */
-        for (int i = 0; i < ctx->settings.outputs_num; i++) {
-            char *dirname = crip_get_path(ctx, CRIP_PATH_FOLDER, &crip_fmt_info[ctx->settings.outputs[i]], NULL);
-            struct stat st_req = { 0 };
-            if (stat(dirname, &st_req) == -1)
-                mkdir(dirname, 0700);
-            av_free(dirname);
-        }
-
-        /* Create logfile */
+    /* Create log file */
+    if (!ctx->settings.print_info_only)
         cyanrip_log_init(ctx);
-    }
 
     cyanrip_log_start_report(ctx);
     setup_track_offsets_and_report(ctx);
@@ -1566,15 +1576,6 @@ int main(int argc, char **argv)
                         av_err2str(err));
             ctx->total_error_count++;
             goto end;
-        }
-    }
-
-    for (int i = 0; i < ctx->nb_tracks; i++) {
-        for (int f = 0; f < ctx->settings.outputs_num; f++) {
-            char *logfile = crip_get_path(ctx, CRIP_PATH_TRACK,
-                                          &crip_fmt_info[ctx->settings.outputs[f]],
-                                          &ctx->tracks[i]);
-            av_free(logfile);
         }
     }
 

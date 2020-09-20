@@ -778,7 +778,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->ctx = ctx;
     atomic_init(&s->status, 0);
 
-    char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, cfmt, t);
+    char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, 1, cfmt, t);
 
     /* lavf init */
     ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);

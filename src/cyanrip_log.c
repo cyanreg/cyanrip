@@ -262,7 +262,7 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
 int cyanrip_log_init(cyanrip_ctx *ctx)
 {
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        char *logfile = crip_get_path(ctx, CRIP_PATH_LOG,
+        char *logfile = crip_get_path(ctx, CRIP_PATH_LOG, 1,
                                       &crip_fmt_info[ctx->settings.outputs[i]],
                                       NULL);
 

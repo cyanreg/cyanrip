@@ -69,7 +69,6 @@ enum CRIPPathType {
     CRIP_PATH_COVERART, /* arg must be a CRIPArt * */
     CRIP_PATH_TRACK, /* arg must be a cyanrip_track * */
     CRIP_PATH_LOG, /* arg must be NULL */
-    CRIP_PATH_FOLDER, /* arg must be NULL */
 };
 
 enum CRIPSanitize {
@@ -206,7 +205,7 @@ typedef struct cyanrip_out_fmt {
 
 extern const cyanrip_out_fmt crip_fmt_info[];
 
-char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type,
+char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg);
 
 static inline const char *dict_get(AVDictionary *dict, const char *key)
