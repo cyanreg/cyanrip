@@ -63,6 +63,15 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         return;
     }
 
+    cyanrip_log(ctx, 0, "    Files:\n");
+    for (int f = 0; f < ctx->settings.outputs_num; f++) {
+        char *path = crip_get_path(ctx, CRIP_PATH_TRACK, 0,
+                                   &crip_fmt_info[ctx->settings.outputs[f]],
+                                   t);
+        cyanrip_log(ctx, 0, "        %s\n", path);
+        av_free(path);
+    }
+
     cyanrip_log(ctx, 0, "    Metadata:\n", length);
 
     const AVDictionaryEntry *d = NULL;

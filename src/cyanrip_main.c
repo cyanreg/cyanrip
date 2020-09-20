@@ -1535,8 +1535,18 @@ int main(int argc, char **argv)
     }
 
     /* Create log file */
-    if (!ctx->settings.print_info_only)
+    if (!ctx->settings.print_info_only) {
         cyanrip_log_init(ctx);
+    } else {
+        cyanrip_log(ctx, 0, "Logs will be written to:\n");
+        for (int f = 0; f < ctx->settings.outputs_num; f++) {
+            char *logfile = crip_get_path(ctx, CRIP_PATH_LOG, 0,
+                                          &crip_fmt_info[ctx->settings.outputs[f]],
+                                          NULL);
+            cyanrip_log(ctx, 0, "    %s\n", logfile);
+            av_free(logfile);
+        }
+    }
 
     cyanrip_log_start_report(ctx);
     setup_track_offsets_and_report(ctx);
