@@ -176,7 +176,7 @@ Naming scheme
 -------------
 cyanrip supports highly flexible naming schemes via a custom syntax. You can extensively customize how all files and directories are named.
 
-The default naming scheme for albums is `Album name [Format]` if the `release` tag is empty or `Album name (Release) [Format]` if it isn't.
+The default naming scheme for albums is `Album name [Format]` if the `releasecomment` tag is empty or `Album name (Release comment) [Format]` if it isn't.
 For tracks, its `Track number - Track title.Extension` if there's a single disc in the album or `Disc Number.Track number - Track title.Extension` if there are multiple.
 The log file will be named `Album name.log` in each of the output folders unless there are multiple CDs in the album, in which case it'll be `Album name CD1.log` for the first CD and so on.
 
@@ -195,7 +195,7 @@ If an arithmetic comparison is used when both tokens are strings, the result of 
 
 If the condition is true, everything after the last token's `#` is copied, with any metadata tags there wrapped with `|`. Otherwise, nothing is copied.
 
-Examples are easier to understand, by default the folder value of `{album}{if #release# > #0# (|release|)} [{format}]` is used. This resolves to `Album [FLAC]` if there's nothing in the `release` key, or `Album (Release) [FLAC]` if there is.
+Examples are easier to understand, by default the folder value of `{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]` is used. This resolves to `Album [FLAC]` if there's nothing in the `releasecomment` key, or `Album (Release comment) [FLAC]` if there is.
 
 The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. So this resolves to `01 - Title.flac` if there's a single CD, or `1.01 - Title.flac` if there are more than 1 CDs and you're ripping the first one.
 

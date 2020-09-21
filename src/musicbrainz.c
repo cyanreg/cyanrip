@@ -327,7 +327,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     }
 
     READ_MB(mb5_release_get_id, release, ctx->meta, "release_id");
-    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "release");
+    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "releasecomment");
     READ_MB(mb5_release_get_date, release, ctx->meta, "date");
     READ_MB(mb5_release_get_title, release, ctx->meta, "album");
     READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode");

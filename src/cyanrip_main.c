@@ -1172,7 +1172,7 @@ int main(int argc, char **argv)
 
     /* Default settings */
     settings.dev_path = NULL;
-    settings.folder_name_scheme = "{album}{if #release# > #0# (|release|)} [{format}]";
+    settings.folder_name_scheme = "{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]";
     settings.track_name_scheme = "{if #totaldiscs# > #1#|disc|.}{track} - {title}";
     settings.log_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
     settings.sanitize_method = CRIP_SANITIZE_UNICODE;
