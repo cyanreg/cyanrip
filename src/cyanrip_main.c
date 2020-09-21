@@ -980,12 +980,6 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
 
     char *save, *tok = av_strtok(scheme_copy, "{}", &save);
     while (tok) {
-        if (((tok > scheme_copy) && (tok[-1] == '\''))) {
-            crip_bprint_sanitize(ctx, buf, tok, dir_list, dir_list_nb, 0);
-            tok = av_strtok(NULL, "{}", &save);
-            continue;
-        }
-
         if (!strncmp(tok, "if", strlen("if"))) {
             char *cond = av_strdup(tok);
             char *cond_save, *cond_tok = av_strtok(cond, "#", &cond_save);
@@ -1071,12 +1065,6 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             if (cond_true) {
                 char *true_save, *true_tok = av_strtok(cond_tok, "|", &true_save);
                 while (true_tok) {
-                    if (((true_tok > cond_tok) && (true_tok[-1] == '\''))) {
-                        crip_bprint_sanitize(ctx, buf, true_tok, dir_list, dir_list_nb, 0);
-                        true_tok = av_strtok(NULL, "|", &true_save);
-                        continue;
-                    }
-
                     int origin_is_tag = 1;
                     char *true_val = get_dir_tag_val(ctx, meta, ofmt, true_tok);
                     if (!true_val) {
