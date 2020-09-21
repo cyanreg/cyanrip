@@ -175,6 +175,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     if (rctx.size % entry_size) {
         cyanrip_log(ctx, 0, "AccuRIP DB data error, got unexpected number of bytes!\n");
         ctx->ar_db_status = CYANRIP_ACCUDB_ERROR;
+        goto end;
     }
 
     int nb_entries = rctx.size / entry_size;
