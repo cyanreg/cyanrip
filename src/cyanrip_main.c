@@ -25,7 +25,7 @@
 
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
-#include "cyanrip_crc.h"
+#include "checksums.h"
 #include "discid.h"
 #include "musicbrainz.h"
 #include "accurip.h"
@@ -491,8 +491,8 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     int start_err = ctx->total_error_count;
 
     /* Checksum */
-    cyanrip_crc_ctx crc_ctx;
-    init_crc_ctx(ctx, &crc_ctx, t);
+    cyanrip_checksum_ctx checksum_ctx;
+    crip_init_checksum_ctx(ctx, &checksum_ctx, t);
 
     /* Fill with silence to maintain track length */
     for (int i = 0; i < frames_before_disc_start; i++) {
@@ -504,7 +504,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             bytes = -offs;
         }
 
-        process_checksums(&crc_ctx, data, bytes);
+        crip_process_checksums(&checksum_ctx, data, bytes);
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
         if (ret) {
@@ -552,8 +552,8 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             break;
         }
 
-        /* Update CRCs */
-        process_checksums(&crc_ctx, data, bytes);
+        /* Update checksums */
+        crip_process_checksums(&checksum_ctx, data, bytes);
 
         /* Decode and encode */
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
@@ -578,7 +578,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         if ((i == (frames_after_disc_end - 1)) && offs)
             bytes = offs;
 
-        process_checksums(&crc_ctx, data, bytes);
+        crip_process_checksums(&checksum_ctx, data, bytes);
         ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                            dec_ctx, data, bytes);
         if (ret) {
@@ -587,7 +587,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         }
     }
 
-    finalize_crc(&crc_ctx, t);
+    crip_finalize_checksums(&checksum_ctx, t);
 
     cyanrip_log(NULL, 0, "\nFlushing encoders...\n");
 

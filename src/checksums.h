@@ -18,10 +18,12 @@
 
 #pragma once
 
-#include "cyanrip_main.h"
+#include <stdint.h>
 #include <libavutil/crc.h>
 
-typedef struct cyanrip_crc_ctx {
+#include "cyanrip_main.h"
+
+typedef struct cyanrip_checksum_ctx {
     const AVCRC *eac_ctx;
     uint32_t eac_crc;
     uint32_t acu_start;
@@ -30,9 +32,9 @@ typedef struct cyanrip_crc_ctx {
     uint32_t acu_sum_1;
     uint32_t acu_sum_1_450;
     uint32_t acu_sum_2;
-} cyanrip_crc_ctx;
+} cyanrip_checksum_ctx;
 
-static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_track *t)
+static inline void crip_init_checksum_ctx(cyanrip_ctx *ctx, cyanrip_checksum_ctx *s, cyanrip_track *t)
 {
     s->eac_ctx   = av_crc_get_table(AV_CRC_32_IEEE_LE);
     s->eac_crc   = UINT32_MAX;
@@ -51,7 +53,7 @@ static inline void init_crc_ctx(cyanrip_ctx *ctx, cyanrip_crc_ctx *s, cyanrip_tr
         s->acu_end   -= (CDIO_CD_FRAMESIZE_RAW * 5) >> 2;
 }
 
-static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, int bytes)
+static inline void crip_process_checksums(cyanrip_checksum_ctx *s, const uint8_t *data, int bytes)
 {
     if (!bytes)
         return;
@@ -78,7 +80,7 @@ static inline void process_checksums(cyanrip_crc_ctx *s, const uint8_t *data, in
     }
 }
 
-static inline void finalize_crc(cyanrip_crc_ctx *s, cyanrip_track *t)
+static inline void crip_finalize_checksums(cyanrip_checksum_ctx *s, cyanrip_track *t)
 {
     t->computed_crcs = 1;
     t->eac_crc = s->eac_crc ^ UINT32_MAX;
