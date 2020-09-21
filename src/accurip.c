@@ -171,7 +171,13 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
 
     int entry_size = 1 + 12 + audio_tracks * (1 + 8);
-    float nb_entries = rctx.size / entry_size;
+
+    if (rctx.size % entry_size) {
+        cyanrip_log(ctx, 0, "AccuRIP DB data error, got unexpected number of bytes!\n");
+        ctx->ar_db_status = CYANRIP_ACCUDB_ERROR;
+    }
+
+    int nb_entries = rctx.size / entry_size;
 
     for (int i = 0; i < nb_entries; i++) {
         if (bytestream2_get_byte(&gbc) != audio_tracks ||
