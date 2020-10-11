@@ -270,6 +270,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             READ_MB(mb5_release_get_title, release, tmp_dict, "album");
             READ_MB(mb5_release_get_id, release, tmp_dict, "id");
             READ_MB(mb5_release_get_disambiguation, release, tmp_dict, "disambiguation");
+            READ_MB(mb5_release_get_country, release, tmp_dict, "country");
 
             Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
             int num_cds = mb5_medium_list_size(medium_list);
@@ -282,11 +283,12 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     (!!dict_get(tmp_dict, key)) ? postamble : "",               \
     (!!dict_get(tmp_dict, key)) ? ")" : ""
 
-            cyanrip_log(ctx, 0, "    %i (ID: %s): %s" "%s%s%s%s" "%s%s%s%s" "%s%s%s%s" "%s", i + 1,
+            cyanrip_log(ctx, 0, "    %i (ID: %s): %s" "%s%s%s%s" "%s%s%s%s" "%s%s%s%s" "%s%s%s%s" "%s", i + 1,
                         dict_get(tmp_dict, "id")    ? dict_get(tmp_dict, "id")    : "unknown id",
                         dict_get(tmp_dict, "album") ? dict_get(tmp_dict, "album") : "unknown album",
                         PROP("disambiguation", ""),
-                        PROP("num_cds", "CDs"),
+                        PROP("country", ""),
+                        PROP("num_cds", " CDs"),
                         PROP("date", ""),
                         "\n");
 
