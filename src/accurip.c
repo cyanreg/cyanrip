@@ -187,7 +187,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
             bytestream2_get_le32(&gbc) != cddb_id) {
             if (ctx->ar_db_status != CYANRIP_ACCUDB_FOUND)
                 ctx->ar_db_status = CYANRIP_ACCUDB_MISMATCH;
-            bytestream2_skip(&gbc, bytestream2_tell(&gbc) % entry_size);
+            bytestream2_skip(&gbc, entry_size - (bytestream2_tell(&gbc) % entry_size));
             continue;
         }
 
