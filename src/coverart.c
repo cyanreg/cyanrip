@@ -318,6 +318,18 @@ end:
     return ret;
 }
 
+static int string_is_url(const char *src)
+{
+    return !strncmp(src, "http://", 4)   ||
+           !strncmp(src, "https://", 4)  ||
+           !strncmp(src, "ftp://", 4)    ||
+           !strncmp(src, "ftps://", 4)   ||
+           !strncmp(src, "sftp://", 4)   ||
+           !strncmp(src, "tftp://", 4)   ||
+           !strncmp(src, "gopher://", 4) ||
+           !strncmp(src, "telnet://", 4);
+}
+
 int crip_fill_coverart(cyanrip_ctx *ctx, int info_only)
 {
     int err = 0;
@@ -362,7 +374,7 @@ int crip_fill_coverart(cyanrip_ctx *ctx, int info_only)
     for (int i = 0; i < ctx->nb_cover_arts; i++) {
         char *source_url = ctx->cover_arts[i].source_url;
         const char *title = dict_get(ctx->cover_arts[i].meta, "title");
-        int is_url = (!strncmp(source_url, "http://", 4)) || (!strncmp(source_url, "https://", 4));
+        int is_url = string_is_url(source_url);
 
         /* If its a url, we haven't downloaded it from CADB and we're not info printing */
         if (is_url && !ctx->cover_arts[i].data && !info_only) {
@@ -372,7 +384,7 @@ int crip_fill_coverart(cyanrip_ctx *ctx, int info_only)
         }
 
         /* If we don't have to download it, or we have data */
-        if (!is_url || ctx->cover_arts[i].data) {
+        if (!is_url || !info_only) {
             if ((err = demux_image(ctx, &ctx->cover_arts[i], info_only)) < 0)
                 goto end;
         }
@@ -394,7 +406,7 @@ int crip_fill_track_coverart(cyanrip_ctx *ctx, int info_only)
             continue;
 
         char *source_url = ctx->tracks[i].art.source_url;
-        int is_url = (!strncmp(source_url, "http://", 4)) || (!strncmp(source_url, "https://", 4));
+        int is_url = string_is_url(source_url);
 
         /* If its a url, we haven't downloaded it from CADB and we're not info printing */
         if (is_url && !ctx->tracks[i].art.data && !info_only) {
@@ -404,7 +416,7 @@ int crip_fill_track_coverart(cyanrip_ctx *ctx, int info_only)
         }
 
         /* If we don't have to download it, or we have data */
-        if (!is_url || !ctx->tracks[i].art.data) {
+        if (!is_url || !info_only) {
             if ((err = demux_image(ctx, &ctx->tracks[i].art, info_only)) < 0)
                 goto end;
         }
