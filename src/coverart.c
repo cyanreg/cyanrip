@@ -28,6 +28,12 @@
 int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
 {
     int ret = 0;
+
+    if (!art->pkt) {
+        cyanrip_log(ctx, 0, "Cover art has no packet!\n");
+        return 0;
+    }
+
     char *filepath = crip_get_path(ctx, CRIP_PATH_COVERART, 1, fmt, art);
     if (!filepath)
         return 0;
@@ -262,22 +268,27 @@ static int demux_image(cyanrip_ctx *ctx, CRIPArt *art, int info_only)
 
     /* Output extension guesswork */
     av_freep(&art->extension);
-    if (art->params->codec_id == AV_CODEC_ID_MJPEG)
+    if (art->params->codec_id == AV_CODEC_ID_MJPEG) {
         art->extension = av_strdup("jpg");
-    else if (art->params->codec_id == AV_CODEC_ID_PNG)
+    } else if (art->params->codec_id == AV_CODEC_ID_PNG) {
         art->extension = av_strdup("png");
-    else if (art->params->codec_id == AV_CODEC_ID_BMP)
+    } else if (art->params->codec_id == AV_CODEC_ID_BMP) {
         art->extension = av_strdup("bmp");
-    else if (art->params->codec_id == AV_CODEC_ID_TIFF)
+    } else if (art->params->codec_id == AV_CODEC_ID_TIFF) {
         art->extension = av_strdup("tiff");
-    else if (art->params->codec_id == AV_CODEC_ID_AV1)
+    } else if (art->params->codec_id == AV_CODEC_ID_AV1) {
         art->extension = av_strdup("avif");
-    else if (art->params->codec_id == AV_CODEC_ID_HEVC)
+    } else if (art->params->codec_id == AV_CODEC_ID_HEVC) {
         art->extension = av_strdup("heif");
-    else if (art->params->codec_id == AV_CODEC_ID_WEBP)
+    } else if (art->params->codec_id == AV_CODEC_ID_WEBP) {
         art->extension = av_strdup("webp");
-    else
+    } else if (art->params->codec_id != AV_CODEC_ID_NONE) {
         art->extension = av_strdup(avcodec_get_name(art->params->codec_id));
+    } else {
+        ret = AVERROR(EINVAL);
+        cyanrip_log(ctx, 0, "Error demuxing cover image: %s!\n", av_err2str(ret));
+        goto end;
+    }
 
     if (info_only)
         goto end;
