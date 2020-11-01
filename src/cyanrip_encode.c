@@ -50,10 +50,6 @@ struct cyanrip_dec_ctx {
     AVFilterContext *buffersink_ctx;
     AVFilterContext *buffersrc_ctx;
     AVFilterGraph *filter_graph;
-
-    /* Cover image demuxing */
-    AVPacket *cover_image_pkt;
-    AVCodecParameters *cover_image_params;
 };
 
 void cyanrip_print_codecs(void)
@@ -249,64 +245,8 @@ void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
         avfilter_graph_free(&dec_ctx->graph);
         cyanrip_set_av_log_capture(ctx, 0, 0, 0);
     }
-    av_packet_free(&dec_ctx->cover_image_pkt);
-    av_freep(&dec_ctx->cover_image_params);
+
     av_freep(s);
-}
-
-static int cyanrip_read_cover_image(cyanrip_ctx *ctx, cyanrip_dec_ctx *dec_ctx,
-                                    cyanrip_track *t)
-{
-    int ret = 0;
-    AVFormatContext *avf = NULL;
-    const char *cover_image_path = dict_get(t->meta, "cover_art");
-
-    if (!cover_image_path)
-        return 0;
-
-    ret = avformat_open_input(&avf, cover_image_path, NULL, NULL);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Unable to open \"%s\": %s!\n", cover_image_path,
-                    av_err2str(ret));
-        goto fail;
-    }
-
-    av_dict_set(&t->meta, "cover_art", NULL, 0);
-
-    ret = avformat_find_stream_info(avf, NULL);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Unable to get cover image info: %s!\n", av_err2str(ret));
-        goto fail;
-    }
-
-    dec_ctx->cover_image_params = av_calloc(1, sizeof(AVCodecParameters));
-    if (!dec_ctx->cover_image_params)
-        goto fail;
-
-    memcpy(dec_ctx->cover_image_params, avf->streams[0]->codecpar,
-           sizeof(AVCodecParameters));
-
-    dec_ctx->cover_image_pkt = av_packet_alloc();
-    if (!dec_ctx->cover_image_pkt) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    ret = av_read_frame(avf, dec_ctx->cover_image_pkt);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error demuxing cover image: %s!\n", av_err2str(ret));
-        goto fail;
-    }
-
-    avformat_close_input(&avf);
-
-    return 0;
-
-fail:
-    av_dict_set(&t->meta, "cover_art", NULL, 0);
-    avformat_close_input(&avf);
-
-    return ret;
 }
 
 static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
@@ -420,10 +360,6 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     cyanrip_dec_ctx *dec_ctx = av_mallocz(sizeof(*dec_ctx));
     if (!dec_ctx)
         return AVERROR(ENOMEM);
-
-    ret = cyanrip_read_cover_image(ctx, dec_ctx, t);
-    if (ret < 0)
-        goto fail;
 
     if (ctx->settings.decode_hdcd) {
         ret = init_hdcd_decoding(ctx, dec_ctx);
@@ -796,6 +732,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Cover image init */
+#if 0
     if (dec_ctx->cover_image_pkt && cfmt->coverart_supported) {
         st_img = avformat_new_stream(s->avf, NULL);
         if (!st_img) {
@@ -810,6 +747,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         s->avf->oformat->video_codec = st_img->codecpar->codec_id;
         av_dict_set(&st_img->metadata, "title", "Front", 0);
     }
+#endif
 
     /* Find encoder */
     if (cfmt->codec == AV_CODEC_ID_NONE)
@@ -869,6 +807,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
 
+#if 0
     /* Mux cover image */
     if (dec_ctx->cover_image_pkt && cfmt->coverart_supported) {
         AVPacket *pkt = av_packet_clone(dec_ctx->cover_image_pkt);
@@ -878,6 +817,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
             goto fail;
         }
     }
+#endif
 
     /* SWR */
     s->swr = setup_init_swr(ctx, s->out_avctx, ctx->settings.decode_hdcd);
