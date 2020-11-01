@@ -41,6 +41,7 @@ struct cyanrip_enc_ctx {
     SwrContext *swr;
     AVCodecContext *out_avctx;
     atomic_int status;
+    int audio_stream_index;
 };
 
 struct cyanrip_dec_ctx {
@@ -731,7 +732,7 @@ static void *cyanrip_track_encoding(void *ctx)
                 goto fail;
             }
 
-            int sid = 0;
+            int sid = s->audio_stream_index;
             out_pkt.stream_index = sid;
 
             AVRational src_tb = s->out_avctx->time_base;
@@ -833,8 +834,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Set primary audio stream's parameters */
-    st_aud->id        = 0;
     st_aud->time_base = (AVRational){ 1, s->out_avctx->sample_rate };
+    s->audio_stream_index = st_aud->index;
 
     /* Add metadata */
     av_dict_copy(&s->avf->metadata, t->meta, 0);
@@ -871,7 +872,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     /* Mux cover image */
     if (dec_ctx->cover_image_pkt && cfmt->coverart_supported) {
         AVPacket *pkt = av_packet_clone(dec_ctx->cover_image_pkt);
-        pkt->stream_index = 1;
+        pkt->stream_index = st_img->index;
         if ((ret = av_interleaved_write_frame(s->avf, pkt)) < 0) {
             cyanrip_log(ctx, 0, "Error writing picture packet: %s!\n", av_err2str(ret));
             goto fail;
