@@ -1,8 +1,13 @@
-Next
-====
+0.7
+===
+ - __No need to rerip anything.__
  - Automated CD drive offset finding
  - Verification of partially damaged tracks
  - Tagging usability improvements
+ - Even faster ripping
+ - Arbitrary directory/file structure
+ - Automatic cover art image downloading
+ - ...and more
 
 0.6.0
 =====

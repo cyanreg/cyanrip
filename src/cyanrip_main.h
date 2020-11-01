@@ -93,6 +93,7 @@ typedef struct cyanrip_settings {
     float bitrate;
     int decode_hdcd;
     int disable_accurip;
+    int disable_coverart_db;
     int overread_leadinout;
     int eject_on_success_rip;
     enum cyanrip_pregap_action pregap_action[99];
@@ -109,6 +110,20 @@ typedef struct CRIPAccuDBEntry {
     uint32_t checksum; /* We don't know which version it is */
     uint32_t checksum_450;
 } CRIPAccuDBEntry;
+
+typedef struct CRIPArt {
+    AVDictionary *meta;
+    char *source_url;
+    char *title; /* Temporary, used during parsing only, copied to meta, do not free */
+    char *mime_type;
+
+    AVPacket *pkt;
+    AVCodecParameters *params;
+
+    uint8_t *data;
+    size_t size;
+    char *extension;
+} CRIPArt;
 
 typedef struct cyanrip_track {
     int number; /* Human readable track number, may be 0 */
@@ -131,6 +146,8 @@ typedef struct cyanrip_track {
     lsn_t end_lsn_sig;
 
     ptrdiff_t partial_frame_byte_offs;
+
+    CRIPArt art; /* One cover art, will not be saved */
 
     int computed_crcs;
     uint32_t eac_crc;
@@ -160,6 +177,10 @@ typedef struct cyanrip_ctx {
 
     char *mb_submission_url;
 
+    /* Non-track bound cover art */
+    CRIPArt cover_arts[32];
+    int nb_cover_arts;
+
     /* Drive caps */
     cdio_drive_read_cap_t  rcap;
     cdio_drive_write_cap_t wcap;
@@ -178,19 +199,6 @@ typedef struct cyanrip_ctx {
     lsn_t end_lsn;
     lsn_t duration_frames;
 } cyanrip_ctx;
-
-typedef struct CRIPArt {
-    char *name;
-    char *comment;
-    char *extension;
-
-    AVPacket *pkt;
-    enum AVCodecID codec;
-
-    /* Do not scrap raw file data, write it out as-is without remuxing */
-    uint8_t *data;
-    size_t size;
-} CRIPArt;
 
 typedef struct cyanrip_out_fmt {
     const char *name;

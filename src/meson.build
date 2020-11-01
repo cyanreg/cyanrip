@@ -41,6 +41,7 @@ sources = [
 
     'discid.c',
     'musicbrainz.c',
+    'coverart.c',
     'accurip.c',
 
     # Version

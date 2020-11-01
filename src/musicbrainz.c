@@ -213,7 +213,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         switch(res) {
         case eQuery_Timeout:
         case eQuery_ConnectionError:
-            cyanrip_log(ctx, 0, "Connection failed, try again? Or disable via -n\n");
+            cyanrip_log(ctx, 0, "Connection failed, try again? Or disable via -N\n");
             break;
         case eQuery_AuthenticationError:
         case eQuery_FetchError:
@@ -232,7 +232,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
                             "and metadata hasn't been manually added!\n");
                 cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
                             "submitting the disc info to the following URL:\n%s\n", ctx->mb_submission_url);
-                cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -n!\n");
+                cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -N!\n");
             }
             break;
         default:

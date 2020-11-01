@@ -732,22 +732,28 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Cover image init */
-#if 0
-    if (dec_ctx->cover_image_pkt && cfmt->coverart_supported) {
+    CRIPArt *art = &t->art;
+    if (!art->pkt) {
+        int i;
+        for (i = 0; i < ctx->nb_cover_arts; i++)
+            if (!strcmp(dict_get(ctx->cover_arts[i].meta, "title"), "Front"))
+                break;
+        art = &ctx->cover_arts[i == ctx->nb_cover_arts ? 0 : i];
+    }
+
+    if (art->pkt && cfmt->coverart_supported) {
         st_img = avformat_new_stream(s->avf, NULL);
         if (!st_img) {
             cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
             ret = AVERROR(ENOMEM);
             goto fail;
         }
-        memcpy(st_img->codecpar, dec_ctx->cover_image_params,
-               sizeof(AVCodecParameters));
+        memcpy(st_img->codecpar, art->params, sizeof(AVCodecParameters));
         st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
         st_img->time_base = (AVRational){ 1, 25 };
         s->avf->oformat->video_codec = st_img->codecpar->codec_id;
-        av_dict_set(&st_img->metadata, "title", "Front", 0);
+        av_dict_copy(&st_img->metadata, art->meta, 0);
     }
-#endif
 
     /* Find encoder */
     if (cfmt->codec == AV_CODEC_ID_NONE)
@@ -807,17 +813,16 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
 
-#if 0
     /* Mux cover image */
-    if (dec_ctx->cover_image_pkt && cfmt->coverart_supported) {
-        AVPacket *pkt = av_packet_clone(dec_ctx->cover_image_pkt);
+    if (art->pkt && cfmt->coverart_supported) {
+        AVPacket *pkt = av_packet_clone(art->pkt);
         pkt->stream_index = st_img->index;
         if ((ret = av_interleaved_write_frame(s->avf, pkt)) < 0) {
             cyanrip_log(ctx, 0, "Error writing picture packet: %s!\n", av_err2str(ret));
             goto fail;
         }
+        av_packet_free(&pkt);
     }
-#endif
 
     /* SWR */
     s->swr = setup_init_swr(ctx, s->out_avctx, ctx->settings.decode_hdcd);

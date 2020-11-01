@@ -28,6 +28,7 @@
 #include "checksums.h"
 #include "discid.h"
 #include "musicbrainz.h"
+#include "coverart.h"
 #include "accurip.h"
 #include "cyanrip_encode.h"
 #include "os_compat.h"
@@ -57,9 +58,13 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
     ctx = *s;
 
     for (int i = 0; i < ctx->nb_tracks; i++) {
+        crip_free_art(&ctx->tracks[i].art);
         av_dict_free(&ctx->tracks[i].meta);
         av_free(ctx->tracks[i].ar_db_entries);
     }
+
+    for (int i = 0; i < ctx->nb_cover_arts; i++)
+        crip_free_art(&ctx->cover_arts[i]);
 
     av_free(ctx->mb_submission_url);
 
@@ -1126,9 +1131,9 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
 
     char *ext = NULL;
     if (type == CRIP_PATH_COVERART) {
-        crip_bprint_sanitize(ctx, &buf, arg, &dir_list, &dir_list_nb, 0);
         CRIPArt *art = arg;
-        ext = av_strdup(art->extension);
+        crip_bprint_sanitize(ctx, &buf, dict_get(art->meta, "title"), &dir_list, &dir_list_nb, 0);
+        ext = art->extension ? av_strdup(art->extension) : av_strdup("<extension>");
     } else if (type == CRIP_PATH_LOG) {
         if (process_cond(ctx, &buf, ctx->meta, fmt->name, &dir_list, &dir_list_nb,
                          ctx->settings.log_name_scheme))
@@ -1182,6 +1187,7 @@ int main(int argc, char **argv)
     settings.offset = 0;
     settings.print_info_only = 0;
     settings.disable_mb = 0;
+    settings.disable_coverart_db = 0;
     settings.decode_hdcd = 0;
     settings.bitrate = 128.0f;
     settings.overread_leadinout = 0;
@@ -1199,13 +1205,19 @@ int main(int argc, char **argv)
     int mb_release_idx = -1;
     char *mb_release_str = NULL;
     int discnumber = 0, totaldiscs = 0;
-    char *cover_image_path = NULL;
     char *album_metadata_ptr = NULL;
-    char *track_metadata_ptr[99] = { NULL };
+    char *track_metadata_ptr[198] = { NULL };
     int track_metadata_ptr_cnt = 0;
     int find_drive_offset_range = 0;
 
-    while ((c = getopt(argc, argv, "hnfAHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
+    CRIPArt cover_arts[32] = { 0 };
+    int nb_cover_arts = 0;
+
+    CRIPArt track_cover_arts[198] = { 0 };
+    int track_cover_arts_map[198] = { 0 };
+    int nb_track_cover_arts = 0;
+
+    while ((c = getopt(argc, argv, "hNAUfHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1223,10 +1235,11 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
             cyanrip_log(ctx, 0, "    -t <number>=<string>  Track metadata, can be specified multiple times\n");
             cyanrip_log(ctx, 0, "    -R <int>/<string>     Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string\n");
-            cyanrip_log(ctx, 0, "    -c <path>             Set cover image path\n");
-            cyanrip_log(ctx, 0, "    -n                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
+            cyanrip_log(ctx, 0, "    -c <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
+            cyanrip_log(ctx, 0, "    -C <title>=<path>     Set cover image path, type may be \"Name\" or a \"track_number\"\n");
+            cyanrip_log(ctx, 0, "    -N                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
             cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
-            cyanrip_log(ctx, 0, "    -C <int>/<int>        Tag multi-disc albums, syntax is disc/totaldiscs\n");
+            cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
             cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
@@ -1286,8 +1299,14 @@ int main(int argc, char **argv)
             int frames = ceilf(abs(settings.offset)/(float)(CDIO_CD_FRAMESIZE_RAW >> 2));
             settings.over_under_read_frames = sign*frames;
             break;
-        case 'n':
+        case 'N':
             settings.disable_mb = 1;
+            break;
+        case 'A':
+            settings.disable_accurip = 1;
+            break;
+        case 'U':
+            settings.disable_coverart_db = 1;
             break;
         case 'b':
             settings.bitrate = strtof(optarg, NULL);
@@ -1343,13 +1362,10 @@ int main(int argc, char **argv)
         case 'O':
             settings.overread_leadinout = 1;
             break;
-        case 'A':
-            settings.disable_accurip = 1;
-            break;
         case 'f':
             find_drive_offset_range = 6;
             break;
-        case 'C':
+        case 'c':
             p = av_strtok(optarg, "/", &p_save);
             discnumber = strtol(p, NULL, 10);
             if (discnumber <= 0) {
@@ -1396,8 +1412,64 @@ int main(int argc, char **argv)
             }
             settings.pregap_action[idx - 1] = act;
             break;
-        case 'c':
-            cover_image_path = optarg;
+        case 'C':
+            p = av_strtok(optarg, "=", &p_save);
+            char *next = av_strtok(NULL, "=", &p_save);
+            CRIPArt *dst = NULL;
+
+            if (!next) {
+                int have_front = 0;
+                int have_back = 0;
+                for (int i = 0; i < nb_cover_arts; i++) {
+                    if (!strcmp(cover_arts[i].title, "Front"))
+                        have_front = 1;
+                    if (!strcmp(cover_arts[i].title, "Back"))
+                        have_back = 1;
+                }
+                if (!have_front) {
+                    next = p;
+                    p = "Front";
+                } else if (!have_back) {
+                    next = p;
+                    p = "Back";
+                } else {
+                    cyanrip_log(ctx, 0, "No cover art location specified for \"%s\"\n", p);
+                    return 1;
+                }
+            }
+
+            if (crip_is_integer(p)) {
+                idx = strtol(p, NULL, 10);
+                if (idx < 0 || idx > 198) {
+                    cyanrip_log(ctx, 0, "Invalid track idx for cover art: %i\n", idx);
+                    return 1;
+                }
+                for (int i = 0; i < nb_track_cover_arts; i++) {
+                    if (track_cover_arts_map[i] == idx) {
+                        cyanrip_log(ctx, 0, "Cover art already specified for track idx %i!\n", idx);
+                        return 1;
+                    }
+                }
+                track_cover_arts_map[nb_track_cover_arts] = idx;
+                dst = &track_cover_arts[nb_track_cover_arts++];
+                p = "title";
+            } else {
+                for (int i = 0; i < nb_cover_arts; i++) {
+                    if (!strcmp(cover_arts[i].title, p)) {
+                        cyanrip_log(ctx, 0, "Cover art \"%s\" already specified!\n", p);
+                        return 1;
+                    }
+                }
+
+                dst = &cover_arts[nb_cover_arts++];
+                if (nb_cover_arts > 31) {
+                    cyanrip_log(ctx, 0, "Too many cover arts specified!\n");
+                    return 1;
+                }
+            }
+
+            dst->source_url = next;
+            dst->title = p;
             break;
         case 'E':
             settings.eject_on_success_rip = 1;
@@ -1454,9 +1526,10 @@ int main(int argc, char **argv)
     if (find_drive_offset_range) {
         settings.disable_accurip = 0;
         settings.disable_mb = 1;
+        settings.disable_coverart_db = 1;
         settings.offset = 0;
         settings.eject_on_success_rip = 0;
-        cyanrip_log(ctx, 0, "Searching for drive offset, enabling AccuRip and disabling MusicBrainz\n");
+        cyanrip_log(ctx, 0, "Searching for drive offset, enabling AccuRip and disabling MusicBrainz and Cover art fetching...\n");
     }
 
     if (cyanrip_ctx_init(&ctx, &settings))
@@ -1483,6 +1556,19 @@ int main(int argc, char **argv)
     if (ctx->settings.print_info_only)
         cyanrip_log(ctx, 0, "MusicBrainz URL:\n%s\n", ctx->mb_submission_url);
 
+    /* Copy album cover arts */
+    ctx->nb_cover_arts = nb_cover_arts;
+    for (int i = 0; i < nb_cover_arts; i++) {
+        ctx->cover_arts[i].source_url = av_strdup(cover_arts[i].source_url);
+        av_dict_set(&ctx->cover_arts[i].meta, "title", cover_arts[i].title, 0);
+    }
+
+    /* Album cover art (down)loading, and DB quering */
+    if (crip_fill_coverart(ctx, ctx->settings.print_info_only) < 0) {
+        ctx->total_error_count++;
+        goto end;
+    }
+
     /* Fill in accurip data */
     if (crip_fill_accurip(ctx)) {
         ctx->total_error_count++;
@@ -1496,9 +1582,6 @@ int main(int argc, char **argv)
 
     if (mb_release_str && !dict_get(ctx->meta, "release_id"))
         av_dict_set(&ctx->meta, "release_id", mb_release_str, 0);
-
-    if (cover_image_path)
-        av_dict_set(&ctx->meta, "cover_art", cover_image_path, 0);
 
     if (discnumber)
         av_dict_set_int(&ctx->meta, "disc", discnumber, 0);
@@ -1595,6 +1678,54 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Copy album cover arts */
+    for (int i = 0; i < nb_track_cover_arts; i++) {
+        idx = track_cover_arts_map[i];
+        int track_idx = 0;
+        for (; track_idx < ctx->nb_tracks; track_idx++) {
+            if (ctx->tracks[track_idx].number == idx)
+                break;
+        }
+        if (track_idx >= ctx->nb_tracks) {
+            cyanrip_log(ctx, 0, "Invalid track number %i, list has %i tracks!\n",
+                        idx, ctx->nb_tracks);
+            ctx->total_error_count++;
+            goto end;
+        }
+        ctx->tracks[track_idx].art.source_url = av_strdup(track_cover_arts[i].source_url);
+        av_dict_set(&ctx->tracks[track_idx].art.meta, "title", "Front", 0);
+    }
+
+    /* Track cover art (down)loading */
+    if (crip_fill_track_coverart(ctx, ctx->settings.print_info_only) < 0) {
+        ctx->total_error_count++;
+        goto end;
+    }
+
+    /* Write non-track cover arts */
+    if (ctx->nb_cover_arts) {
+        cyanrip_log(ctx, 0, "Cover art destination(s):\n");
+        for (int f = 0; f < ctx->settings.outputs_num; f++) {
+            for (int i = 0; i < ctx->nb_cover_arts; i++) {
+                char *file = crip_get_path(ctx, CRIP_PATH_COVERART, 0,
+                                           &crip_fmt_info[ctx->settings.outputs[f]],
+                                           &ctx->cover_arts[i]);
+                cyanrip_log(ctx, 0, "    %s\n", file);
+                av_free(file);
+
+                if (!ctx->settings.print_info_only) {
+                    int err = crip_save_art(ctx, &ctx->cover_arts[i],
+                                            &crip_fmt_info[ctx->settings.outputs[f]]);
+                    if (err) {
+                        ctx->total_error_count++;
+                        goto end;
+                    }
+                }
+            }
+        }
+        cyanrip_log(ctx, 0, "\n");
+    }
+
     cyanrip_log(ctx, 0, "Tracks:\n");
     if (ctx->settings.rip_indices_count == -1) {
         for (int i = 0; i < ctx->nb_tracks; i++) {
@@ -1602,7 +1733,6 @@ int main(int argc, char **argv)
             if (ctx->settings.print_info_only) {
                 cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
                 track_read_extra(ctx, t);
-                av_dict_set(&t->meta, "cover_art", NULL, 0);
                 cyanrip_log_track_end(ctx, t);
 
                 if (cdio_get_media_changed(ctx->cdio)) {
@@ -1647,7 +1777,6 @@ int main(int argc, char **argv)
             if (ctx->settings.print_info_only) {
                 cyanrip_log(ctx, 0, "Track %i info:\n", ctx->tracks[j].number);
                 track_read_extra(ctx, &ctx->tracks[j]);
-                av_dict_set(&ctx->tracks[j].meta, "cover_art", NULL, 0);
                 cyanrip_log_track_end(ctx, &ctx->tracks[j]);
 
                 if (cdio_get_media_changed(ctx->cdio)) {

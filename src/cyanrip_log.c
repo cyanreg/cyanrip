@@ -80,6 +80,29 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
     if (t->preemphasis)
         cyanrip_log(ctx, 0, "    Preemphasis:      present, deemphasis required\n");
+    if (t->art.source_url || ctx->nb_cover_arts) {
+        const char *codec_name = NULL;
+        CRIPArt *art = &t->art;
+        if (!art->source_url) {
+            int i;
+            for (i = 0; i < ctx->nb_cover_arts; i++)
+                if (!strcmp(dict_get(ctx->cover_arts[i].meta, "title"), "Front"))
+                    break;
+            art = &ctx->cover_arts[i == ctx->nb_cover_arts ? 0 : i];
+        }
+
+        if (art->pkt && art->params) {
+            const AVCodecDescriptor *cd = avcodec_descriptor_get(art->params->codec_id);
+            if (cd)
+                codec_name = cd->long_name;
+            else
+                codec_name = avcodec_get_name(art->params->codec_id);
+        }
+
+        cyanrip_log(ctx, 0, "    Cover art:        %s\n",
+                    codec_name ? codec_name :
+                    (t->art.source_url ? art->source_url : dict_get(art->meta, "title")));
+    }
     cyanrip_log(ctx, 0, "    Duration:         %s\n", length);
     cyanrip_log(ctx, 0, "    Samples:          %u\n", t->nb_samples);
     cyanrip_log(ctx, 0, "    Frames:           %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
@@ -168,7 +191,19 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "Paranoia level: %i\n", ctx->settings.paranoia_level);
     cyanrip_log(ctx, 0, "Frame retries:  %i\n", ctx->settings.frame_max_retries);
     cyanrip_log(ctx, 0, "HDCD decoding:  %s\n", ctx->settings.decode_hdcd ? "enabled" : "disabled");
-    CLOG("Album Art:      %s\n", ctx->meta, "cover_art")
+
+    cyanrip_log(ctx, 0, "Album Art:      %s", ctx->nb_cover_arts == 0 ? "none" : "");
+    for (int i = 0; i < ctx->nb_cover_arts; i++) {
+        const char *title = dict_get(ctx->cover_arts[i].meta, "title");
+        const char *source = dict_get(ctx->cover_arts[i].meta, "source");
+        cyanrip_log(ctx, 0, "%s%s%s%s%s", title,
+                    source ? " (From: " : "",
+                    source ? source : "",
+                    source ? ")" : "",
+                    i != (ctx->nb_cover_arts - 1) ? ", " : "");
+    }
+    cyanrip_log(ctx, 0, "\n");
+
     cyanrip_log(ctx, 0, "Outputs:        ");
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_log(ctx, 0, "%s%s", cyanrip_fmt_desc(ctx->settings.outputs[i]), i != (ctx->settings.outputs_num - 1) ? ", " : "");

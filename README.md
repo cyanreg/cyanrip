@@ -12,13 +12,13 @@ Features
  * [Multi-disc album ripping](#multi-disc-albums)
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
+ * Automatic [cover art image downloading](#cover-art-downloading)
  * Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums
  * Accurate ripping verification of partially damaged tracks
  * Automatic drive offset finding
 
 Installation
 ------------
-
 ### Archlinux
 ```
 pacaur -S cyanrip
@@ -70,10 +70,11 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -a `string`          | Album metadata, syntax is described below                                                   |
 | -t `number=string`   | Track metadata, syntax is described below                                                   |
 | -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string     |
-| -c `path` or `url`   | Sets cover image to embed into each track, syntax is described below                        |
-| -n                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
+| -c `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                      |
+| -C `path` or `url`   | Sets cover image to embed into each track, syntax is described below                        |
+| -N                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
 | -A                   | Disables AccurateRip database query and comparison                                          |
-| -C `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                      |
+| -U                   | Disables Cover art DB database query and retrieval                                          |
 |                      | **Output options**                                                                          |
 | -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                      |
 | -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
@@ -113,7 +114,7 @@ Pregap handling
 ---------------
 By default, track 1 pregap is ignored, while any other track's pregap is merged into the previous track. This is identical to EAC's default behaviour.
 
-You can override what's done with each pregap on a per-track basis using the -p *number*=*action* argument. This argument must be specified separately for each track.
+You can override what's done with each pregap on a per-track basis using the `-p track_number=action` argument. This argument must be specified separately for each track.
 
 | *action* | Description                                |
 |----------|--------------------------------------------|
@@ -129,29 +130,36 @@ cyanrip guarantees that there will be no discontinuities between tracks, unless 
 
 Cover art embedding
 -------------------
-cyanrip supports embedding album and track cover art, in either jpeg or png formats.
+cyanrip supports embedding album and track cover art.
 
-To embed cover art for the whole album, either specify it with the -c *path* parameter, or add the cover_art=*path* tag to the album metadata. *path* can be a URL as well, in which case it will be downloaded once per track.
+To embed cover art for the whole album, specify it with the `-C path` or `-C destination=path` parameter. `path` can be a URL, in which case it will be automatically downloaded.
 
-To specify the cover art for a single track, specify it with the `cover_art="path"` tag in the track's metadata. Metadata precedence is as specified above.
+If `destination` is a number, the cover art will be embedded only for the track with that number. Otherwise, `destination` should be a descriptor like `Front` or `Back` or `Disc`. If `destination` is omitted, `Front`, then `Back` will be used.
 
-The cover_art tag containing the path will not be encoded.
+Cover arts which are not attached to a track will be copied to each output directory as `destination` with an autodetected extension.
+
+If multiple cover arts are present and no track cover art is specified, only the cover art with `Front` destination will be embedded, or the first cover art specified if no `Front` exists. Otherwise, only the specified track cover art will be embedded.
+
+
+Cover art downloading
+---------------------
+If a release ID is specified or detected, and no `Front` or `Back` cover arts were specified, a query will be made to the [Cover Art Archive](https://coverartarchive.org/) and if found, the archive cover art will be downloaded and used.
 
 
 Multi-disc albums
 -----------------
-cyanrip supports ripping multi-disc albums in the same output folder. To enable this manually, specify the -C argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
+cyanrip supports ripping multi-disc albums in the same output folder. To enable this manually, specify the `-c` argument followed by `disc/totaldiscs` (`/totaldiscs` is optional), otherwise it'll be done automatically if the MusicBrainz tags indicate so.
 
 The track filenames will be `disc.track - title.ext`. The logfile will be `Album name CD<disc>.log`.
 
-As well as using the -C argument, you can also specify the `disc=number:totaldiscs=number` in the album/track metadata.
+As well as using the `-c` argument, you can also specify the `disc=number:totaldiscs=number` in the album/track metadata.
 
 If each disc has a title, you should use the `discname` tag if you're manually setting tags, which is what MusicBrainz will set if available.
 
 
 HDCD decoding
 -------------
-cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the -l argument and look at the log. A non-HDCD encoded disc will have:
+cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the `-l` argument and look at the log. A non-HDCD encoded disc will have:
 
 ```
 HDCD detected: no
