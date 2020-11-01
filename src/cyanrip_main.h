@@ -115,7 +115,6 @@ typedef struct CRIPArt {
     AVDictionary *meta;
     char *source_url;
     char *title; /* Temporary, used during parsing only, copied to meta, do not free */
-    char *mime_type;
 
     AVPacket *pkt;
     AVCodecParameters *params;

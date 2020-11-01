@@ -38,10 +38,8 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     if (!filepath)
         return 0;
 
-    AVOutputFormat *ofm = av_guess_format(NULL, filepath, art->mime_type);
     AVFormatContext *avf = NULL;
-
-    ret = avformat_alloc_output_context2(&avf, ofm, NULL, filepath);
+    ret = avformat_alloc_output_context2(&avf, NULL, NULL, filepath);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context: %s!\n", av_err2str(ret));
         goto fail;
@@ -105,7 +103,6 @@ void crip_free_art(CRIPArt *art)
     art->size = 0;
 
     av_freep(&art->source_url);
-    av_freep(&art->mime_type);
     av_freep(&art->extension);
 
     av_dict_free(&art->meta);
@@ -190,8 +187,6 @@ static int fetch_image(cyanrip_ctx *ctx, CURL *curl_ctx, CRIPArt *art,
         goto end;
     }
 
-    art->mime_type = av_strdup(content_type);
-
     /* Response code */
     long response_code = 0;
     res = curl_easy_getinfo(curl_ctx, CURLINFO_RESPONSE_CODE, &response_code);
@@ -219,7 +214,7 @@ static int fetch_image(cyanrip_ctx *ctx, CURL *curl_ctx, CRIPArt *art,
         art->size = 0;
     } else {
         char header[99];
-        snprintf(header, sizeof(header), "data:%s;base64,", art->mime_type);
+        snprintf(header, sizeof(header), "data:%s;base64,", content_type);
 
         size_t data_len = AV_BASE64_SIZE(art->size);
         char *data = av_mallocz(strlen(header) + data_len);
