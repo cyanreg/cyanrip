@@ -97,7 +97,7 @@ In case the MusicBrainz database doesn't contain the disc information, is incomp
 
 `-t 1=artist="Track Artist":lyrics="Name":random_tag="Value" -t 3=artist="Someone Else"`
 
-All key=value pair tags must be separated by *:*. For track tags, the syntax is -t track_number=key=value:key=value. You need to specify the -t argument separately for each track.
+All key=value pair tags must be separated by `:`. For track tags, the syntax is `-t track_number=key=value:key=value`. You need to specify the -t argument separately for each track.
 
 For convenience, if any of the first 2 metadata tags of tracks are missing a key, such as with `-t 2=some_title:some_artist:key=value`, cyanrip will automatically prepend `title=` and `artist=` such that it becomes `-t title=some_title:artist=some_artist:key=value`.
 A missing key in tag 1 is always considered a title while a missing key in tag 2 is always considered artist, so either can be skipped with no effect.
