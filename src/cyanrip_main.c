@@ -1678,7 +1678,7 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Copy album cover arts */
+    /* Copy track cover arts */
     for (int i = 0; i < nb_track_cover_arts; i++) {
         idx = track_cover_arts_map[i];
         int track_idx = 0;
