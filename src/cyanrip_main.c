@@ -1194,7 +1194,7 @@ int main(int argc, char **argv)
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, sizeof(settings.pregap_action));
 
-    int c;
+    int c, idx;
     char *p_save, *p;
     int mb_release_idx = -1;
     char *mb_release_str = NULL;
@@ -1296,7 +1296,7 @@ int main(int argc, char **argv)
             settings.rip_indices_count = 0;
             p = av_strtok(optarg, ",", &p_save);
             while (p) {
-                int idx = strtol(p, NULL, 10);
+                idx = strtol(p, NULL, 10);
                 for (int i = 0; i < settings.rip_indices_count; i++) {
                     if (settings.rip_indices[i] == idx) {
                         cyanrip_log(ctx, 0, "Duplicated rip idx %i\n", idx);
@@ -1371,9 +1371,9 @@ int main(int argc, char **argv)
             break;
         case 'p':
             p = av_strtok(optarg, "=", &p_save);
-            int idx = strtol(p, NULL, 10);
-            if (idx < 1 || idx > 99) {
-                cyanrip_log(ctx, 0, "Invalid track idx %i\n", idx);
+            idx = strtol(p, NULL, 10);
+            if (idx < 1 || idx > 197) {
+                cyanrip_log(ctx, 0, "Invalid track idx for pregap: %i\n", idx);
                 return 1;
             }
             enum cyanrip_pregap_action act = CYANRIP_PREGAP_DEFAULT;
@@ -1619,7 +1619,7 @@ int main(int argc, char **argv)
         }
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
-            int idx = ctx->settings.rip_indices[i];
+            idx = ctx->settings.rip_indices[i];
 
             /* Verify all indices */
             int j = 0;
@@ -1636,7 +1636,8 @@ int main(int argc, char **argv)
         }
 
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
-            int idx = ctx->settings.rip_indices[i];
+            idx = ctx->settings.rip_indices[i];
+
             int j = 0;
             for (; j < ctx->nb_tracks; j++) {
                 if (ctx->tracks[j].number == idx)
