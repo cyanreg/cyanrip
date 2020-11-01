@@ -63,7 +63,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         return;
     }
 
-    cyanrip_log(ctx, 0, "    Files:\n");
+    cyanrip_log(ctx, 0, "    File(s):\n");
     for (int f = 0; f < ctx->settings.outputs_num; f++) {
         char *path = crip_get_path(ctx, CRIP_PATH_TRACK, 0,
                                    &crip_fmt_info[ctx->settings.outputs[f]],
