@@ -5,7 +5,6 @@ buildCyanrip() {
     build_curl
     build_neon
     build_libmusicbrainz
-    # build_libcoverart
     build_ffmpeg
     build_cyanrip
 }
@@ -92,11 +91,6 @@ build_neon() {
 
 build_libmusicbrainz() {
     cyan_do_vcs "https://github.com/wiiaboo/libmusicbrainz.git" &&
-    cyan_do_cmakeinstall
-}
-
-build_libcoverart() {
-    cyan_do_vcs "https://github.com/wiiaboo/libcoverart.git" &&
     cyan_do_cmakeinstall
 }
 
