@@ -352,16 +352,16 @@ int crip_fill_coverart(cyanrip_ctx *ctx, int info_only)
             int has_err = 0;
             if (!have_front) {
                 has_err = fetch_image(ctx, curl_ctx, &ctx->cover_arts[ctx->nb_cover_arts], release_id, "front", info_only, NULL);
-                if (has_err >= 0) {
+                if (has_err > 0) {
                     av_dict_set(&ctx->cover_arts[ctx->nb_cover_arts].meta, "title", "Front", 0);
                     av_dict_set(&ctx->cover_arts[ctx->nb_cover_arts].meta, "source", "Cover Art DB", 0);
                     ctx->cover_arts[ctx->nb_cover_arts].extension = av_strdup("jpg");
                     ctx->nb_cover_arts++;
                 }
             }
-            if (!have_back && (has_err >= 0)) {
+            if (!have_back && (has_err > 0)) {
                 has_err = fetch_image(ctx, curl_ctx, &ctx->cover_arts[ctx->nb_cover_arts], release_id, "back", info_only, NULL);
-                if (has_err >= 0) {
+                if (has_err > 0) {
                     av_dict_set(&ctx->cover_arts[ctx->nb_cover_arts].meta, "title", "Back", 0);
                     av_dict_set(&ctx->cover_arts[ctx->nb_cover_arts].meta, "source", "Cover Art DB", 0);
                     ctx->cover_arts[ctx->nb_cover_arts].extension = av_strdup("jpg");
