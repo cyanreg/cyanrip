@@ -134,7 +134,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
         /* Different error */
         size_t len = strlen(errbuf);
         if (len)
-            cyanrip_log(ctx, 0, "Unable to get AccuRIP DB data: %s%s!\n",
+            cyanrip_log(ctx, 0, "Unable to get AccuRIP DB data: %s%s",
                         errbuf, ((errbuf[len - 1] != '\n') ? "\n" : ""));
         else
             cyanrip_log(ctx, 0, "Unable to get AccuRIP DB data: %s\n!\n",
