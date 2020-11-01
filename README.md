@@ -16,9 +16,22 @@ Features
  * Accurate ripping verification of partially damaged tracks
  * Automatic drive offset finding
 
+Installation
+------------
 
-Compiling
----------
+### Archlinux
+```
+pacaur -S cyanrip
+```
+
+### Automated Windows builds ![Windows CI](https://github.com/cyanreg/cyanrip/workflows/CI/badge.svg)
+[Latest release Windows build](https://github.com/cyanreg/cyanrip/releases/latest/download/cyanrip-win64.exe)
+
+[Latest Windows build](https://github.com/cyanreg/cyanrip/releases/download/nightly/cyanrip-win64-latest.exe)
+
+If the latest build is broken, you can find older ones in the [nightly release page](https://github.com/cyanreg/cyanrip/releases/tag/nightly)
+
+### Compiling
 Complete list of dependencies:
 
  * FFmpeg (at least 4.0, libavcodec, libswresample, libavutil, libavformat, libavfilter)
@@ -35,15 +48,6 @@ All are available on any up-to-date Linux distribution's package repositories. T
 `sudo ninja -C build install`
 
 cyanrip can be also built and ran under Windows using MinGW
-
-
-Automated Windows builds ![Windows CI](https://github.com/cyanreg/cyanrip/workflows/CI/badge.svg)
---------------
-[Latest release Windows build](https://github.com/cyanreg/cyanrip/releases/latest/download/cyanrip-win64.exe)
-
-[Latest Windows build](https://github.com/cyanreg/cyanrip/releases/download/nightly/cyanrip-win64-latest.exe)
-
-If the latest build is broken, you can find older ones in the [nightly release page](https://github.com/cyanreg/cyanrip/releases/tag/nightly)
 
 
 CLI
