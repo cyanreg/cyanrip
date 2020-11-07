@@ -20,9 +20,16 @@ Features
 Installation
 ------------
 ### Archlinux
-```
+```bash
 pacaur -S cyanrip
 ```
+Or use your favorite AUR installation method.
+
+### FreeBSD
+```bash
+pkg install cyanrip
+```
+Or via ports: `portsnap fetch update && cd /usr/ports/audio/cyanrip/ && make install clean`.
 
 ### Automated Windows builds ![Windows CI](https://github.com/cyanreg/cyanrip/workflows/CI/badge.svg)
 [Latest release Windows build](https://github.com/cyanreg/cyanrip/releases/latest/download/cyanrip-win64.exe)
