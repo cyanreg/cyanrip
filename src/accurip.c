@@ -236,11 +236,10 @@ int crip_find_ar(cyanrip_track *t, uint32_t checksum, int is_450)
 
     for (int i = 0; i < t->ar_db_nb_entries; i++) {
         CRIPAccuDBEntry *e = &t->ar_db_entries[i];
-        if (is_450 && e->checksum_450 == checksum) {
+        if (is_450 && e->checksum_450 == checksum)
             return e->confidence;
-        } else if (e->checksum == checksum) {
+        else if (e->checksum == checksum)
             return e->confidence;
-        }
     }
 
     return -1;
