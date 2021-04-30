@@ -18,6 +18,11 @@ ver_micro = version_split[2]
 conf.set('PROJECT_VERSION_MAJOR', ver_major)
 conf.set('PROJECT_VERSION_MINOR', ver_minor)
 conf.set('PROJECT_VERSION_MICRO', ver_micro)
+if host_machine.endian() == 'big'
+    conf.set('CONFIG_BIG_ENDIAN', 1)
+else
+    conf.set('CONFIG_BIG_ENDIAN', 0)
+endif
 
 cc = meson.get_compiler('c')
 
