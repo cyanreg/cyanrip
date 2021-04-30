@@ -54,7 +54,6 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
 
     memcpy(st->codecpar, art->params, sizeof(AVCodecParameters));
     st->time_base = (AVRational){ 1, 25 };
-    avf->oformat->video_codec = st->codecpar->codec_id;
     av_dict_copy(&st->metadata, art->meta, 0);
     av_dict_copy(&avf->metadata, art->meta, 0);
 
