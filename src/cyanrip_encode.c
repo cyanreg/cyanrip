@@ -751,7 +751,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         memcpy(st_img->codecpar, art->params, sizeof(AVCodecParameters));
         st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
         st_img->time_base = (AVRational){ 1, 25 };
-        s->avf->oformat->video_codec = st_img->codecpar->codec_id;
         av_dict_copy(&st_img->metadata, art->meta, 0);
     }
 
@@ -768,7 +767,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         ret = AVERROR(ENOMEM);
         goto fail;
     }
-    s->avf->oformat->audio_codec = out_codec->id;
 
     /* Output avctx */
     s->out_avctx = setup_out_avctx(ctx, s->avf, out_codec, cfmt);
