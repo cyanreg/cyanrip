@@ -19,6 +19,11 @@ Features
 
 Installation
 ------------
+### Alpine Linux
+```bash
+apk add cyanrip
+```
+
 ### Archlinux
 ```bash
 pacaur -S cyanrip
