@@ -1535,6 +1535,11 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
+    /* Default album/track titles */
+    av_dict_set(&ctx->meta, "album", "Unknown disc", 0);
+    for (int i = 0; i < ctx->nb_tracks; i++)
+        av_dict_set(&ctx->meta, "title", "Unknown track", 0);
+
     /* Fill disc MCN */
     crip_fill_mcn(ctx);
 
