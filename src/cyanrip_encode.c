@@ -95,7 +95,7 @@ const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? crip_fmt_info[format].folder_suffix : NULL;
 }
 
-static const uint64_t pick_codec_channel_layout(AVCodec *codec)
+static const uint64_t pick_codec_channel_layout(const AVCodec *codec)
 {
     int i = 0;
     int max_channels = 0;
@@ -136,7 +136,7 @@ static const uint64_t pick_codec_channel_layout(AVCodec *codec)
     return best_layout;
 }
 
-static enum AVSampleFormat pick_codec_sample_fmt(AVCodec *codec, int hdcd)
+static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
 {
     int i = 0;
     int max_bps = 0;
@@ -179,7 +179,7 @@ static enum AVSampleFormat pick_codec_sample_fmt(AVCodec *codec, int hdcd)
     return max_bps_fmt;
 }
 
-static int pick_codec_sample_rate(AVCodec *codec)
+static int pick_codec_sample_rate(const AVCodec *codec)
 {
     int i = 0, ret;
     int irate = 44100;
@@ -207,7 +207,7 @@ static int pick_codec_sample_rate(AVCodec *codec)
 }
 
 static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
-                                       AVCodec *codec, const cyanrip_out_fmt *cfmt)
+                                       const AVCodec *codec, const cyanrip_out_fmt *cfmt)
 {
     AVCodecContext *avctx = avcodec_alloc_context3(codec);
     if (!avctx)
@@ -630,6 +630,14 @@ static void *cyanrip_track_encoding(void *ctx)
     cyanrip_enc_ctx *s = ctx;
     int ret = 0, flushing = 0;
 
+    /* Allocate output packet */
+    AVPacket *out_pkt = av_packet_alloc();
+    if (!out_pkt) {
+        ret = AVERROR(ENOMEM);
+        cyanrip_log(s->ctx, 0, "Error while encoding: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
     while (1) {
         AVFrame *out_frame = NULL;
 
@@ -652,11 +660,9 @@ static void *cyanrip_track_encoding(void *ctx)
             goto fail;
         }
 
-        /* Return */
+        /* Return loop */
         while (1) {
-            AVPacket out_pkt;
-            av_init_packet(&out_pkt);
-            ret = avcodec_receive_packet(s->out_avctx, &out_pkt);
+            ret = avcodec_receive_packet(s->out_avctx, out_pkt);
             if (ret == AVERROR_EOF) {
                 ret = 0;
                 goto write_trailer;
@@ -669,22 +675,23 @@ static void *cyanrip_track_encoding(void *ctx)
             }
 
             int sid = s->audio_stream_index;
-            out_pkt.stream_index = sid;
+            out_pkt->stream_index = sid;
 
             AVRational src_tb = s->out_avctx->time_base;
             AVRational dst_tb = s->avf->streams[sid]->time_base;
 
             /* Rescale timestamps to container */
-            out_pkt.pts = av_rescale_q(out_pkt.pts, src_tb, dst_tb);
-            out_pkt.dts = av_rescale_q(out_pkt.dts, src_tb, dst_tb);
-            out_pkt.duration = av_rescale_q(out_pkt.duration, src_tb, dst_tb);
+            av_packet_rescale_ts(out_pkt, src_tb, dst_tb);
 
-            ret = av_interleaved_write_frame(s->avf, &out_pkt);
-            av_packet_unref(&out_pkt);
+            /* Send frame to lavf */
+            ret = av_interleaved_write_frame(s->avf, out_pkt);
             if (ret < 0) {
                 cyanrip_log(s->ctx, 0, "Error writing packet: %s!\n", av_err2str(ret));
                 goto fail;
             }
+
+            /* Reset the packet */
+            av_packet_unref(out_pkt);
         }
     }
 
@@ -695,6 +702,8 @@ write_trailer:
     }
 
 fail:
+    av_packet_free(&out_pkt);
+
     atomic_store(&s->status, ret);
 
     return NULL;
@@ -710,7 +719,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     AVStream *st_aud = NULL;
     AVStream *st_img = NULL;
-    AVCodec *out_codec = NULL;
+    const AVCodec *out_codec = NULL;
 
     s->ctx = ctx;
     atomic_init(&s->status, 0);
