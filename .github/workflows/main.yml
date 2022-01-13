@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: msys2/setup-msys2@v2
         with:
-          install: git base-devel zip mingw-w64-x86_64-toolchain mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake mingw-w64-x86_64-nasm mingw-w64-x86_64-libcdio-paranoia mingw-w64-x86_64-opus mingw-w64-x86_64-lame mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libxml2 mingw-w64-x86_64-nghttp2
+          install: git base-devel zip autoconf automake libtool mingw-w64-x86_64-toolchain mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake mingw-w64-x86_64-nasm mingw-w64-x86_64-libcdio-paranoia mingw-w64-x86_64-opus mingw-w64-x86_64-lame mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libxml2 mingw-w64-x86_64-nghttp2
           update: true
 
       - name: Build
