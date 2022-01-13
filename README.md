@@ -74,7 +74,7 @@ cyanrip can be also built and ran under Windows using MinGW
 
 CLI
 ---
-Arguments are optional. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking and performs a MusicBrainz lookup.
+Arguments are optional. By default cyanrip will rip all tracks from the default CD drive with an offset of 0, output to flac only, enables all cd-paranoia error checking, performs a MusicBrainz lookup, and downloads and embeds the cover art if one is found.
 
 | Argument             | Description                                                                                 |
 |----------------------|---------------------------------------------------------------------------------------------|
@@ -87,6 +87,14 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
+|                      | **Output options**                                                                          |
+| -o `list`            | Comma separated list of output formats (encodings). Use "help" to list all. Default is flac |
+| -b `int`             | Bitrate in kbps for lossy formats, 256 by default                                           |
+| -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
+| -F `string`          | File naming scheme, see [below](#naming-scheme)                                             |
+| -L `string`          | Log naming scheme, see [below](#naming-scheme)                                              |
+| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                      |
+| -T `string`          | Filename sanitation, default is unicode, see [below](#filename-sanitation)                  |
 |                      | **Metadata options**                                                                        |
 | -I                   | Only print CD metadata and information, will not rip or eject the CD                        |
 | -a `string`          | Album metadata, syntax is described below                                                   |
@@ -97,14 +105,6 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -N                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
 | -A                   | Disables AccurateRip database query and comparison                                          |
 | -U                   | Disables Cover art DB database query and retrieval                                          |
-|                      | **Output options**                                                                          |
-| -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                      |
-| -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
-| -F `string`          | File naming scheme, see [below](#naming-scheme)                                             |
-| -L `string`          | Log naming scheme, see [below](#naming-scheme)                                              |
-| -T `string`          | Filename sanitation, default is unicode, see [below](#filename-sanitation)                  |
-| -o `list`            | Comma separated list of output formats, "help" to list all, default is flac                 |
-| -b `int`             | Bitrate in kbps for lossy formats                                                           |
 |                      | **Misc. options**                                                                           |
 | -E                   | Eject CD tray if ripping has been successfully completed                                    |
 | -V                   | Print version                                                                               |
@@ -130,6 +130,30 @@ The same goes for album tags, with `album=` and `album_artist=` being omitable.
 For album tags, if either `artist` or `album_artist` are unset, their values will be mirrored if one is available.
 
 The precedence of tags is Track tags > Album tags > MusicBrainz tags.
+
+
+Output
+------
+The output encoding(s) can be set via the `-o` option as a comma-separated list. Currently, the following formats are available:
+
+| Format name | Description                                     | Extension | Cover art embedding | Notes                                                     |
+|-------------|-------------------------------------------------|-----------|---------------------|-----------------------------------------------------------|
+| `flac`      | Standard FLAC files                             | `.flac`   | :heavy_check_mark:  | Always uses maximum compression                           |
+| `tta`       | TTA (True Audio) files                          | `.tta`    | ⬜                  | Always uses maximum compression                           |
+| `opus`      | Standard Opus files (in an Ogg container)       | `.opus`   | ⬜                  | VBR, use -b to adjust the bitrate, default is 256 (kbps)  |
+| `aac`       | Standard AAC files                              | `.aac`    | ⬜                  | Use -b to adjust the bitrate, default is 256 (kbps)       |
+| `wavpack`   | Standard lossless WavPack files                 | `.wv`     | ⬜                  | Always uses maximum compression                           |
+| `alac`      | Standard ALAC files                             | `.alac`   | ⬜                  | Always uses maximum compression                           |
+| `mp3`       | Standard MP3 files                              | `.mp3`    | :heavy_check_mark:  | VBR, use -b to adjust the bitrate, default is 256 (kbps)  |
+| `vorbis`    | Standard Ogg/Vorbis files (in an OGG container) | `.ogg`    | ⬜                  | Use -b to adjust the bitrate, default is 256 (kbps)       |
+| `wav`       | Standard WAV files                              | `.wav`    | ⬜                  | 16-bit little endian signed audio, or 32-bit in HDCD mode |
+| `aac_mp4`   | Standard MP4 files (with AAC encoding)          | `.mp4`    | :heavy_check_mark:  | Use -b to adjust the bitrate, default is 256 (kbps)       |
+| `opus_mp4`  | Standard MP4 files (with Opus encoding)         | `.mp4`    | :heavy_check_mark:  | Use -b to adjust the bitrate, default is 256 (kbps)       |
+| `pcm`       | Raw audio, 16-bits, two channel, little-endian  | `.raw`    | ⬜                  |                                                           |
+
+For example, to make both FLAC and MP3 files simultaneously, use `-o flac,mp3`. Encodings are done in parallel during ripping, so adding more does not slow down the process.
+
+To adjust the directories and filenames, read the [naming scheme](#naming-scheme) section below.
 
 
 Pregap handling

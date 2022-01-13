@@ -1189,7 +1189,7 @@ int main(int argc, char **argv)
     settings.disable_mb = 0;
     settings.disable_coverart_db = 0;
     settings.decode_hdcd = 0;
-    settings.bitrate = 128.0f;
+    settings.bitrate = 256.0f;
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
     settings.disable_accurip = 0;
@@ -1230,6 +1230,14 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
             cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
             cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
+            cyanrip_log(ctx, 0, "\n  Output options:\n");
+            cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
+            cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
+            cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
+            cyanrip_log(ctx, 0, "    -F <string>           Track naming scheme, by default its \"%s\"\n", settings.track_name_scheme);
+            cyanrip_log(ctx, 0, "    -L <string>           Log file name scheme, by default its \"%s\"\n", settings.log_name_scheme);
+            cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
+            cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
             cyanrip_log(ctx, 0, "\n  Metadata options:\n");
             cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
@@ -1240,14 +1248,6 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -N                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
             cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
             cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
-            cyanrip_log(ctx, 0, "\n  Output options:\n");
-            cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
-            cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
-            cyanrip_log(ctx, 0, "    -F <string>           Track naming scheme, by default its \"%s\"\n", settings.track_name_scheme);
-            cyanrip_log(ctx, 0, "    -L <string>           Log file name scheme, by default its \"%s\"\n", settings.log_name_scheme);
-            cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
-            cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
-            cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
             cyanrip_log(ctx, 0, "\n  Misc. options:\n");
             cyanrip_log(ctx, 0, "    -E                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
