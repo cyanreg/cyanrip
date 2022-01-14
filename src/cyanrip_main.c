@@ -22,6 +22,7 @@
 
 #include <libavutil/bprint.h>
 #include <libavutil/avstring.h>
+#include <libavutil/time.h>
 
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
@@ -457,6 +458,9 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
+    int line_len = 0;
+    int max_line_len = 0;
+    char line[4096];
 
     const int frames_before_disc_start = t->frames_before_disc_start;
     const int frames = t->frames;
@@ -518,6 +522,8 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         }
     }
 
+    int64_t frame_last_read = av_gettime_relative();
+
     /* Read the actual CD data */
     for (int i = 0; i < frames; i++) {
         /* Detect disc removals */
@@ -568,11 +574,73 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             goto fail;
         }
 
+        if (line_len > 0) {
+            cyanrip_log(NULL, 0, "\r", line);
+            line_len = 0;
+        }
+
         /* Report progress */
-        cyanrip_log(NULL, 0, "\rRipping and encoding track %i, progress - %0.2f%%",
-                    t->number, ((double)(i + 1)/frames)*100.0f);
+        line_len += snprintf(line, sizeof(line),
+                             "Ripping and encoding track %i, progress - %0.2f%%",
+                             t->number, ((double)(i + 1)/frames)*100.0f);
+
+        ctx->frames_read++;
+
+        int64_t cur_time   = av_gettime_relative();
+        int64_t frame_diff = cur_time - frame_last_read;
+        frame_last_read = cur_time;
+
+        int64_t diff = cr_sliding_win(&ctx->eta_ctx, frame_diff, cur_time,
+                                      av_make_q(1, 1000000),
+                                      1000000LL * 1200LL, 1);
+
+        int64_t seconds = (ctx->frames_to_read - ctx->frames_read) * diff;
+
+        int hours = 0;
+        while (seconds >= (3600LL * 1000000LL)) {
+            seconds -= (3600LL * 1000000LL);
+            hours++;
+        }
+
+        int minutes = 0;
+        while (seconds >= (60LL * 1000000LL)) {
+            seconds -= (60LL * 1000000LL);
+            minutes++;
+        }
+
+        seconds = av_rescale(seconds, 1, 1000000);
+
+        if (seconds == 60) {
+            minutes++;
+            seconds = 0;
+        }
+
+        if (minutes == 60) {
+            hours++;
+            minutes = 0;
+        }
+
+        if (hours)
+            line_len += snprintf(line + line_len, sizeof(line) - line_len,
+                                 ", ETA - %ih %im %lis", hours, minutes, seconds);
+        else if (minutes)
+            line_len += snprintf(line + line_len, sizeof(line) - line_len,
+                                 ", ETA - %im %lis", minutes, seconds);
+        else
+            line_len += snprintf(line + line_len, sizeof(line) - line_len,
+                                 ", ETA - %lis", seconds);
+
         if (ctx->total_error_count - start_err)
-            cyanrip_log(NULL, 0, ", errors - %i", ctx->total_error_count - start_err);
+            line_len += snprintf(line + line_len, sizeof(line) - line_len,
+                                 ", errors - %i", ctx->total_error_count - start_err);
+
+        max_line_len = FFMAX(line_len, max_line_len);
+        if (line_len < max_line_len) {
+            for (int c = line_len; c < max_line_len; c++)
+                line_len += snprintf(line + line_len, sizeof(line) - line_len, " ");
+        }
+
+        cyanrip_log(NULL, 0, "%s", line);
     }
 
     /* Fill with silence to maintain track length */
@@ -1733,6 +1801,8 @@ int main(int argc, char **argv)
 
     cyanrip_log(ctx, 0, "Tracks:\n");
     if (ctx->settings.rip_indices_count == -1) {
+        ctx->frames_to_read = ctx->duration_frames;
+
         for (int i = 0; i < ctx->nb_tracks; i++) {
             cyanrip_track *t = &ctx->tracks[i];
             if (ctx->settings.print_info_only) {
@@ -1768,6 +1838,8 @@ int main(int argc, char **argv)
                 ctx->total_error_count++;
                 goto end;
             }
+
+            ctx->frames_to_read += ctx->tracks[j].frames;
         }
 
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {

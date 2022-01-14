@@ -26,6 +26,8 @@
 #include "../config.h"
 #include "version.h"
 
+#include "utils.h"
+
 #include <cdio/paranoia/paranoia.h>
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
@@ -197,6 +199,11 @@ typedef struct cyanrip_ctx {
     lsn_t start_lsn;
     lsn_t end_lsn;
     lsn_t duration_frames;
+
+    /* ETA */
+    CRSlidingWinCtx eta_ctx;
+    lsn_t frames_read;
+    lsn_t frames_to_read;
 } cyanrip_ctx;
 
 typedef struct cyanrip_out_fmt {
@@ -214,41 +221,6 @@ extern const cyanrip_out_fmt crip_fmt_info[];
 
 char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg);
-
-static inline const char *dict_get(AVDictionary *dict, const char *key)
-{
-    AVDictionaryEntry *e = av_dict_get(dict, key, NULL, 0);
-    return e ? e->value : NULL;
-}
-
-static inline void cyanrip_frames_to_duration(uint32_t frames, char *str)
-{
-    if (!str)
-        return;
-    const double tot = frames/75.0; /* 75 frames per second */
-    const int hr    = tot/3600.0;
-    const int min   = (tot/60.0) - (hr * 60.0);
-    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
-    const int msec  = tot - sec;
-    snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
-}
-
-static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
-{
-    if (!str)
-        return;
-    const double tot = samples/44100.0; /* 44100 samples per second */
-    const int hr    = tot/3600.0;
-    const int min   = (tot/60.0) - (hr * 60.0);
-    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
-    const int msec  = tot - sec;
-    snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
-}
-
-static inline int cmp_numbers(const void *a, const void *b)
-{
-    return *((int *)a) > *((int *)b);
-}
 
 extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
 extern const int crip_max_paranoia_level;
