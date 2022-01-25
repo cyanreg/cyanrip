@@ -622,10 +622,10 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
         if (hours)
             line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %ih %im %lis", hours, minutes, seconds);
+                                 ", ETA - %ih %im", hours, minutes);
         else if (minutes)
             line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %im %lis", minutes, seconds);
+                                 ", ETA - %im", minutes);
         else
             line_len += snprintf(line + line_len, sizeof(line) - line_len,
                                  ", ETA - %lis", seconds);
