@@ -1,3 +1,13 @@
+0.8.0
+=====
+ - __No need to rerip anything.__
+ - ETA printout
+ - Minor bugfixes
+ - Big endian fixes
+ - Default bitrate for lossy files set to 256kbps
+ - Fix minor compilation warnings
+ - Fix compilation warnings with FFmpeg 5.0
+
 0.7
 ===
  - __No need to rerip anything.__
