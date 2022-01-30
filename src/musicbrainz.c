@@ -22,8 +22,9 @@
 #include <musicbrainz5/mb5_c.h>
 #include <libavutil/crc.h>
 
-#define READ_MB(FUNC, MBCTX, DICT, KEY)                                             \
+#define READ_MB(FUNC, MBCTX, DICT, KEY, APPEND)                                     \
     do {                                                                            \
+        int flags = AV_DICT_DONT_STRDUP_VAL | ((APPEND) ? AV_DICT_APPEND : 0x0);    \
         if (!MBCTX)                                                                 \
             break;                                                                  \
         int len = FUNC(MBCTX, NULL, 0) + 1;                                         \
@@ -32,24 +33,26 @@
         if (str[0] == '\0')                                                         \
             av_free(str);                                                           \
         else                                                                        \
-            av_dict_set(&DICT, KEY, str, AV_DICT_DONT_STRDUP_VAL | AV_DICT_APPEND); \
+            av_dict_set(&DICT, KEY, str, flags);                                    \
     } while (0)
 
 static void mb_credit(Mb5ArtistCredit credit, AVDictionary *dict, const char *key)
 {
+    int append = 0;
     Mb5NameCreditList namecredit_list = mb5_artistcredit_get_namecreditlist(credit);
+
     for (int i = 0; i < mb5_namecredit_list_size(namecredit_list); i++) {
         Mb5NameCredit namecredit = mb5_namecredit_list_item(namecredit_list, i);
 
         if (mb5_namecredit_get_name(namecredit, NULL, 0)) {
-            READ_MB(mb5_namecredit_get_name, namecredit, dict, key);
+            READ_MB(mb5_namecredit_get_name, namecredit, dict, key, append++);
         } else {
             Mb5Artist artist = mb5_namecredit_get_artist(namecredit);
             if (artist)
-                READ_MB(mb5_artist_get_name, artist, dict, key);
+                READ_MB(mb5_artist_get_name, artist, dict, key, append++);
         }
 
-        READ_MB(mb5_namecredit_get_joinphrase, namecredit, dict, key);
+        READ_MB(mb5_namecredit_get_joinphrase, namecredit, dict, key, append++);
     }
 }
 
@@ -68,14 +71,14 @@ static uint32_t crc_medium(Mb5Medium medium)
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);
 
-        READ_MB(mb5_recording_get_id, recording, tmp_dict, "mbid");
+        READ_MB(mb5_recording_get_id, recording, tmp_dict, "mbid", 0);
 
         Mb5ArtistCredit credit;
         if (recording) {
-            READ_MB(mb5_recording_get_title, recording, tmp_dict, "title");
+            READ_MB(mb5_recording_get_title, recording, tmp_dict, "title", 0);
             credit = mb5_recording_get_artistcredit(recording);
         } else {
-            READ_MB(mb5_track_get_title, track, tmp_dict, "title");
+            READ_MB(mb5_track_get_title, track, tmp_dict, "title", 0);
             credit = mb5_track_get_artistcredit(track);
         }
         if (credit)
@@ -144,8 +147,8 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
         }
     }
 
-    READ_MB(mb5_medium_get_title, medium, ctx->meta, "discname");
-    READ_MB(mb5_medium_get_format, medium, ctx->meta, "format");
+    READ_MB(mb5_medium_get_title, medium, ctx->meta, "discname", 0);
+    READ_MB(mb5_medium_get_format, medium, ctx->meta, "format", 0);
 
     Mb5TrackList track_list = mb5_medium_get_tracklist(medium);
     if (!track_list) {
@@ -161,14 +164,14 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
         Mb5Track track = mb5_track_list_item(track_list, i);
         Mb5Recording recording = mb5_track_get_recording(track);
 
-        READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid");
+        READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid", 0);
 
         Mb5ArtistCredit credit;
         if (recording) {
-            READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title");
+            READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title", 0);
             credit = mb5_recording_get_artistcredit(recording);
         } else {
-            READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title");
+            READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title", 0);
             credit = mb5_track_get_artistcredit(track);
         }
         if (credit)
@@ -266,11 +269,11 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         for (int i = 0; i < num_releases; i++) {
             release = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
-            READ_MB(mb5_release_get_date, release, tmp_dict, "date");
-            READ_MB(mb5_release_get_title, release, tmp_dict, "album");
-            READ_MB(mb5_release_get_id, release, tmp_dict, "id");
-            READ_MB(mb5_release_get_disambiguation, release, tmp_dict, "disambiguation");
-            READ_MB(mb5_release_get_country, release, tmp_dict, "country");
+            READ_MB(mb5_release_get_date, release, tmp_dict, "date", 0);
+            READ_MB(mb5_release_get_title, release, tmp_dict, "album", 0);
+            READ_MB(mb5_release_get_id, release, tmp_dict, "id", 0);
+            READ_MB(mb5_release_get_disambiguation, release, tmp_dict, "disambiguation", 0);
+            READ_MB(mb5_release_get_country, release, tmp_dict, "country", 0);
 
             Mb5MediumList medium_list = mb5_release_get_mediumlist(release);
             int num_cds = mb5_medium_list_size(medium_list);
@@ -312,7 +315,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         for (; i < num_releases; i++) {
             release = mb5_release_list_item(release_list, i);
             AVDictionary *tmp_dict = NULL;
-            READ_MB(mb5_release_get_id, release, tmp_dict, "id");
+            READ_MB(mb5_release_get_id, release, tmp_dict, "id", 0);
             if (dict_get(tmp_dict, "id") && !strcmp(release_str, dict_get(tmp_dict, "id"))) {
                 av_dict_free(&tmp_dict);
                 break;
@@ -328,23 +331,23 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
         release = mb5_release_list_item(release_list, 0);
     }
 
-    READ_MB(mb5_release_get_id, release, ctx->meta, "release_id");
-    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "releasecomment");
-    READ_MB(mb5_release_get_date, release, ctx->meta, "date");
-    READ_MB(mb5_release_get_title, release, ctx->meta, "album");
-    READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode");
-    READ_MB(mb5_release_get_packaging, release, ctx->meta, "packaging");
-    READ_MB(mb5_release_get_country, release, ctx->meta, "country");
-    READ_MB(mb5_release_get_status, release, ctx->meta, "status");
+    READ_MB(mb5_release_get_id, release, ctx->meta, "release_id", 0);
+    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "releasecomment", 0);
+    READ_MB(mb5_release_get_date, release, ctx->meta, "date", 0);
+    READ_MB(mb5_release_get_title, release, ctx->meta, "album", 0);
+    READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode", 0);
+    READ_MB(mb5_release_get_packaging, release, ctx->meta, "packaging", 0);
+    READ_MB(mb5_release_get_country, release, ctx->meta, "country", 0);
+    READ_MB(mb5_release_get_status, release, ctx->meta, "status", 0);
 
     /* Label info */
     Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
     if (mb5_labelinfo_list_size(labelinfolist) == 1) {
         Mb5LabelInfo *labelinfo = mb5_label_list_item(labelinfolist, 0);
-        READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalog");
+        READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalog", 0);
 
         Mb5Label *label = mb5_labelinfo_get_label(labelinfo);
-        READ_MB(mb5_label_get_name, label, ctx->meta, "label");
+        READ_MB(mb5_label_get_name, label, ctx->meta, "label", 0);
     }
 
     Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
