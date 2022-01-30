@@ -1,3 +1,8 @@
+0.8.1
+=====
+ - __No need to rerip anything.__
+ - Fix Musicbrainz album name setting.
+
 0.8.0
 =====
  - __No need to rerip anything.__
