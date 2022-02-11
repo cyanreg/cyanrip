@@ -1603,11 +1603,6 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
-    /* Default album/track titles */
-    av_dict_set(&ctx->meta, "album", "Unknown disc", 0);
-    for (int i = 0; i < ctx->nb_tracks; i++)
-        av_dict_set(&ctx->meta, "title", "Unknown track", 0);
-
     /* Fill disc MCN */
     crip_fill_mcn(ctx);
 
@@ -1616,6 +1611,48 @@ int main(int argc, char **argv)
         ctx->total_error_count++;
         goto end;
     }
+
+    /* Default album title */
+    av_dict_set(&ctx->meta, "album", "Unknown disc", 0);
+    const char *barcode_id = dict_get(ctx->meta, "barcode");
+    const char *mcn_id = dict_get(ctx->meta, "disc_mcn");
+    const char *did_id = dict_get(ctx->meta, "discid");
+
+    if (barcode_id || mcn_id || did_id) {
+        char fourcc_id[5] = { '0', '0', '0', '0', '\0' };
+        const char *id = NULL;
+
+        /* Try the barcode first */
+        if (barcode_id)
+            id = barcode_id;
+
+        /* Try MCN */
+        if (!id) {
+            /* Check MCN is not all zeroes (this happens often) */
+            for (int i = 0; i < strlen(mcn_id); i++) {
+                if (mcn_id[i] != '0') {
+                    id = mcn_id;
+                    break;
+                }
+            }
+        }
+
+        /* Otherwise just grab the discid */
+        if (!id)
+            id = did_id;
+
+        strncpy(fourcc_id, id, 4);
+        for (int i = 0; i < 4; i++)
+            fourcc_id[i] = av_toupper(fourcc_id[i]);
+
+        av_dict_set(&ctx->meta, "album", " (", AV_DICT_APPEND);
+        av_dict_set(&ctx->meta, "album", fourcc_id, AV_DICT_APPEND);
+        av_dict_set(&ctx->meta, "album", ")", AV_DICT_APPEND);
+    }
+
+    /* Set default track title */
+    for (int i = 0; i < ctx->nb_tracks; i++)
+        av_dict_set(&ctx->meta, "title", "Unknown track", 0);
 
     /* Fill musicbrainz metadata */
     if (crip_fill_metadata(ctx,
