@@ -186,7 +186,7 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
 
 static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, char *release_str, int discnumber)
 {
-    int ret = 0;
+    int ret = 0, notfound = 0, possible_stub = 0;
     const char *ua = "cyanrip/" PROJECT_VERSION_STRING " ( https://github.com/cyanreg/cyanrip )";
     Mb5Query query = mb5_query_new(ua, NULL, 0);
     if (!query) {
@@ -209,7 +209,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             int chars = mb5_query_get_lasterrormessage(query, NULL, 0) + 1;
             char *msg = av_mallocz(chars*sizeof(*msg));
             mb5_query_get_lasterrormessage(query, msg, chars);
-            cyanrip_log(ctx, 0, "MusicBrainz lookup failed: %s\n", msg);
+            cyanrip_log(ctx, 0, "MusicBrainz query failed: %s\n", msg);
             av_freep(&msg);
         }
 
@@ -224,19 +224,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             cyanrip_log(ctx, 0, "Error fetching/requesting/auth, this shouldn't happen.\n");
             break;
         case eQuery_ResourceNotFound:
-            if (manual_metadata_specified) {
-                cyanrip_log(ctx, 0, "Unable to find metadata for this CD, but "
-                            "metadata has been manually specified, continuing.\n");
-                cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
-                            "submitting the disc info to the following URL:\n%s\n", ctx->mb_submission_url);
-                goto end;
-            } else {
-                cyanrip_log(ctx, 0, "Unable to find release info for this CD, "
-                            "and metadata hasn't been manually added!\n");
-                cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
-                            "submitting the disc info to the following URL:\n%s\n", ctx->mb_submission_url);
-                cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -N!\n");
-            }
+            notfound = 1;
             break;
         default:
             break;
@@ -249,20 +237,23 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     Mb5ReleaseList release_list = NULL;
     Mb5Disc disc = mb5_metadata_get_disc(metadata);
     if (!disc) {
-        cyanrip_log(ctx, 0, "DiscID not found in MusicBrainz\n");
+        possible_stub = 1;
+        notfound = 1;
         goto end_meta;
     }
 
     release_list = mb5_disc_get_releaselist(disc);
     if (!release_list) {
-        cyanrip_log(ctx, 0, "DiscID has no associated releases.\n");
+        cyanrip_log(ctx, 0, "MusicBrainz lookup failed: DiscID has no associated releases.\n");
+        notfound = 1;
         goto end_meta;
     }
 
     Mb5Release release = NULL;
     int num_releases = mb5_release_list_size(release_list);
     if (!num_releases) {
-        cyanrip_log(ctx, 0, "No releases found for DiscID.\n");
+        cyanrip_log(ctx, 0, "MusicBrainz lookup failed: no releases found for DiscID.\n");
+        notfound = 1;
         goto end_meta;
     } else if (num_releases > 1 && ((release_idx < 0) && !release_str)) {
         cyanrip_log(ctx, 0, "Multiple releases found in database for DiscID %s:\n", discid);
@@ -365,6 +356,32 @@ end_meta:
 
 end:
     mb5_query_delete(query);
+
+    if (notfound) {
+        if (possible_stub) {
+            cyanrip_log(ctx, 0, "MusicBrainz lookup failed, but DiscID has a matching stub, "
+                        "consider verifying the data and creating a release here:\n");
+            ret = 1;
+        } else if (!manual_metadata_specified) {
+            cyanrip_log(ctx, 0, "Unable to find release info for this CD, "
+                        "and metadata hasn't been manually added!\n");
+            ret = 1;
+        } else {
+            cyanrip_log(ctx, 0, "Unable to find metadata for this CD, but "
+                        "metadata has been manually specified, continuing.\n");
+            ret = 0;
+        }
+
+        if (!possible_stub) {
+            cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
+                        "submitting the disc info via the following URL:\n");
+        }
+
+        cyanrip_log(ctx, 0, "%s\n", ctx->mb_submission_url);
+        if (ret)
+            cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -N!\n");
+    }
+
     return ret;
 }
 
