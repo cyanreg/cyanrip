@@ -313,7 +313,9 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
         ctx->logfile[i] = av_fopen_utf8(logfile, "w");
 
         if (!ctx->logfile[i]) {
-            cyanrip_log(ctx, 0, "Error opening log file \"%s\" to write to!\n", logfile);
+            cyanrip_log(ctx, 0, "Couldn't open path \"%s\" for writing: %s!\n"
+                        "Invalid folder name? Try -D <folder>.\n",
+                        logfile, av_err2str(AVERROR(errno)));
             av_freep(&logfile);
             return 1;
         }
