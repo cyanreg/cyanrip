@@ -1627,7 +1627,7 @@ int main(int argc, char **argv)
             id = barcode_id;
 
         /* Try MCN */
-        if (!id) {
+        if (!id && mcn_id) {
             /* Check MCN is not all zeroes (this happens often) */
             for (int i = 0; i < strlen(mcn_id); i++) {
                 if (mcn_id[i] != '0') {
