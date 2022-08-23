@@ -65,8 +65,12 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     }
     av_freep(&filepath);
 
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "update", "1", 0");
+
     /* Write header */
-    ret = avformat_write_header(avf, NULL);
+    ret = avformat_write_header(avf, &opts);
+    av_dict_free(&opts);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Couldn't write header: %s!\n", av_err2str(ret));
         goto fail;
