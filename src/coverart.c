@@ -65,8 +65,9 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     }
     av_freep(&filepath);
 
+    /* Silence libavformat warning */
     AVDictionary *opts = NULL;
-    av_dict_set(&opts, "update", "1", 0");
+    av_dict_set(&opts, "update", "1", 0);
 
     /* Write header */
     ret = avformat_write_header(avf, &opts);
