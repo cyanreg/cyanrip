@@ -1,3 +1,12 @@
+0.9.0
+=====
+ - Improve MusicBrainz query result handling and detect stub releases
+ - For unknown discs, add an ID to the album name
+ - Better error reporting when opening logfile
+ - Fix crash when MCN is missing
+ - Silence warning when writing cover art to a file
+ - Fix compilation with FFmpeg 6.0
+
 0.8.1
 =====
  - __No need to rerip anything.__
