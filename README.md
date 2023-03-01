@@ -30,6 +30,11 @@ pacaur -S cyanrip
 ```
 Or use your favorite AUR installation method.
 
+### Void Linux
+```bash
+xbps-install -S cyanrip
+```
+
 ### FreeBSD
 ```bash
 pkg install cyanrip
