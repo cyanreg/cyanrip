@@ -39,7 +39,7 @@ xbps-install -S cyanrip
 ```bash
 pkg install cyanrip
 ```
-Or via ports: `portsnap fetch update && cd /usr/ports/audio/cyanrip/ && make install clean`.
+Or via ports: `cd /usr/ports/audio/cyanrip && make install clean`.
 
 ### NixOS
 ```bash
