@@ -111,7 +111,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -A                   | Disables AccurateRip database query and comparison                                          |
 | -U                   | Disables Cover art DB database query and retrieval                                          |
 |                      | **Misc. options**                                                                           |
-| -E                   | Eject CD tray if ripping has been successfully completed                                    |
+| -Q                   | Eject CD tray if ripping has been successfully completed                                    |
 | -V                   | Print version                                                                               |
 | -h                   | Print usage (this)                                                                          |
 | -f                   | Find drive offset (requires a disc with an AccuRip DB entry)                                |

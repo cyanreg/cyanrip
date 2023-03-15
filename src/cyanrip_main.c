@@ -1285,7 +1285,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVEOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1317,7 +1317,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
             cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
             cyanrip_log(ctx, 0, "\n  Misc. options:\n");
-            cyanrip_log(ctx, 0, "    -E                    Eject tray once successfully done\n");
+            cyanrip_log(ctx, 0, "    -Q                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
             cyanrip_log(ctx, 0, "    -h                    Print options help\n");
             cyanrip_log(ctx, 0, "    -f                    Find drive offset (requires a disc with an AccuRip DB entry)\n");
@@ -1539,7 +1539,7 @@ int main(int argc, char **argv)
             dst->source_url = next;
             dst->title = p;
             break;
-        case 'E':
+        case 'Q':
             settings.eject_on_success_rip = 1;
             break;
         case 'D':
