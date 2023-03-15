@@ -33,6 +33,16 @@
 #include "cyanrip_log.h"
 #include "os_compat.h"
 
+#if CONFIG_BIG_ENDIAN
+#define AV_CODEC_ID_PCM_S16 AV_CODEC_ID_PCM_S16BE
+#define AV_CODEC_ID_PCM_S32 AV_CODEC_ID_PCM_S32BE
+#define AV_CODEC_ID_PCM_F64 AV_CODEC_ID_PCM_F64BE
+#else
+#define AV_CODEC_ID_PCM_S16 AV_CODEC_ID_PCM_S16LE
+#define AV_CODEC_ID_PCM_S32 AV_CODEC_ID_PCM_S32LE
+#define AV_CODEC_ID_PCM_F64 AV_CODEC_ID_PCM_F64LE
+#endif
+
 struct cyanrip_enc_ctx {
     cyanrip_ctx *ctx;
     AVBufferRef *fifo;
@@ -45,7 +55,7 @@ struct cyanrip_enc_ctx {
 };
 
 struct cyanrip_dec_ctx {
-    /* HDCD decoding */
+    /* Deemphasis, and HDCD decoding (not at once) */
     AVFilterGraph *graph;
     AVFilterContext *buffersink_ctx;
     AVFilterContext *buffersrc_ctx;
@@ -56,10 +66,16 @@ void cyanrip_print_codecs(void)
 {
     for (int i = 0; i < CYANRIP_FORMATS_NB; i++) {
         const cyanrip_out_fmt *cfmt = &crip_fmt_info[i];
-        if (avcodec_find_encoder(cfmt->codec) ||
-            ((cfmt->codec == AV_CODEC_ID_NONE) &&
-              avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
-              avcodec_find_encoder(AV_CODEC_ID_PCM_S32LE))) {
+        int is_supported = 0;
+        if (cfmt->codec == AV_CODEC_ID_NONE) {
+            is_supported = avcodec_find_encoder(AV_CODEC_ID_PCM_S16) &&
+                           avcodec_find_encoder(AV_CODEC_ID_PCM_S32) &&
+                           avcodec_find_encoder(AV_CODEC_ID_PCM_F64);
+        } else {
+            is_supported = !!avcodec_find_encoder(cfmt->codec);
+        }
+
+        if (is_supported) {
             const char *str = cfmt->coverart_supported ? "\t(supports cover art)" : "";
             cyanrip_log(NULL, 0, "\t%s\tfolder: [%s]\textension: %s%s\n", cfmt->name, cfmt->folder_suffix, cfmt->ext, str);
         }
@@ -72,14 +88,18 @@ int cyanrip_validate_fmt(const char *fmt)
         const cyanrip_out_fmt *cfmt = &crip_fmt_info[i];
         if ((!strncasecmp(fmt, cfmt->name, strlen(fmt))) &&
             (strlen(fmt) == strlen(cfmt->name))) {
-            if (cfmt->codec == AV_CODEC_ID_NONE &&
-                avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE) &&
-                avcodec_find_encoder(AV_CODEC_ID_PCM_S32LE))
+
+            if (cfmt->codec == AV_CODEC_ID_NONE) {
+                if (avcodec_find_encoder(AV_CODEC_ID_PCM_S16) &&
+                    avcodec_find_encoder(AV_CODEC_ID_PCM_S32) &&
+                    avcodec_find_encoder(AV_CODEC_ID_PCM_F64))
+                    return i;
+            } else if (avcodec_find_encoder(cfmt->codec)) {
                 return i;
-            else if (avcodec_find_encoder(cfmt->codec))
-                return i;
-            cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
-            return -1;
+            } else {
+                cyanrip_log(NULL, 0, "Encoder for %s not compiled in ffmpeg!\n", cfmt->name);
+                return -1;
+            }
         }
     }
     return -1;
@@ -136,12 +156,13 @@ static const uint64_t pick_codec_channel_layout(const AVCodec *codec)
     return best_layout;
 }
 
-static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
+static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd, int deemphasis)
 {
     int i = 0;
     int max_bps = 0;
-    int ibps = hdcd ? 20 : 16;
-    enum AVSampleFormat ifmt = hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
+    int ibps = hdcd ? 20 : (deemphasis ? 64 : 16);
+    enum AVSampleFormat ifmt = hdcd ? AV_SAMPLE_FMT_S32 :
+                               (deemphasis ? AV_SAMPLE_FMT_DBLP : AV_SAMPLE_FMT_S16);
     enum AVSampleFormat max_bps_fmt = AV_SAMPLE_FMT_NONE;
 
     ibps = ibps >> 3;
@@ -207,7 +228,8 @@ static int pick_codec_sample_rate(const AVCodec *codec)
 }
 
 static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
-                                       const AVCodec *codec, const cyanrip_out_fmt *cfmt)
+                                       const AVCodec *codec, const cyanrip_out_fmt *cfmt,
+                                       int decode_hdcd, int deemphasis)
 {
     AVCodecContext *avctx = avcodec_alloc_context3(codec);
     if (!avctx)
@@ -215,15 +237,17 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     avctx->opaque            = ctx;
     avctx->bit_rate          = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt        = pick_codec_sample_fmt(codec, ctx->settings.decode_hdcd);
+    avctx->sample_fmt        = pick_codec_sample_fmt(codec, decode_hdcd, deemphasis);
     avctx->channel_layout    = pick_codec_channel_layout(codec);
     avctx->compression_level = cfmt->compression_level;
     avctx->sample_rate       = pick_codec_sample_rate(codec);
     avctx->time_base         = (AVRational){ 1, avctx->sample_rate };
     avctx->channels          = av_get_channel_layout_nb_channels(avctx->channel_layout);
 
-    if (cfmt->lossless && ctx->settings.decode_hdcd)
-        avctx->bits_per_raw_sample = 24;
+    if (cfmt->lossless && decode_hdcd)
+        avctx->bits_per_raw_sample = FFMIN(24, av_get_bytes_per_sample(avctx->sample_fmt)*8);
+    else if (cfmt->lossless && deemphasis)
+        avctx->bits_per_raw_sample = av_get_bytes_per_sample(avctx->sample_fmt)*8;
     else if (cfmt->lossless)
         avctx->bits_per_raw_sample = 16;
 
@@ -249,7 +273,8 @@ void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
     av_freep(s);
 }
 
-static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
+static int init_filtering(cyanrip_ctx *ctx, cyanrip_dec_ctx *s,
+                          int hdcd, int deemphasis)
 {
     int ret = 0;
     AVFilterInOut *outputs = NULL;
@@ -282,9 +307,14 @@ static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
         goto fail;
     }
 
-    static const enum AVSampleFormat out_sample_fmts[] = { AV_SAMPLE_FMT_S32, -1 };
-    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_fmts", out_sample_fmts, -1,
-                              AV_OPT_SEARCH_CHILDREN);
+    static const enum AVSampleFormat out_sample_fmts_hdcd[] = { AV_SAMPLE_FMT_S32, -1 };
+    static const enum AVSampleFormat out_sample_fmts_deemph[] = { AV_SAMPLE_FMT_DBLP, -1 };
+
+    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_fmts",
+                              hdcd ? out_sample_fmts_hdcd :
+                              deemphasis ? out_sample_fmts_deemph :
+                              NULL,
+                              -1, AV_OPT_SEARCH_CHILDREN);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Error setting filter sample format: %s!\n", av_err2str(ret));
         goto fail;
@@ -326,7 +356,8 @@ static int init_hdcd_decoding(cyanrip_ctx *ctx, cyanrip_dec_ctx *s)
     inputs->pad_idx       = 0;
     inputs->next          = NULL;
 
-    const char *filter_desc = "hdcd";
+    const char *filter_desc = hdcd ? "hdcd" :
+                              deemphasis ? "aemphasis=type=cd" : NULL;
 
     ret = avfilter_graph_parse_ptr(s->graph, filter_desc, &inputs, &outputs, NULL);
     if (ret < 0) {
@@ -361,8 +392,11 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     if (!dec_ctx)
         return AVERROR(ENOMEM);
 
-    if (ctx->settings.decode_hdcd) {
-        ret = init_hdcd_decoding(ctx, dec_ctx);
+    if (ctx->settings.decode_hdcd ||
+        (ctx->settings.deemphasis && t->preemphasis)) {
+        ret = init_filtering(ctx, dec_ctx,
+                             ctx->settings.decode_hdcd,
+                             ctx->settings.deemphasis && t->preemphasis);
         if (ret < 0)
             goto fail;
     }
@@ -481,7 +515,8 @@ fail:
     return ret;
 }
 
-static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx, int hdcd)
+static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx,
+                                  int hdcd, int deemphasis)
 {
     SwrContext *swr = swr_alloc();
     if (!swr) {
@@ -489,7 +524,9 @@ static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx, i
         return NULL;
     }
 
-    enum AVSampleFormat in_sample_fmt = hdcd ? AV_SAMPLE_FMT_S32 : AV_SAMPLE_FMT_S16;
+    enum AVSampleFormat in_sample_fmt = hdcd ? AV_SAMPLE_FMT_S32 :
+                                        (deemphasis ? AV_SAMPLE_FMT_DBLP :
+                                                      AV_SAMPLE_FMT_S16);
 
     av_opt_set_int           (swr, "in_sample_rate",     44100,                     0);
     av_opt_set_channel_layout(swr, "in_channel_layout",  AV_CH_LAYOUT_STEREO,       0);
@@ -716,6 +753,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     int ret = 0;
     const cyanrip_out_fmt *cfmt = &crip_fmt_info[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
+    int deemphasis = ctx->settings.deemphasis && t->preemphasis;
 
     AVStream *st_aud = NULL;
     AVStream *st_img = NULL;
@@ -766,8 +804,10 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     /* Find encoder */
     if (cfmt->codec == AV_CODEC_ID_NONE)
         out_codec = avcodec_find_encoder(ctx->settings.decode_hdcd ?
-                                         AV_CODEC_ID_PCM_S32LE :
-                                         AV_CODEC_ID_PCM_S16LE);
+                                         AV_CODEC_ID_PCM_S32 :
+                                         (deemphasis ?
+                                          AV_CODEC_ID_PCM_F64 :
+                                          AV_CODEC_ID_PCM_S16));
     else
         out_codec = avcodec_find_encoder(cfmt->codec);
 
@@ -778,7 +818,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Output avctx */
-    s->out_avctx = setup_out_avctx(ctx, s->avf, out_codec, cfmt);
+    s->out_avctx = setup_out_avctx(ctx, s->avf, out_codec, cfmt,
+                                   ctx->settings.decode_hdcd, deemphasis);
     if (!s->out_avctx) {
         cyanrip_log(ctx, 0, "Unable to init output avctx!\n");
         goto fail;
@@ -832,7 +873,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* SWR */
-    s->swr = setup_init_swr(ctx, s->out_avctx, ctx->settings.decode_hdcd);
+    s->swr = setup_init_swr(ctx, s->out_avctx,
+                            ctx->settings.decode_hdcd, deemphasis);
     if (!s->swr)
         goto fail;
 

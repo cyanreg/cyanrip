@@ -9,6 +9,7 @@ Features
  * Drive offset compensation and error recovery via cd-paranoia
  * [Full pregap handling](#pregap-handling)
  * [HDCD detection and decoding](#hdcd-decoding)
+ * [CD Deemphasis](#deemphasis)
  * [Multi-disc album ripping](#multi-disc-albums)
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
@@ -92,6 +93,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
+| -W                   | Disable automatic CD deemphasis. Read below for details                                     |
 |                      | **Output options**                                                                          |
 | -o `list`            | Comma separated list of output formats (encodings). Use "help" to list all. Default is flac |
 | -b `int`             | Bitrate in kbps for lossy formats, 256 by default                                           |
@@ -210,7 +212,7 @@ If each disc has a title, you should use the `discname` tag if you're manually s
 
 HDCD decoding
 -------------
-cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the `-l` argument and look at the log. A non-HDCD encoded disc will have:
+cyanrip can decode and detect HDCD encoded discs. To check if a suspected disc contains HDCD audio, rip a single track using the `-l 1` argument and look at the log. A non-HDCD encoded disc will have:
 
 ```
 HDCD detected: no
@@ -223,6 +225,33 @@ HDCD detected: yes, peak_extend: never enabled, max_gain_adj: 0.0 dB, transient_
 ```
 
 Should a track be detected as HDCD, it would be safe to proceed decoding all of the disc. The resulting encoded files will have a bit depth of at least 24 bits.
+
+
+Deemphasis
+----------
+Old (and not so old) CDs may require deeemphasis. cyanrip is able to detect such discs and will apply a correction filter automatically.
+To check whether the CD contains emphasised audio, you can simply run `cyanrip -I` and read the printout. An non-emphasised CD will print out:
+
+```
+Preemphasis:      none
+```
+
+for each track.
+An emphasised CD will have:
+
+```
+Preemphasis:      removed
+```
+
+To disable this behavior, you can use the `-W` flag. The printout will change to:
+
+```
+Preemphasis:      present, deemphasis required
+```
+
+Note that deemphasising (enabled by default) will raise the bit depth of the
+output files, as filtering is done at a much higher precision, 64 bits,
+rather than 16-bits.
 
 
 Paranoia status count
