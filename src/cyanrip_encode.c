@@ -115,24 +115,24 @@ const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? crip_fmt_info[format].folder_suffix : NULL;
 }
 
-static const uint64_t pick_codec_channel_layout(const AVCodec *codec)
+static const AVChannelLayout pick_codec_channel_layout(const AVCodec *codec)
 {
     int i = 0;
     int max_channels = 0;
-    uint64_t ilayout = AV_CH_LAYOUT_STEREO;
-    int in_channels = av_get_channel_layout_nb_channels(ilayout);
-    uint64_t best_layout = 0;
+    AVChannelLayout ilayout = AV_CHANNEL_LAYOUT_STEREO;
+    int in_channels = ilayout.nb_channels;
+    AVChannelLayout best_layout = { 0 };
 
     /* Supports anything */
-    if (!codec->channel_layouts)
+    if (!codec->ch_layouts)
         return ilayout;
 
     /* Try to match */
     while (1) {
-        if (!codec->channel_layouts[i])
+        if (!codec->ch_layouts[i].nb_channels)
             break;
-        if (codec->channel_layouts[i] == ilayout)
-            return codec->channel_layouts[i];
+        if (av_channel_layout_compare(&codec->ch_layouts[i], &ilayout))
+            return codec->ch_layouts[i];
         i++;
     }
 
@@ -140,15 +140,15 @@ static const uint64_t pick_codec_channel_layout(const AVCodec *codec)
 
     /* Try to match channel counts */
     while (1) {
-        if (!codec->channel_layouts[i])
+        if (!codec->ch_layouts[i].nb_channels)
             break;
-        int num = av_get_channel_layout_nb_channels(codec->channel_layouts[i]);
+        int num = codec->ch_layouts[i].nb_channels;
         if (num > max_channels) {
             max_channels = num;
-            best_layout = codec->channel_layouts[i];
+            best_layout = codec->ch_layouts[i];
         }
         if (num >= in_channels)
-            return codec->channel_layouts[i];
+            return codec->ch_layouts[i];
         i++;
     }
 
@@ -235,14 +235,14 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
     if (!avctx)
         return NULL;
 
-    avctx->opaque            = ctx;
-    avctx->bit_rate          = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt        = pick_codec_sample_fmt(codec, decode_hdcd, deemphasis);
-    avctx->channel_layout    = pick_codec_channel_layout(codec);
-    avctx->compression_level = cfmt->compression_level;
-    avctx->sample_rate       = pick_codec_sample_rate(codec);
-    avctx->time_base         = (AVRational){ 1, avctx->sample_rate };
-    avctx->channels          = av_get_channel_layout_nb_channels(avctx->channel_layout);
+    avctx->opaque                = ctx;
+    avctx->bit_rate              = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
+    avctx->sample_fmt            = pick_codec_sample_fmt(codec, decode_hdcd, deemphasis);
+    avctx->ch_layout             = pick_codec_channel_layout(codec);
+    avctx->compression_level     = cfmt->compression_level;
+    avctx->sample_rate           = pick_codec_sample_rate(codec);
+    avctx->time_base             = (AVRational){ 1, avctx->sample_rate };
+    avctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 
     if (cfmt->lossless && decode_hdcd)
         avctx->bits_per_raw_sample = FFMIN(24, av_get_bytes_per_sample(avctx->sample_fmt)*8);
@@ -497,7 +497,7 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     frame->sample_rate = 44100;
     frame->nb_samples = bytes >> 2;
-    frame->channel_layout = AV_CH_LAYOUT_STEREO;
+    frame->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     frame->format = AV_SAMPLE_FMT_S16;
 
     ret = av_frame_get_buffer(frame, 0);
@@ -524,17 +524,18 @@ static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx,
         return NULL;
     }
 
+    AVChannelLayout ichl = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     enum AVSampleFormat in_sample_fmt = hdcd ? AV_SAMPLE_FMT_S32 :
                                         (deemphasis ? AV_SAMPLE_FMT_DBLP :
                                                       AV_SAMPLE_FMT_S16);
 
-    av_opt_set_int           (swr, "in_sample_rate",     44100,                     0);
-    av_opt_set_channel_layout(swr, "in_channel_layout",  AV_CH_LAYOUT_STEREO,       0);
-    av_opt_set_sample_fmt    (swr, "in_sample_fmt",      in_sample_fmt,             0);
+    av_opt_set_int       (swr, "in_sample_rate",  44100,                  0);
+    av_opt_set_chlayout  (swr, "in_chlayout",     &ichl,                  0);
+    av_opt_set_sample_fmt(swr, "in_sample_fmt",   in_sample_fmt,          0);
 
-    av_opt_set_int           (swr, "out_sample_rate",    out_avctx->sample_rate,    0);
-    av_opt_set_channel_layout(swr, "out_channel_layout", out_avctx->channel_layout, 0);
-    av_opt_set_sample_fmt    (swr, "out_sample_fmt",     out_avctx->sample_fmt,     0);
+    av_opt_set_int       (swr, "out_sample_rate", out_avctx->sample_rate, 0);
+    av_opt_set_chlayout  (swr, "out_chlayout",    &out_avctx->ch_layout,  0);
+    av_opt_set_sample_fmt(swr, "out_sample_fmt",  out_avctx->sample_fmt,  0);
 
     if (swr_init(swr) < 0) {
         cyanrip_log(ctx, 0, "Could not init swr context!\n");
@@ -601,7 +602,7 @@ static int audio_process_frame(cyanrip_enc_ctx *ctx, AVFrame **input, int flush)
     }
 
     out_frame->format                = ctx->out_avctx->sample_fmt;
-    out_frame->channel_layout        = ctx->out_avctx->channel_layout;
+    out_frame->ch_layout             = ctx->out_avctx->ch_layout;
     out_frame->sample_rate           = ctx->out_avctx->sample_rate;
     out_frame->pts                   = resampled_frame_pts;
 
