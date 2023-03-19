@@ -93,6 +93,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
+| -E                   | Force CD deemphasis, for CDs mastered with preemphasis without actually signalling it       |
 | -W                   | Disable automatic CD deemphasis. Read below for details                                     |
 |                      | **Output options**                                                                          |
 | -o `list`            | Comma separated list of output formats (encodings). Use "help" to list all. Default is flac |
@@ -252,6 +253,8 @@ Preemphasis:      present, deemphasis required
 Note that deemphasising (enabled by default) will raise the bit depth of the
 output files, as filtering is done at a much higher precision, 64 bits,
 rather than 16-bits.
+
+Some CDs may have been mastered with preemphasis, but don't actually signal it via the track substream properties. In such cases, if known, deemphasis can be forced via the `-E` flag.
 
 
 Paranoia status count

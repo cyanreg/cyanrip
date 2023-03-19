@@ -392,11 +392,12 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     if (!dec_ctx)
         return AVERROR(ENOMEM);
 
-    if (ctx->settings.decode_hdcd ||
-        (ctx->settings.deemphasis && t->preemphasis)) {
+    if ((ctx->settings.decode_hdcd) ||
+        (ctx->settings.deemphasis && t->preemphasis) ||
+        (ctx->settings.force_deemphasis)) {
         ret = init_filtering(ctx, dec_ctx,
                              ctx->settings.decode_hdcd,
-                             ctx->settings.deemphasis && t->preemphasis);
+                             (ctx->settings.deemphasis && t->preemphasis) || ctx->settings.force_deemphasis);
         if (ret < 0)
             goto fail;
     }
@@ -754,7 +755,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     int ret = 0;
     const cyanrip_out_fmt *cfmt = &crip_fmt_info[format];
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
-    int deemphasis = ctx->settings.deemphasis && t->preemphasis;
+    int deemphasis = (ctx->settings.deemphasis && t->preemphasis) || ctx->settings.force_deemphasis;
 
     AVStream *st_aud = NULL;
     AVStream *st_img = NULL;

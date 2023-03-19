@@ -103,6 +103,7 @@ typedef struct cyanrip_settings {
     int rip_indices[99];
     int paranoia_level;
     int deemphasis;
+    int force_deemphasis;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;

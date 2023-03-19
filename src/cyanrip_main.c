@@ -1258,6 +1258,7 @@ int main(int argc, char **argv)
     settings.disable_coverart_db = 0;
     settings.decode_hdcd = 0;
     settings.deemphasis = 1;
+    settings.force_deemphasis = 0;
     settings.bitrate = 256.0f;
     settings.overread_leadinout = 0;
     settings.rip_indices_count = -1;
@@ -1286,7 +1287,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1299,6 +1300,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
             cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
             cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
+            cyanrip_log(ctx, 0, "    -E                    Force CD deemphasis\n");
             cyanrip_log(ctx, 0, "    -W                    Disable automatic CD deemphasis\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
@@ -1540,6 +1542,9 @@ int main(int argc, char **argv)
 
             dst->source_url = next;
             dst->title = p;
+            break;
+        case 'E':
+            settings.force_deemphasis = 1;
             break;
         case 'W':
             settings.deemphasis = 0;
