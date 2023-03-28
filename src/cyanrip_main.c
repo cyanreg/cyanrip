@@ -438,7 +438,17 @@ end:
 static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (!t->track_is_data) {
+        /* TOC preemphasis */
         t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->cd_track_number);
+        if (!t->preemphasis) {
+            cdio_subchannel_t subchannel_data = { 0 };
+            driver_return_code_t ret = cdio_audio_read_subchannel(ctx->cdio, &subchannel_data);
+            if (ret != DRIVER_OP_SUCCESS) {
+                cyanrip_log(ctx, 0, "Unable to read track %i subchannel info!\n", t->number);
+            } else {
+                t->preemphasis = subchannel_data.control & 0x01;
+            }
+        }
 
         if (!ctx->disregard_cd_isrc && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) && !dict_get(t->meta, "isrc")) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);

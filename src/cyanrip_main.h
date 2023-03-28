@@ -29,6 +29,7 @@
 #include "utils.h"
 
 #include <cdio/paranoia/paranoia.h>
+#include <cdio/audio.h>
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
