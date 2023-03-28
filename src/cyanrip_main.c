@@ -438,8 +438,7 @@ end:
 static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (!t->track_is_data) {
-        t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->cd_track_number);
-
+        /* ISRC code */
         if (!ctx->disregard_cd_isrc && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) && !dict_get(t->meta, "isrc")) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);
             if (isrc_str) {
@@ -450,6 +449,20 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
                 cdio_free((void *)isrc_str);
             } else {
                 ctx->disregard_cd_isrc = 1;
+            }
+        }
+
+        /* TOC preemphasis flag*/
+        t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->cd_track_number);
+
+        /* Subcode preemphasis flag */
+        if (!t->preemphasis && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC)) {
+            cdio_subchannel_t subchannel_data = { 0 };
+            driver_return_code_t ret = cdio_audio_read_subchannel(ctx->cdio, &subchannel_data);
+            if (ret != DRIVER_OP_SUCCESS) {
+                cyanrip_log(ctx, 0, "Unable to read track %i subchannel info!\n", t->number);
+            } else {
+                t->preemphasis = subchannel_data.control & 0x01;
             }
         }
     }
