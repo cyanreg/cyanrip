@@ -156,13 +156,13 @@ static const AVChannelLayout pick_codec_channel_layout(const AVCodec *codec)
     return best_layout;
 }
 
-static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd, int deemphasis)
+static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
 {
     int i = 0;
     int max_bps = 0;
-    int ibps = hdcd ? 20 : (deemphasis ? 64 : 16);
+    int ibps = hdcd ? 20 : 16;
     enum AVSampleFormat ifmt = hdcd ? AV_SAMPLE_FMT_S32 :
-                               (deemphasis ? AV_SAMPLE_FMT_DBLP : AV_SAMPLE_FMT_S16);
+                                      AV_SAMPLE_FMT_S16;
     enum AVSampleFormat max_bps_fmt = AV_SAMPLE_FMT_NONE;
 
     ibps = ibps >> 3;
@@ -237,7 +237,7 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     avctx->opaque                = ctx;
     avctx->bit_rate              = cfmt->lossless ? 0 : lrintf(ctx->settings.bitrate*1000.0f);
-    avctx->sample_fmt            = pick_codec_sample_fmt(codec, decode_hdcd, deemphasis);
+    avctx->sample_fmt            = pick_codec_sample_fmt(codec, decode_hdcd);
     avctx->ch_layout             = pick_codec_channel_layout(codec);
     avctx->compression_level     = cfmt->compression_level;
     avctx->sample_rate           = pick_codec_sample_rate(codec);
@@ -246,8 +246,6 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
 
     if (cfmt->lossless && decode_hdcd)
         avctx->bits_per_raw_sample = FFMIN(24, av_get_bytes_per_sample(avctx->sample_fmt)*8);
-    else if (cfmt->lossless && deemphasis)
-        avctx->bits_per_raw_sample = av_get_bytes_per_sample(avctx->sample_fmt)*8;
     else if (cfmt->lossless)
         avctx->bits_per_raw_sample = 16;
 
