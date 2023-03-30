@@ -805,9 +805,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     if (cfmt->codec == AV_CODEC_ID_NONE)
         out_codec = avcodec_find_encoder(ctx->settings.decode_hdcd ?
                                          AV_CODEC_ID_PCM_S32 :
-                                         (deemphasis ?
-                                          AV_CODEC_ID_PCM_F64 :
-                                          AV_CODEC_ID_PCM_S16));
+                                         AV_CODEC_ID_PCM_S16);
     else
         out_codec = avcodec_find_encoder(cfmt->codec);
 

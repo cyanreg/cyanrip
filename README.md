@@ -9,7 +9,7 @@ Features
  * Drive offset compensation and error recovery via cd-paranoia
  * [Full pregap handling](#pregap-handling)
  * [HDCD detection and decoding](#hdcd-decoding)
- * [CD Deemphasis](#deemphasis)
+ * [CD Deemphasis (TOC + subcode)](#deemphasis)
  * [Multi-disc album ripping](#multi-disc-albums)
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
@@ -230,7 +230,7 @@ Should a track be detected as HDCD, it would be safe to proceed decoding all of 
 
 Deemphasis
 ----------
-Old (and not so old) CDs may require deeemphasis. cyanrip is able to detect such discs and will apply a correction filter automatically.
+Old (and not so old) CDs may require deeemphasis. cyanrip is able to detect such discs (using both the TOC and track subcode) and will apply a correction filter automatically.
 To check whether the CD contains emphasised audio, you can simply run `cyanrip -I` and read the printout. An non-emphasised CD will print out:
 
 ```
