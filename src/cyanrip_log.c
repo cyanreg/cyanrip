@@ -78,12 +78,26 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
         cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
 
-    if (ctx->settings.force_deemphasis)
-        cyanrip_log(ctx, 0, "    Preemphasis:      removed (forced)\n");
-    else
-        cyanrip_log(ctx, 0, "    Preemphasis:      %s\n",
-                    (t->preemphasis && !ctx->settings.deemphasis) ? "present, deemphasis required" :
-                    (t->preemphasis &&  ctx->settings.deemphasis) ? "removed" : "none");
+    cyanrip_log(ctx, 0, "    Preemphasis:      ");
+    if (!t->preemphasis) {
+        cyanrip_log(ctx, 0, "none detected");
+
+        if (ctx->settings.deemphasis)
+            cyanrip_log(ctx, 0, " (deemphasis forced)\n");
+        else
+            cyanrip_log(ctx, 0, "\n");
+    } else {
+        if (t->preemphasis_in_subcode)
+            cyanrip_log(ctx, 0, "present (subcode)");
+        else
+            cyanrip_log(ctx, 0, "present (TOC)");
+
+        if (ctx->settings.deemphasis)
+            cyanrip_log(ctx, 0, " (deemphasis applied)\n");
+        else
+            cyanrip_log(ctx, 0, "\n");
+    }
+
     if (t->art.source_url || ctx->nb_cover_arts) {
         const char *codec_name = NULL;
         CRIPArt *art = &t->art;

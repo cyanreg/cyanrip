@@ -462,7 +462,7 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
             if (ret != DRIVER_OP_SUCCESS) {
                 cyanrip_log(ctx, 0, "Unable to read track %i subchannel info!\n", t->number);
             } else {
-                t->preemphasis = subchannel_data.control & 0x01;
+                t->preemphasis = t->preemphasis_in_subcode = subchannel_data.control & 0x01;
             }
         }
     }

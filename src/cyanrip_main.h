@@ -136,6 +136,7 @@ typedef struct cyanrip_track {
 
     int track_is_data;
     int preemphasis;
+    int preemphasis_in_subcode;
 
     size_t nb_samples; /* Track duration in samples */
 
