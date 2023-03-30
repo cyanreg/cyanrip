@@ -231,30 +231,22 @@ Should a track be detected as HDCD, it would be safe to proceed decoding all of 
 Deemphasis
 ----------
 Old (and not so old) CDs may require deeemphasis. cyanrip is able to detect such discs (using both the TOC and track subcode) and will apply a correction filter automatically.
-To check whether the CD contains emphasised audio, you can simply run `cyanrip -I` and read the printout. An non-emphasised CD will print out:
+To check whether the CD contains emphasised audio, you can simply run `cyanrip -I` and read the printout.
 
 ```
-Preemphasis:      none
+Preemphasis:      <status> <action>
 ```
 
 for each track.
-An emphasised CD will have:
 
-```
-Preemphasis:      removed
-```
+`status` can be either `none detected` or `present (TOC)` or `present (subcode)`.
 
-To disable this behavior, you can use the `-W` flag. The printout will change to:
+Action may be either `(deemphasis applied)`, which applies a deemphasis filter to the audio (default), `(deemphasis forced)` which does the same, even if no preemphasis is signalled
+(can be activated via the `-E` flag, or blank, which deactivates automatic deemphasis, preserving audio data as-is (activated via the `-W` flag).
 
-```
-Preemphasis:      present, deemphasis required
-```
+The `-E` flag can be useful for some CDs, which may have been mastered with preemphasis, but don't actually signal it via the track substream properties.
 
-Note that deemphasising (enabled by default) will raise the bit depth of the
-output files, as filtering is done at a much higher precision, 64 bits,
-rather than 16-bits.
-
-Some CDs may have been mastered with preemphasis, but don't actually signal it via the track substream properties. In such cases, if known, deemphasis can be forced via the `-E` flag.
+An incomplete list of releases mastered with preemphasis can be found at [this wiki page](https://www.studio-nibble.com/cd/index.php?title=Pre-emphasis_(release_list)).
 
 
 Paranoia status count
