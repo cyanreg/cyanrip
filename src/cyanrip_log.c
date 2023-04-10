@@ -82,7 +82,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     if (!t->preemphasis) {
         cyanrip_log(ctx, 0, "none detected");
 
-        if (ctx->settings.deemphasis)
+        if (ctx->settings.force_deemphasis)
             cyanrip_log(ctx, 0, " (deemphasis forced)\n");
         else
             cyanrip_log(ctx, 0, "\n");
@@ -92,7 +92,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         else
             cyanrip_log(ctx, 0, "present (TOC)");
 
-        if (ctx->settings.deemphasis)
+        if (ctx->settings.deemphasis || ctx->settings.force_deemphasis)
             cyanrip_log(ctx, 0, " (deemphasis applied)\n");
         else
             cyanrip_log(ctx, 0, "\n");
