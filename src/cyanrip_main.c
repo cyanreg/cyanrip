@@ -1292,6 +1292,7 @@ int main(int argc, char **argv)
     char *track_metadata_ptr[198] = { NULL };
     int track_metadata_ptr_cnt = 0;
     int find_drive_offset_range = 0;
+    int offset_set = 0;
 
     CRIPArt cover_arts[32] = { 0 };
     int nb_cover_arts = 0;
@@ -1383,6 +1384,7 @@ int main(int argc, char **argv)
             int sign = settings.offset < 0 ? -1 : +1;
             int frames = ceilf(abs(settings.offset)/(float)(CDIO_CD_FRAMESIZE_RAW >> 2));
             settings.over_under_read_frames = sign*frames;
+            offset_set = 1;
             break;
         case 'N':
             settings.disable_mb = 1;
@@ -1625,6 +1627,12 @@ int main(int argc, char **argv)
 
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
+
+    if (!settings.offset && !offset_set &&
+        !find_drive_offset_range && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC)) {
+        cyanrip_log(ctx, 0, "Offset is unset! To continue with an offset of 0, run with -s 0!\n");
+        goto end;
+    }
 
     /* Fill disc MCN */
     crip_fill_mcn(ctx);
