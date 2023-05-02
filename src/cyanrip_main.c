@@ -26,6 +26,7 @@
 
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
+#include "cue_writer.h"
 #include "checksums.h"
 #include "discid.h"
 #include "musicbrainz.h"
@@ -256,7 +257,6 @@ static void track_set_creation_time(cyanrip_ctx *ctx, cyanrip_track *t)
 static void copy_album_to_track_meta(cyanrip_ctx *ctx)
 {
     for (int i = 0; i < ctx->nb_tracks; i++) {
-        av_dict_set(&ctx->tracks[i].meta, "comment", "cyanrip "PROJECT_VERSION_STRING, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "track", ctx->tracks[i].number, 0);
         av_dict_set_int(&ctx->tracks[i].meta, "tracktotal", ctx->nb_tracks, 0);
         av_dict_copy(&ctx->tracks[i].meta, ctx->meta, AV_DICT_DONT_OVERWRITE);
@@ -483,6 +483,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     if (t->track_is_data) {
         cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
         cyanrip_log_track_end(ctx, t);
+        cyanrip_cue_track(ctx, t);
         return 0;
     }
 
@@ -698,10 +699,12 @@ fail:
 
     cyanrip_free_dec_ctx(ctx, &dec_ctx);
 
-    if (!ret)
+    if (!ret) {
         cyanrip_log_track_end(ctx, t);
-    else
+        cyanrip_cue_track(ctx, t);
+    } else {
         ctx->total_error_count++;
+    }
 
     return ret;
 }
@@ -1220,12 +1223,17 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                          ctx->settings.log_name_scheme))
             goto end;
         ext = av_strdup("log");
+    } else if (type == CRIP_PATH_CUE) {
+        if (process_cond(ctx, &buf, ctx->meta, fmt->name, &dir_list, &dir_list_nb,
+                         ctx->settings.cue_name_scheme))
+            goto end;
+        ext = av_strdup("cue");
     } else {
         cyanrip_track *t = arg;
         if (process_cond(ctx, &buf, t->meta, fmt->name, &dir_list, &dir_list_nb,
                          ctx->settings.track_name_scheme))
             goto end;
-        ext = av_strdup(fmt->ext);
+        ext = av_strdup(t->track_is_data ? "bin" : fmt->ext);
     }
 
     if (ext)
@@ -1261,6 +1269,7 @@ int main(int argc, char **argv)
     settings.folder_name_scheme = "{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]";
     settings.track_name_scheme = "{if #totaldiscs# > #1#|disc|.}{track} - {title}";
     settings.log_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
+    settings.cue_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
     settings.sanitize_method = CRIP_SANITIZE_UNICODE;
     settings.speed = 0;
     settings.frame_max_retries = 25;
@@ -1301,7 +1310,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1322,6 +1331,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -D <string>           Directory naming scheme, by default its \"%s\"\n", settings.folder_name_scheme);
             cyanrip_log(ctx, 0, "    -F <string>           Track naming scheme, by default its \"%s\"\n", settings.track_name_scheme);
             cyanrip_log(ctx, 0, "    -L <string>           Log file name scheme, by default its \"%s\"\n", settings.log_name_scheme);
+            cyanrip_log(ctx, 0, "    -M <string>           CUE file name scheme, by default its \"%s\"\n", settings.cue_name_scheme);
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
             cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
             cyanrip_log(ctx, 0, "\n  Metadata options:\n");
@@ -1576,6 +1586,9 @@ int main(int argc, char **argv)
         case 'L':
             settings.log_name_scheme = optarg;
             break;
+        case 'M':
+            settings.cue_name_scheme = optarg;
+            break;
         case 'T':
             if (!strncmp(optarg, "simple", strlen("simple"))) {
                 settings.sanitize_method = CRIP_SANITIZE_SIMPLE;
@@ -1645,6 +1658,7 @@ int main(int argc, char **argv)
 
     /* Default album title */
     av_dict_set(&ctx->meta, "album", "Unknown disc", 0);
+    av_dict_set(&ctx->meta, "comment", "cyanrip "PROJECT_VERSION_STRING, 0);
     const char *barcode_id = dict_get(ctx->meta, "barcode");
     const char *mcn_id = dict_get(ctx->meta, "disc_mcn");
     const char *did_id = dict_get(ctx->meta, "discid");
@@ -1774,9 +1788,22 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    %s\n", logfile);
             av_free(logfile);
         }
+        cyanrip_log(ctx, 0, "CUE files will be written to:\n");
+        for (int f = 0; f < ctx->settings.outputs_num; f++) {
+            char *cuefile = crip_get_path(ctx, CRIP_PATH_CUE, 0,
+                                          &crip_fmt_info[ctx->settings.outputs[f]],
+                                          NULL);
+            cyanrip_log(ctx, 0, "    %s\n", cuefile);
+            av_free(cuefile);
+        }
     }
 
+    if (cyanrip_cue_init(ctx) < 0)
+        return 1;
+
     cyanrip_log_start_report(ctx);
+    if (!ctx->settings.print_info_only)
+        cyanrip_cue_start(ctx);
     setup_track_offsets_and_report(ctx);
 
     copy_album_to_track_meta(ctx);
@@ -1942,6 +1969,8 @@ int main(int argc, char **argv)
         cyanrip_log_finish_report(ctx);
 end:
     cyanrip_log_end(ctx);
+    if (!ctx->settings.print_info_only)
+        cyanrip_cue_end(ctx);
 
     int err_cnt = ctx->total_error_count;
 

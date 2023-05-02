@@ -101,6 +101,7 @@ Arguments are optional. By default cyanrip will rip all tracks from the default 
 | -D `string`          | Directory naming scheme, see [below](#naming-scheme)                                        |
 | -F `string`          | File naming scheme, see [below](#naming-scheme)                                             |
 | -L `string`          | Log naming scheme, see [below](#naming-scheme)                                              |
+| -M `string`          | CUE file naming scheme, see [below](#naming-scheme)                                         |
 | -l `list`            | Comma separated list of track numbers to rip, (default is it rips all)                      |
 | -T `string`          | Filename sanitation, default is unicode, see [below](#filename-sanitation)                  |
 |                      | **Metadata options**                                                                        |

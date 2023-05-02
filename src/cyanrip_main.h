@@ -71,7 +71,9 @@ enum CRIPAccuDBStatus {
 enum CRIPPathType {
     CRIP_PATH_COVERART, /* arg must be a CRIPArt * */
     CRIP_PATH_TRACK, /* arg must be a cyanrip_track * */
+    CRIP_PATH_DATA, /* arg must be a cyanrip_track * */
     CRIP_PATH_LOG, /* arg must be NULL */
+    CRIP_PATH_CUE, /* arg must be NULL */
 };
 
 enum CRIPSanitize {
@@ -86,6 +88,7 @@ typedef struct cyanrip_settings {
     char *folder_name_scheme;
     char *track_name_scheme;
     char *log_name_scheme;
+    char *cue_name_scheme;
     enum CRIPSanitize sanitize_method;
     int speed;
     int frame_max_retries;
@@ -173,6 +176,7 @@ typedef struct cyanrip_ctx {
     cdrom_paranoia_t  *paranoia;
     CdIo_t            *cdio;
     FILE              *logfile[CYANRIP_FORMATS_NB];
+    FILE              *cuefile[CYANRIP_FORMATS_NB];
     cyanrip_settings   settings;
 
     cyanrip_track tracks[198];

@@ -44,6 +44,16 @@ static inline const char *dict_get(AVDictionary *dict, const char *key)
     return e ? e->value : NULL;
 }
 
+static inline void cyanrip_frames_to_cue(uint32_t frames, char *str)
+{
+    if (!str)
+        return;
+    const uint32_t min  = frames / (75 * 60);
+    const uint32_t sec  = (frames - (min * 75 * 60)) / 75;
+    const uint32_t left = frames - (min * 75 * 60) - (sec * 75);
+    snprintf(str, 16, "%02i:%02i:%02i", min, sec, left);
+}
+
 static inline void cyanrip_frames_to_duration(uint32_t frames, char *str)
 {
     if (!str)
