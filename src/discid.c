@@ -87,7 +87,7 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     cddb |= (last/75 - (ctx->tracks[0].start_lsn + 150)/75) << 8;
     cddb |= ctx->tracks[last_audio_track_idx].number;
 
-    snprintf(temp, sizeof(temp), "%08x", cddb);
+    snprintf(temp, sizeof(temp), "%08X", cddb);
 
     av_dict_set(&ctx->meta, "cddb", temp, 0);
 
