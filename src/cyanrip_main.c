@@ -1778,7 +1778,10 @@ int main(int argc, char **argv)
 
     /* Create log file */
     if (!ctx->settings.print_info_only) {
-        cyanrip_log_init(ctx);
+        if (cyanrip_log_init(ctx) < 0)
+            return 1;
+        if (cyanrip_cue_init(ctx) < 0)
+            return 1;
     } else {
         cyanrip_log(ctx, 0, "Log(s) will be written to:\n");
         for (int f = 0; f < ctx->settings.outputs_num; f++) {
@@ -1797,9 +1800,6 @@ int main(int argc, char **argv)
             av_free(cuefile);
         }
     }
-
-    if (cyanrip_cue_init(ctx) < 0)
-        return 1;
 
     cyanrip_log_start_report(ctx);
     if (!ctx->settings.print_info_only)
@@ -1969,8 +1969,7 @@ int main(int argc, char **argv)
         cyanrip_log_finish_report(ctx);
 end:
     cyanrip_log_end(ctx);
-    if (!ctx->settings.print_info_only)
-        cyanrip_cue_end(ctx);
+    cyanrip_cue_end(ctx);
 
     int err_cnt = ctx->total_error_count;
 
