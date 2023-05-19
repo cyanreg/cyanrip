@@ -77,6 +77,24 @@ void cyanrip_cue_start(cyanrip_ctx *ctx)
 
 void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
+    char time_00[16];
+    char time_01[16];
+
+    /* Finish over the pregap which has been appended to the last track */
+    if (t->pregap_lsn != CDIO_INVALID_LSN && t->pt &&
+        t->dropped_pregap_start == CDIO_INVALID_LSN &&
+        t->merged_pregap_end == CDIO_INVALID_LSN) {
+        for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
+            fprintf(ctx->cuefile[Z], "  TRACK 02 AUDIO\n");
+
+        CLOG("    TITLE \"%s\"\n", t->meta, "title");
+        CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
+
+        cyanrip_frames_to_cue(t->pt->end_lsn - t->pregap_lsn + 1, time_00);
+        for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
+            fprintf(ctx->cuefile[Z], "    INDEX 00 %s\n", time_00);
+    }
+
     for (int Z = 0; Z < ctx->settings.outputs_num; Z++) {
         char *path = crip_get_path(ctx,
                                    t->track_is_data ? CRIP_PATH_DATA : CRIP_PATH_TRACK,
@@ -94,7 +112,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                 ctx->settings.outputs[Z] == CYANRIP_FORMAT_MP3 ? "MP3" :
                 t->track_is_data ? "BINARY" : "WAVE");
 
-        fprintf(ctx->cuefile[Z], "  TRACK %02i %s\n", t->number,
+        fprintf(ctx->cuefile[Z], "  TRACK 01 %s\n",
                 t->track_is_data ? "MODE1/2352" : "AUDIO");
 
         av_free(path);
@@ -105,18 +123,30 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
     }
 
-    char time_00[16];
-    char time_01[16];
-    if (t->pregap_lsn >= 0)
-        cyanrip_frames_to_cue(t->pregap_lsn, time_00);
-    cyanrip_frames_to_cue(t->start_lsn_sig, time_01);
+    if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
+        cyanrip_frames_to_cue(t->start_lsn - t->dropped_pregap_start + 1, time_00);
+        cyanrip_frames_to_cue(0, time_01);
+    } else if (t->merged_pregap_end != CDIO_INVALID_LSN) {
+        cyanrip_frames_to_cue(0, time_00);
+        cyanrip_frames_to_cue(t->merged_pregap_end - t->start_lsn + 1, time_01);
+    } else {
+        cyanrip_frames_to_cue(0, time_01);
+    }
+
     for (int Z = 0; Z < ctx->settings.outputs_num; Z++) {
         if (t->preemphasis && !ctx->settings.deemphasis &&
             !ctx->settings.force_deemphasis)
             fprintf(ctx->cuefile[Z], "    FLAGS PRE\n");
-        if (t->pregap_lsn >= 0)
+
+        if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
+            fprintf(ctx->cuefile[Z], "    PREGAP %s\n",   time_00);
+            fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
+        } else if (t->merged_pregap_end != CDIO_INVALID_LSN) {
             fprintf(ctx->cuefile[Z], "    INDEX 00 %s\n", time_00);
-        fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
+            fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
+        } else {
+            fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
+        }
     }
 }
 

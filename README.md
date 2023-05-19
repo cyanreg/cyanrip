@@ -296,3 +296,10 @@ Filename sanitation
 -------------------
 If invalid symbols are found in a file or a folder, such as `:` or `/`, the symbol is by default substituted with a unicode lookalike, such as `∶` or `∕` respectively. If this is undesirable, this can be overridden via the `-T simple` argument. This will replace all invalid symbols with `_`.
 In case you're on an operating system with more liberal allowance on filenames, you can use the `-T os_unicode` option to allow symbols like `:` not supported on Windows to be passed through. Note that this will make files like these not accessible on Windows, unless renamed, so use this only if you're sure.
+
+
+CUE sheet
+---------
+cyanrip will generate a CUE sheet from which a byte-exact duplicate of the disc can be made. By default, pregaps are kept in the CUE sheet as being appended to the previous track (except for the first track, where the pregap is dropped and signalled as silence). This is reffered to as "noncompliant" by [hydrogenaudio](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_.28Noncompliant.29).
+
+Custom changes in the way pregaps are handled will be reflected in the CUE file. For example, dropping a pregap will signal [silence](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_left_out) in the CUE sheet. Appending a pregap to the track will accordingly mark the track as [having two audio indices](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_corrected_gaps).

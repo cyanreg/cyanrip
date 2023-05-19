@@ -188,6 +188,8 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         t->number = t->cd_track_number = i + first_track_nb;
         t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
         t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
+        t->dropped_pregap_start = CDIO_INVALID_LSN;
+        t->merged_pregap_end = CDIO_INVALID_LSN;
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
         t->end_lsn = cdio_get_track_last_lsn(ctx->cdio, t->number);
 
@@ -804,14 +806,19 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
                 cyanrip_log(ctx, 0, "unmerged\n");
             else
                 cyanrip_log(ctx, 0, "merging into track %i\n", lt->number);
+
+            if ((ct->number - 1) == 0)
+                ct->dropped_pregap_start = ct->pregap_lsn;
             break;
         case CYANRIP_PREGAP_DROP:
             cyanrip_log(ctx, 0, "dropping\n");
+            ct->dropped_pregap_start = ct->pregap_lsn;
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
             break;
         case CYANRIP_PREGAP_MERGE:
             cyanrip_log(ctx, 0, "merging\n");
+            ct->merged_pregap_end = ct->start_lsn;
             ct->start_lsn = ct->pregap_lsn;
             if (lt)
                 lt->end_lsn = ct->pregap_lsn - 1;
@@ -838,6 +845,8 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
 
             nt->number = ct->number - 1;
             nt->pregap_lsn = CDIO_INVALID_LSN;
+            nt->dropped_pregap_start = CDIO_INVALID_LSN;
+            nt->merged_pregap_end = CDIO_INVALID_LSN;
             nt->start_lsn = ct->pregap_lsn;
             nt->end_lsn = ct->start_lsn - 1;
             nt->cd_track_number = ct->cd_track_number;
@@ -887,6 +896,14 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
             t->frames = t->end_lsn - t->start_lsn + 1;
         else
             setup_track_lsn(ctx, t);
+    }
+
+    /* Setup next/previous pointers */
+    for (int i = 0; i < ctx->nb_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+
+        t->pt = i ? &ctx->tracks[i - 1] : NULL;
+        t->nt = i != (ctx->nb_tracks - 1) ? &ctx->tracks[i + 1] : NULL;
     }
 
     cyanrip_log(ctx, 0, "%s\n", gaps ? "" : "    None signalled\n");

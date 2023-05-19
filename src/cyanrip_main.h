@@ -153,6 +153,10 @@ typedef struct cyanrip_track {
     lsn_t end_lsn;
     lsn_t end_lsn_sig;
 
+    /* CUE sheet generator only */
+    lsn_t dropped_pregap_start;
+    lsn_t merged_pregap_end;
+
     ptrdiff_t partial_frame_byte_offs;
 
     CRIPArt art; /* One cover art, will not be saved */
@@ -169,6 +173,9 @@ typedef struct cyanrip_track {
     CRIPAccuDBEntry *ar_db_entries;
     int ar_db_nb_entries;
     int ar_db_max_confidence;
+
+    struct cyanrip_track *pt;
+    struct cyanrip_track *nt;
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {
