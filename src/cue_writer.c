@@ -90,7 +90,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
 
-        cyanrip_frames_to_cue(t->pregap_lsn - t->pt->start_lsn + 1, time_00);
+        cyanrip_frames_to_cue(t->pregap_lsn - t->pt->start_lsn, time_00);
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
             fprintf(ctx->cuefile[Z], "    INDEX 00 %s\n", time_00);
     }
@@ -124,11 +124,11 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
-        cyanrip_frames_to_cue(t->start_lsn - t->dropped_pregap_start + 1, time_00);
+        cyanrip_frames_to_cue(t->start_lsn - t->dropped_pregap_start, time_00);
         cyanrip_frames_to_cue(0, time_01);
     } else if (t->merged_pregap_end != CDIO_INVALID_LSN) {
         cyanrip_frames_to_cue(0, time_00);
-        cyanrip_frames_to_cue(t->merged_pregap_end - t->start_lsn + 1, time_01);
+        cyanrip_frames_to_cue(t->merged_pregap_end - t->start_lsn, time_01);
     } else {
         cyanrip_frames_to_cue(0, time_01);
     }
