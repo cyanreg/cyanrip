@@ -80,7 +80,7 @@ cyanrip can be also built and ran under Windows using MinGW
 
 CLI
 ---
-Arguments are optional. By default cyanrip will rip all tracks from the default CD drive with an offset of 0, output to flac only, enables all cd-paranoia error checking, performs a MusicBrainz lookup, and downloads and embeds the cover art if one is found.
+Arguments are optional, except `-s`. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking, performs a MusicBrainz lookup, and downloads and embeds the cover art if one is found.
 
 | Argument             | Description                                                                                 |
 |----------------------|---------------------------------------------------------------------------------------------|
