@@ -1217,11 +1217,11 @@ fail:
 char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg)
 {
-    char *ret = NULL, **ret_p = NULL;
+    char *ret = NULL;
     AVBPrint buf;
     char **dir_list = NULL;
     int dir_list_nb = 0;
-    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
     if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, &dir_list, &dir_list_nb,
                      ctx->settings.folder_name_scheme))
@@ -1257,7 +1257,7 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
         av_bprintf(&buf, ".%s", ext);
     av_free(ext);
 
-    ret_p = &ret;
+end:
     for (int i = 0; i < dir_list_nb; i++) {
         if (create_dirs) {
             struct stat st_req = { 0 };
@@ -1268,8 +1268,7 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
     }
     av_free(dir_list);
 
-end:
-    av_bprint_finalize(&buf, ret_p);
+    av_bprint_finalize(&buf, &ret);
     return ret;
 }
 
