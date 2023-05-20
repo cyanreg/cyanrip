@@ -1221,7 +1221,7 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
     AVBPrint buf;
     char **dir_list = NULL;
     int dir_list_nb = 0;
-    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
 
     if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, &dir_list, &dir_list_nb,
                      ctx->settings.folder_name_scheme))
