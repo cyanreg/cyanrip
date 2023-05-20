@@ -121,6 +121,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
     if (!t->track_is_data) {
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
+        CLOG("    ISRC %s\n", t->meta, "isrc");
     }
 
     if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
