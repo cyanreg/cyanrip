@@ -98,9 +98,9 @@ build_ffmpeg() {
     cyan_do_vcs "https://git.ffmpeg.org/ffmpeg.git"
     cyan_do_separate_confmakeinstall --pkg-config-flags=--static \
         --disable-{programs,devices,filters,decoders,hwaccels,encoders,muxers} \
-        --disable-{protocols,demuxers,parsers,doc,swscale,postproc,network} \
+        --disable-{debug,protocols,demuxers,parsers,doc,swscale,postproc,network} \
         --disable-{avdevice,autodetect} \
-        --disable-bsfs --enable-protocol=file,data --disable-stripping --enable-debug=3 \
+        --disable-bsfs --enable-protocol=file,data \
         --enable-encoder=flac,tta,aac,wavpack,alac,pcm_s16le,pcm_s32le \
         --enable-muxer=flac,tta,ipod,wv,mp3,opus,ogg,wav,pcm_s16le,pcm_s32le,image2,singlejpeg \
         --enable-parser=png,mjpeg --enable-decoder=mjpeg,png \
@@ -117,8 +117,8 @@ build_cyanrip() {
     PKG_CONFIG=pkg-config \
     CFLAGS+=" -DLIBXML_STATIC -DCURL_STATICLIB $(printf ' -I%s' "$(cygpath -m "$CYANRIPINSTALLDIR/include")")" \
         LDFLAGS+="$(printf ' -L%s' "$(cygpath -m "$CYANRIPINSTALLDIR/lib")")" \
-        meson build --default-library=static --buildtype=debug --prefix="$CYANRIPINSTALLDIR" --backend=ninja &&
-    ninja -C build && cp build/src/cyanrip.exe cyanrip.exe
+        meson build --default-library=static --buildtype=release --prefix="$CYANRIPINSTALLDIR" --backend=ninja &&
+    ninja -C build && strip --strip-all build/src/cyanrip.exe -o cyanrip.exe
 }
 
 cd "$(dirname "$0")"
