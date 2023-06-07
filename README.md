@@ -303,3 +303,11 @@ CUE sheet
 cyanrip will generate a CUE sheet from which a byte-exact duplicate of the disc can be made. By default, pregaps are kept in the CUE sheet as being appended to the previous track (except for the first track, where the pregap is dropped and signalled as silence). This is reffered to as "noncompliant" by [hydrogenaudio](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_.28Noncompliant.29).
 
 Custom changes in the way pregaps are handled will be reflected in the CUE file. For example, dropping a pregap will signal [silence](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_left_out) in the CUE sheet. Appending a pregap to the track will accordingly mark the track as [having two audio indices](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_corrected_gaps).
+
+
+Links
+=====
+You can talk about the project and get in touch with developers on:
+ - IRC: **`#cyanrip`** on the [Libera.Chat](ircs://irc.libera.chat:6697) network
+  - [Libera.Chat’s guide on how to connect](https://libera.chat/guides/connect)
+    - Or use the [Kiwi web client](https://kiwiirc.com/nextclient/irc.libera.chat/?#whipper)
