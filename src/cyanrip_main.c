@@ -1261,7 +1261,7 @@ end:
     for (int i = 0; i < dir_list_nb; i++) {
         if (create_dirs) {
             struct stat st_req = { 0 };
-            if (stat(dir_list[i], &st_req) == -1)
+            if (crip_stat(dir_list[i], &st_req) == -1)
                 mkdir(dir_list[i], 0700);
         }
         av_free(dir_list[i]);

@@ -23,6 +23,7 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <sys/stat.h>
 #include <windows.h>
 #include <wchar.h>
 #include <libavutil/mem.h>
@@ -48,19 +49,22 @@ static inline int win32_mkdir(const char *filename_utf8)
     return ret;
 }
 
-static inline int win32_stat(const char *filename_utf8, struct stat* statbuf)
+static inline int crip_stat(const char *filename_utf8, struct stat* statbuf)
 {
     wchar_t *filename_w;
     int ret;
     if (utf8towchar(filename_utf8, &filename_w))
         return -1;
-    ret = _wstat64(filename_w, (struct _stat64 *)statbuf);
+    /* Assume struct stat is the same as struct _stat64, which should be true
+     * because Meson sets _FILE_OFFSET_BITS=64 for mingw64 */
+    ret = _wstat64(filename_w, statbuf);
     av_free(filename_w);
     return ret;
 }
 
 #define mkdir(path, mode) win32_mkdir(path)
-#define stat(path, statbuf) win32_stat(path, statbuf)
+#else
+#define crip_stat stat
 #endif
 
 #if defined(__MACH__)
