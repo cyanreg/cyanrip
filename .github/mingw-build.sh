@@ -104,9 +104,9 @@ build_ffmpeg() {
         --enable-encoder=flac,tta,aac,wavpack,alac,pcm_s16le,pcm_s32le \
         --enable-muxer=flac,tta,ipod,wv,mp3,opus,ogg,wav,pcm_s16le,pcm_s32le,image2,singlejpeg \
         --enable-parser=png,mjpeg --enable-decoder=mjpeg,png \
-        --enable-demuxer=image2,singlejpeg \
+        --enable-demuxer={image2,image_jpeg_pipe,image_png_pipe} \
         --enable-{bzlib,zlib,lzma,iconv} \
-        --enable-filter=hdcd \
+        --enable-filter={hdcd,aemphasis} \
         --enable-lib{mp3lame,vorbis,opus} \
         --enable-encoder={libmp3lame,libvorbis,libopus}
 }
