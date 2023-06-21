@@ -453,7 +453,8 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
             goto fail;
         }
 
-        ret = av_buffersink_get_frame(dec_ctx->buffersink_ctx, dec_frame);
+        ret = av_buffersink_get_frame_flags(dec_ctx->buffersink_ctx, dec_frame,
+                                            AV_BUFFERSINK_FLAG_NO_REQUEST);
         if (ret == AVERROR(EAGAIN)) {
             av_frame_free(&dec_frame);
             ret = 0;
