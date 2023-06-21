@@ -1337,7 +1337,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
             cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
             cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
-            cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out\n");
+            cyanrip_log(ctx, 0, "    -O                    Enable overreading into lead-in and lead-out (may freeze if unsupported by drive)\n");
             cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
             cyanrip_log(ctx, 0, "    -E                    Force CD deemphasis\n");
             cyanrip_log(ctx, 0, "    -W                    Disable automatic CD deemphasis\n");
