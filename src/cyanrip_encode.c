@@ -131,7 +131,7 @@ static const AVChannelLayout pick_codec_channel_layout(const AVCodec *codec)
     while (1) {
         if (!codec->ch_layouts[i].nb_channels)
             break;
-        if (av_channel_layout_compare(&codec->ch_layouts[i], &ilayout))
+        if (!av_channel_layout_compare(&codec->ch_layouts[i], &ilayout))
             return codec->ch_layouts[i];
         i++;
     }
