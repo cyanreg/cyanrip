@@ -244,3 +244,21 @@ int crip_find_ar(cyanrip_track *t, uint32_t checksum, int is_450)
 
     return -1;
 }
+
+float crip_ar_450_dist(cyanrip_track *t, uint32_t checksum)
+{
+    if (t->ar_db_status != CYANRIP_ACCUDB_FOUND)
+        return 0;
+
+    uint32_t max_popcount = 0;
+    for (int i = 0; i < t->ar_db_nb_entries; i++) {
+        CRIPAccuDBEntry *e = &t->ar_db_entries[i];
+
+        uint32_t cmp = e->checksum_450 ^ checksum;
+        uint32_t popcnt = av_popcount(cmp);
+
+        max_popcount = popcnt > max_popcount ? popcnt : max_popcount;
+    }
+
+    return ((float)max_popcount / 32.0) * 100;
+}
