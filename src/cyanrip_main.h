@@ -108,6 +108,7 @@ typedef struct cyanrip_settings {
     int paranoia_level;
     int deemphasis;
     int force_deemphasis;
+    int ripping_retries;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -136,6 +137,7 @@ typedef struct cyanrip_track {
     int number; /* Human readable track number, may be 0 */
     int cd_track_number; /* Actual track on the CD, may be 0 */
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
+    int total_repeats; /* How many times the track was re-ripped */
 
     int track_is_data;
     int preemphasis;

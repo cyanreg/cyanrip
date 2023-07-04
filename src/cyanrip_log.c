@@ -138,7 +138,11 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:        %08X\n", t->eac_crc);
+        cyanrip_log(ctx, 0, "    EAC CRC32:        %08X", t->eac_crc);
+        if (t->total_repeats)
+            cyanrip_log(ctx, 0, " (after %i rips)\n", t->total_repeats);
+        else
+            cyanrip_log(ctx, 0, "\n");
 
         int match_v1 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1, 0) : 0;
         int match_v2 = has_ar ? crip_find_ar(t, t->acurip_checksum_v2, 0) : 0;

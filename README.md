@@ -87,7 +87,8 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 |                      | **Ripping options**                                                                         |
 | -d `string`          | The path or name for a specific device, otherwise uses the default device                   |
 | -s `int`             | Specifies the CD drive offset in samples (same as EAC, default is 0)                        |
-| -r `int`             | Specifies how many times to retry reading a frame if it fails, (default is 25)              |
+| -r `int`             | Specifies how many times to retry ripping if it fails, (default is 25)                      |
+| -Z `int`             | Rips tracks until their checksums match `<int>` number of times. For very damaged CDs.      |
 | -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                        |
 | -p `number=string`   | Specifies what to do with the pregap, syntax is described below                             |
 | -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
