@@ -1675,6 +1675,8 @@ int main(int argc, char **argv)
     /* Default album title */
     av_dict_set(&ctx->meta, "album", "Unknown disc", 0);
     av_dict_set(&ctx->meta, "comment", "cyanrip "PROJECT_VERSION_STRING, 0);
+    av_dict_set(&ctx->meta, "media_type",
+                ctx->settings.decode_hdcd ? "HDCD" : "CD", 0);
     const char *barcode_id = dict_get(ctx->meta, "barcode");
     const char *mcn_id = dict_get(ctx->meta, "disc_mcn");
     const char *did_id = dict_get(ctx->meta, "discid");
