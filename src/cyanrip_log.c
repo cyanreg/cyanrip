@@ -130,7 +130,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
 
     if (!ctx->settings.disable_accurip) {
-        cyanrip_log(ctx, 0, "    Accurip:          %s", has_ar ? "found" : "not found");
+        cyanrip_log(ctx, 0, "    Accurip:          %s", has_ar ? "disc found in database" : "not found");
         if (has_ar)
             cyanrip_log(ctx, 0, " (max confidence: %i)\n", t->ar_db_max_confidence);
         else
@@ -147,7 +147,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         if (has_ar && match_v1 > 0)
             cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v1);
         else if (has_ar && (match_v2 < 1))
-            cyanrip_log(ctx, 0, " (not found in the Accurip database)\n");
+            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
         else
             cyanrip_log(ctx, 0, "\n");
 
@@ -155,23 +155,25 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         if (has_ar && (match_v2 > 0))
             cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v2);
         else if (has_ar && (match_v1 < 0))
-            cyanrip_log(ctx, 0, " (not found in the Accurip database)\n");
+            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
         else
             cyanrip_log(ctx, 0, "\n");
 
         if (!has_ar || ((match_v1 < 0) && (match_v2 < 0))) {
             int match_450 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1_450, 1) : 0;
+
             cyanrip_log(ctx, 0, "    Accurip v1 450:   %08X", t->acurip_checksum_v1_450);
-            if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4)) && (t->acurip_checksum_v1_450 == 0x0))
+            if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4)) && (t->acurip_checksum_v1_450 == 0x0)) {
                 cyanrip_log(ctx, 0, " (match found, confidence %i, but a checksum of 0 is meaningless)\n",
                             match_450, t->ar_db_max_confidence);
-            else if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4)))
+            } else if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4))) {
                 cyanrip_log(ctx, 0, " (matches Accurip DB, confidence %i, track is partially accurately ripped)\n",
                             match_450, t->ar_db_max_confidence);
-            else if (has_ar)
-                cyanrip_log(ctx, 0, " (not found in the Accurip database)\n");
-            else
+            } else if (has_ar) {
+                cyanrip_log(ctx, 0, " (not found)\n");
+            } else {
                 cyanrip_log(ctx, 0, "\n");
+            }
         }
     }
 
