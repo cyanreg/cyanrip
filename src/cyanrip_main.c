@@ -1394,7 +1394,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEGWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1429,6 +1429,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -N                    Disables MusicBrainz lookup and ignores lack of manual metadata\n");
             cyanrip_log(ctx, 0, "    -A                    Disables AccurateRip database query and validation\n");
             cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
+            cyanrip_log(ctx, 0, "    -G                    Disables embedding of cover art images\n");
             cyanrip_log(ctx, 0, "\n  Misc. options:\n");
             cyanrip_log(ctx, 0, "    -Q                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
@@ -1537,6 +1538,9 @@ int main(int argc, char **argv)
             break;
         case 'I':
             settings.print_info_only = 1;
+            break;
+        case 'G':
+            settings.disable_coverart_embedding = 1;
             break;
         case 'H':
             settings.decode_hdcd = 1;

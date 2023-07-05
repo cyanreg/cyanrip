@@ -109,6 +109,7 @@ typedef struct cyanrip_settings {
     int deemphasis;
     int force_deemphasis;
     int ripping_retries;
+    int disable_coverart_embedding;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;

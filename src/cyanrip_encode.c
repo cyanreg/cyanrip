@@ -789,7 +789,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         art = &ctx->cover_arts[i == ctx->nb_cover_arts ? 0 : i];
     }
 
-    if (art->pkt && cfmt->coverart_supported) {
+    if (art->pkt && cfmt->coverart_supported &&
+        !ctx->settings.disable_coverart_embedding) {
         st_img = avformat_new_stream(s->avf, NULL);
         if (!st_img) {
             cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
@@ -861,7 +862,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Mux cover image */
-    if (art->pkt && cfmt->coverart_supported) {
+    if (art->pkt && cfmt->coverart_supported &&
+        !ctx->settings.disable_coverart_embedding) {
         AVPacket *pkt = av_packet_clone(art->pkt);
         pkt->stream_index = st_img->index;
         if ((ret = av_interleaved_write_frame(s->avf, pkt)) < 0) {
