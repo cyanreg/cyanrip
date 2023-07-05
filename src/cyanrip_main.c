@@ -493,7 +493,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     uint32_t start_frames_read;
     uint32_t *last_checksums = NULL;
     uint32_t nb_last_checksums = 0;
-    uint32_t repeat_encode = 0;
+    uint32_t repeat_mode_encode = 0;
     uint32_t total_repeats = 0;
 repeat_ripping:
     const int frames_before_disc_start = t->frames_before_disc_start;
@@ -538,7 +538,7 @@ repeat_ripping:
 
         crip_process_checksums(&checksum_ctx, data, bytes);
 
-        if (!ctx->settings.ripping_retries || repeat_encode) {
+        if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                                dec_ctx, data, bytes);
             if (ret) {
@@ -593,7 +593,7 @@ repeat_ripping:
         crip_process_checksums(&checksum_ctx, data, bytes);
 
         /* Decode and encode */
-        if (!ctx->settings.ripping_retries || repeat_encode) {
+        if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                                dec_ctx, data, bytes);
             if (ret < 0) {
@@ -610,7 +610,7 @@ repeat_ripping:
         /* Report progress */
         line_len += snprintf(line, sizeof(line),
                              "Ripping%strack %i, progress - %0.2f%%",
-                             (!ctx->settings.ripping_retries || repeat_encode) ? " and encoding " : " ",
+                             (!ctx->settings.ripping_retries || repeat_mode_encode) ? " and encoding " : " ",
                              t->number, ((double)(i + 1)/frames)*100.0f);
 
         ctx->frames_read++;
@@ -682,7 +682,7 @@ repeat_ripping:
 
         crip_process_checksums(&checksum_ctx, data, bytes);
 
-        if (!ctx->settings.ripping_retries || repeat_encode) {
+        if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
                                                dec_ctx, data, bytes);
             if (ret) {
@@ -706,7 +706,7 @@ repeat_ripping:
             goto finalize_ripping;
         }
         if (total_repeats >= ctx->settings.max_retries) {
-            cyanrip_log(ctx, 0, "\nDone; (no matches found, but repeat limit of %i hit %i)\n",
+            cyanrip_log(ctx, 0, "\nDone; (no matches found, but hit repeat limit of %i)\n",
                         ctx->settings.max_retries);
             goto finalize_ripping;
         }
@@ -714,7 +714,7 @@ repeat_ripping:
         /* If the next match may be the last one, start encoding */
         if ((matches + 1) >= ctx->settings.ripping_retries ||
             (total_repeats + 1) >= ctx->settings.max_retries)
-            repeat_encode = 1;
+            repeat_mode_encode = 1;
 
         cyanrip_log(ctx, 0, "\nRepeating ripping (%i out of %i matches for current checksum %08X)\n",
                     matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
@@ -1401,7 +1401,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "\n  Ripping options:\n");
             cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
             cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
-            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries for frames and repeated rips (default: 25)\n");
+            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries for frames and repeated rips (default: 10)\n");
             cyanrip_log(ctx, 0, "    -Z <int>              Rips tracks until their checksums match <int> number of times. For very damaged CDs.\n");
             cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
             cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
