@@ -282,7 +282,7 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx)
 
     const uint8_t *data;
     data = (void *)cdio_paranoia_read_limited(ctx->paranoia, &status_cb,
-                                              ctx->settings.frame_max_retries);
+                                              ctx->settings.max_retries);
 
     msg = cdio_cddap_errors(ctx->drive);
     if (msg) {
@@ -477,11 +477,6 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     int max_line_len = 0;
     char line[4096];
 
-    const int frames_before_disc_start = t->frames_before_disc_start;
-    const int frames = t->frames;
-    const int frames_after_disc_end = t->frames_after_disc_end;
-    const ptrdiff_t offs = t->partial_frame_byte_offs;
-
     if (t->track_is_data) {
         cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
         cyanrip_log_track_end(ctx, t);
@@ -492,10 +487,22 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     /* Hopefully reduce seeking by reading this here */
     track_read_extra(ctx, t);
 
-    cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
-
     /* Set creation time at the start of ripping */
     track_set_creation_time(ctx, t);
+
+    uint32_t start_frames_read;
+    uint32_t *last_checksums = NULL;
+    uint32_t nb_last_checksums = 0;
+    uint32_t repeat_encode = 0;
+    uint32_t total_repeats = 0;
+repeat_ripping:
+    const int frames_before_disc_start = t->frames_before_disc_start;
+    const int frames = t->frames;
+    const int frames_after_disc_end = t->frames_after_disc_end;
+    const ptrdiff_t offs = t->partial_frame_byte_offs;
+    start_frames_read = ctx->frames_read;
+
+    cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
 
     cyanrip_dec_ctx *dec_ctx = { NULL };
     cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
@@ -530,11 +537,14 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         }
 
         crip_process_checksums(&checksum_ctx, data, bytes);
-        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                           dec_ctx, data, bytes);
-        if (ret) {
-            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
-            goto fail;
+
+        if (!ctx->settings.ripping_retries || repeat_encode) {
+            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                               dec_ctx, data, bytes);
+            if (ret) {
+                cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+                goto fail;
+            }
         }
     }
 
@@ -583,11 +593,13 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
         crip_process_checksums(&checksum_ctx, data, bytes);
 
         /* Decode and encode */
-        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                           dec_ctx, data, bytes);
-        if (ret < 0) {
-            cyanrip_log(ctx, 0, "\nError in decoding/sending frame!\n");
-            goto fail;
+        if (!ctx->settings.ripping_retries || repeat_encode) {
+            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                               dec_ctx, data, bytes);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "\nError in decoding/sending frame!\n");
+                goto fail;
+            }
         }
 
         if (line_len > 0) {
@@ -597,7 +609,8 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
         /* Report progress */
         line_len += snprintf(line, sizeof(line),
-                             "Ripping and encoding track %i, progress - %0.2f%%",
+                             "Ripping%strack %i, progress - %0.2f%%",
+                             (!ctx->settings.ripping_retries || repeat_encode) ? " and encoding " : " ",
                              t->number, ((double)(i + 1)/frames)*100.0f);
 
         ctx->frames_read++;
@@ -668,16 +681,68 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
             bytes = offs;
 
         crip_process_checksums(&checksum_ctx, data, bytes);
-        ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                           dec_ctx, data, bytes);
-        if (ret) {
-            cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
-            goto fail;
+
+        if (!ctx->settings.ripping_retries || repeat_encode) {
+            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
+                                               dec_ctx, data, bytes);
+            if (ret) {
+                cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+                goto fail;
+            }
         }
     }
 
     crip_finalize_checksums(&checksum_ctx, t);
 
+    if (ctx->settings.ripping_retries) {
+        int matches = 0;
+        for (int i = 0; i < nb_last_checksums; i++)
+            matches += last_checksums[i] == checksum_ctx.eac_crc;
+
+        total_repeats++;
+        if (matches >= ctx->settings.ripping_retries) {
+            cyanrip_log(ctx, 0, "\nDone; (%i out of %i matches for current checksum %08X)\n",
+                        matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
+            goto finalize_ripping;
+        }
+        if (total_repeats >= ctx->settings.max_retries) {
+            cyanrip_log(ctx, 0, "\nDone; (no matches found, but repeat limit of %i hit %i)\n",
+                        ctx->settings.max_retries);
+            goto finalize_ripping;
+        }
+
+        /* If the next match may be the last one, start encoding */
+        if ((matches + 1) >= ctx->settings.ripping_retries ||
+            (total_repeats + 1) >= ctx->settings.max_retries)
+            repeat_encode = 1;
+
+        cyanrip_log(ctx, 0, "\nRepeating ripping (%i out of %i matches for current checksum %08X)\n",
+                    matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
+
+        last_checksums = av_realloc(last_checksums,
+                                    (nb_last_checksums + 1)*sizeof(*last_checksums));
+        if (!last_checksums) {
+            ret = AVERROR(ENOMEM);
+            goto end;
+        }
+
+        last_checksums[nb_last_checksums] = checksum_ctx.eac_crc;
+        nb_last_checksums++;
+
+        for (int j = 0; j < ctx->settings.outputs_num; j++) {
+            int err = cyanrip_end_track_encoding(&enc_ctx[j]);
+            if (err) {
+                cyanrip_log(ctx, 0, "Error in encoding!\n");
+                ret = err;
+                goto end;
+            }
+        }
+
+        ctx->frames_read = start_frames_read;
+        goto repeat_ripping;
+    }
+
+finalize_ripping:
     cyanrip_log(NULL, 0, "\nFlushing encoders...\n");
 
     /* Flush encoders */
@@ -699,8 +764,11 @@ fail:
     if (!ret && !quit_now)
         cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
 
+end:
     cyanrip_free_dec_ctx(ctx, &dec_ctx);
+    av_free(last_checksums);
 
+    t->total_repeats = total_repeats;
     if (!ret) {
         cyanrip_log_track_end(ctx, t);
         cyanrip_cue_track(ctx, t);
@@ -1288,7 +1356,7 @@ int main(int argc, char **argv)
     settings.cue_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
     settings.sanitize_method = CRIP_SANITIZE_UNICODE;
     settings.speed = 0;
-    settings.frame_max_retries = 25;
+    settings.max_retries = 10;
     settings.over_under_read_frames = 0;
     settings.offset = 0;
     settings.print_info_only = 0;
@@ -1326,14 +1394,15 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
             cyanrip_log(ctx, 0, "\n  Ripping options:\n");
             cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
             cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
-            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries to read a frame (default: 25)\n");
+            cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries for frames and repeated rips (default: 25)\n");
+            cyanrip_log(ctx, 0, "    -Z <int>              Rips tracks until their checksums match <int> number of times. For very damaged CDs.\n");
             cyanrip_log(ctx, 0, "    -S <int>              Set drive speed (default: unset)\n");
             cyanrip_log(ctx, 0, "    -p <number>=<string>  Track pregap handling (default: default)\n");
             cyanrip_log(ctx, 0, "    -P <int>              Paranoia level, %i to 0 inclusive, default: %i\n", crip_max_paranoia_level, settings.paranoia_level);
@@ -1388,8 +1457,8 @@ int main(int argc, char **argv)
             }
             break;
         case 'r':
-            settings.frame_max_retries = strtol(optarg, NULL, 10);
-            if (settings.frame_max_retries < 0) {
+            settings.max_retries = strtol(optarg, NULL, 10);
+            if (settings.max_retries < 0) {
                 cyanrip_log(ctx, 0, "Invalid retries amount!\n");
                 return 1;
             }
@@ -1474,6 +1543,13 @@ int main(int argc, char **argv)
             break;
         case 'O':
             settings.overread_leadinout = 1;
+            break;
+        case 'Z':
+            settings.ripping_retries = strtol(optarg, NULL, 10);
+            if (settings.ripping_retries < 0) {
+                cyanrip_log(ctx, 0, "Invalid retries amount!\n");
+                return 1;
+            }
             break;
         case 'f':
             find_drive_offset_range = 6;
