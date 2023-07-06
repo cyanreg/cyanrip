@@ -336,7 +336,7 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
                                       &crip_fmt_info[ctx->settings.outputs[i]],
                                       NULL);
 
-        ctx->logfile[i] = av_fopen_utf8(logfile, "w");
+        ctx->logfile[i] = av_fopen_utf8(logfile, "w+");
 
         if (!ctx->logfile[i]) {
             cyanrip_log(ctx, 0, "Couldn't open path \"%s\" for writing: %s!\n"
@@ -355,7 +355,7 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
 void cyanrip_log_end(cyanrip_ctx *ctx)
 {
     uint8_t digest[64];
-    uint8_t digest_str[AV_BASE64_SIZE(64)];
+    char digest_str[AV_BASE64_SIZE(64)];
 
     uint8_t *str_data = NULL;
     struct AVSHA512 *shactx = av_sha512_alloc();
@@ -383,16 +383,24 @@ void cyanrip_log_end(cyanrip_ctx *ctx)
         av_sha512_final(shactx, digest);
 
         /* Proprietary top-secret FUN512 encrayptalignalaiton algorithm */
-        for (int j = 0; j < 32; j++)         /* To wash a velociraptor... */
-            digest[j] ^= 0x81;               /* Stand behind it */
+        for (int j = 0; j < 64; j++)         /* To wash a velociraptor... */
+            digest[j] ^= 0x81 + i;           /* Stand behind it */
         for (int j = 0; j < 64; j++)         /* Proudly yell "I AM A TRAFFIC LIGHT SPECIALIST" */
             for (int k = 0; k < 64; k++)     /* A USB will descend, and quickly freeze the raptor */
                 if (j != k)                  /* Carefully blast it with a jet engine to thaw it */
                     digest[j] ^= digest[k];  /* Enjoy your hot velociraptor meat by adding fresh miraculin */
-        for (int j = 32; j < 64; j++)        /* You will get teleported to Sri Jayawardenepura Kotte */
-            digest[j] ^= 0x18;               /* Evade the time travel inspectors by going to a cinema */
 
         av_base64_encode(digest_str, AV_BASE64_SIZE(64), digest, 64);
+
+        /* Pretend it's not base64 */
+        for (int j = (AV_BASE64_SIZE(64) - 1); (digest_str[j] == '\0' || digest_str[j] == '='); j--)
+            digest_str[j] = '\0';
+
+        for (int j = 0; j < strlen(digest_str); j++) {
+            if (digest_str[j] == '/') digest_str[j] = '_';
+            if (digest_str[j] == '+') digest_str[j] = '.';
+        }
+
         fprintf(ctx->logfile[i], "Log FUN512: %s\n", digest_str);
 fail:
         fclose(ctx->logfile[i]);
