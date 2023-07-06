@@ -1359,6 +1359,7 @@ int main(int argc, char **argv)
     settings.max_retries = 10;
     settings.over_under_read_frames = 0;
     settings.offset = 0;
+    settings.ripping_retries = 0;
     settings.print_info_only = 0;
     settings.disable_mb = 0;
     settings.disable_coverart_db = 0;
