@@ -490,6 +490,9 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     /* Set creation time at the start of ripping */
     track_set_creation_time(ctx, t);
 
+    cyanrip_dec_ctx *dec_ctx = { NULL };
+    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
+
     uint32_t start_frames_read;
     uint32_t *last_checksums = NULL;
     uint32_t nb_last_checksums = 0;
@@ -504,19 +507,19 @@ repeat_ripping:
 
     cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
 
-    cyanrip_dec_ctx *dec_ctx = { NULL };
-    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
-    ret = cyanrip_create_dec_ctx(ctx, &dec_ctx, t);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error initializing decoder!\n");
-        goto fail;
-    }
-    for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        ret = cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
-                                          ctx->settings.outputs[i]);
+    if (!ctx->settings.ripping_retries || repeat_mode_encode) {
+        ret = cyanrip_create_dec_ctx(ctx, &dec_ctx, t);
         if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error initializing encoder!\n");
+            cyanrip_log(ctx, 0, "Error initializing decoder!\n");
             goto fail;
+        }
+        for (int i = 0; i < ctx->settings.outputs_num; i++) {
+            ret = cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
+                                              ctx->settings.outputs[i]);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error initializing encoder!\n");
+                goto fail;
+            }
         }
     }
 
@@ -730,6 +733,7 @@ repeat_ripping:
         nb_last_checksums++;
 
         for (int j = 0; j < ctx->settings.outputs_num; j++) {
+            cyanrip_free_dec_ctx(ctx, &dec_ctx);
             int err = cyanrip_end_track_encoding(&enc_ctx[j]);
             if (err) {
                 cyanrip_log(ctx, 0, "Error in encoding!\n");
