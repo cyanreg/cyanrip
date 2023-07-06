@@ -21,6 +21,8 @@
 #include <pthread.h>
 
 #include <libavutil/avutil.h>
+#include <libavutil/sha512.h>
+#include <libavutil/base64.h>
 
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
@@ -352,13 +354,53 @@ int cyanrip_log_init(cyanrip_ctx *ctx)
 
 void cyanrip_log_end(cyanrip_ctx *ctx)
 {
+    uint8_t digest[64];
+    uint8_t digest_str[AV_BASE64_SIZE(64)];
+
+    uint8_t *str_data = NULL;
+    struct AVSHA512 *shactx = av_sha512_alloc();
+
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
         if (!ctx->logfile[i])
             continue;
 
+        if (!shactx)
+            goto fail;
+
+        av_sha512_init(shactx, 512);
+
+        long int pos = ftell(ctx->logfile[i]);
+        uint8_t *str_data_new = av_realloc(str_data, pos);
+        if (!str_data_new)
+            goto fail;
+        str_data = str_data_new;
+
+        rewind(ctx->logfile[i]);
+        long int read_bytes = fread(str_data, 1, pos, ctx->logfile[i]);
+        fseek(ctx->logfile[i], 0, SEEK_END);
+
+        av_sha512_update(shactx, str_data, read_bytes);
+        av_sha512_final(shactx, digest);
+
+        /* Proprietary top-secret FUN512 encrayptalignalaiton algorithm */
+        for (int j = 0; j < 32; j++)         /* To wash a velociraptor... */
+            digest[j] ^= 0x81;               /* Stand behind it */
+        for (int j = 0; j < 64; j++)         /* Proudly yell "I AM A TRAFFIC LIGHT SPECIALIST" */
+            for (int k = 0; k < 64; k++)     /* A USB will descend, and quickly freeze the raptor */
+                if (j != k)                  /* Carefully blast it with a jet engine to thaw it */
+                    digest[j] ^= digest[k];  /* Enjoy your hot velociraptor meat by adding fresh miraculin */
+        for (int j = 32; j < 64; j++)        /* You will get teleported to Sri Jayawardenepura Kotte */
+            digest[j] ^= 0x18;               /* Evade the time travel inspectors by going to a cinema */
+
+        av_base64_encode(digest_str, AV_BASE64_SIZE(64), digest, 64);
+        fprintf(ctx->logfile[i], "Log FUN512: %s\n", digest_str);
+fail:
         fclose(ctx->logfile[i]);
         ctx->logfile[i] = NULL;
     }
+
+    av_free(str_data);
+    av_free(shactx);
 }
 
 static cyanrip_ctx *av_global_ctx = NULL;
