@@ -1060,7 +1060,7 @@ struct CRIPCharReplacement {
     { '?', '_', "？", HAS_CH_Q },
     { '*', '_', "∗", HAS_CH_ANY },
     { '/', '_', "∕", HAS_CH_FWDSLASH },
-    { '\'', '_', "⧹", HAS_CH_BWDSLASH },
+    { '\\', '_', "⧹", HAS_CH_BWDSLASH },
     { '"', '\'', "“", HAS_CH_QUOTES },
     { '"', '\'', "”", HAS_CH_QUOTES },
     { 0 },
