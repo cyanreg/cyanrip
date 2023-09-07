@@ -163,6 +163,8 @@ static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
     int ibps = hdcd ? 20 : 16;
     enum AVSampleFormat ifmt = hdcd ? AV_SAMPLE_FMT_S32 :
                                       AV_SAMPLE_FMT_S16;
+    enum AVSampleFormat ifmt_p = hdcd ? AV_SAMPLE_FMT_S32P :
+                                        AV_SAMPLE_FMT_S16P;
     enum AVSampleFormat max_bps_fmt = AV_SAMPLE_FMT_NONE;
 
     ibps = ibps >> 3;
@@ -173,9 +175,10 @@ static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
 
     /* Try to match the input sample format first */
     while (1) {
-        if (codec->sample_fmts[i] == -1)
+        if (codec->sample_fmts[i] == AV_SAMPLE_FMT_NONE)
             break;
-        if (codec->sample_fmts[i] == ifmt)
+        if (codec->sample_fmts[i] == ifmt ||
+            codec->sample_fmts[i] == ifmt_p)
             return codec->sample_fmts[i];
         i++;
     }
@@ -191,7 +194,7 @@ static enum AVSampleFormat pick_codec_sample_fmt(const AVCodec *codec, int hdcd)
             max_bps = bps;
             max_bps_fmt = codec->sample_fmts[i];
         }
-        if (bps >= ibps)
+        if (bps == ibps)
             return codec->sample_fmts[i];
         i++;
     }
