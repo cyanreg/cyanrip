@@ -312,4 +312,4 @@ Links
 You can talk about the project and get in touch with developers on:
  - IRC: **`#cyanrip`** on the [Libera.Chat](ircs://irc.libera.chat:6697) network
   - [Libera.Chat’s guide on how to connect](https://libera.chat/guides/connect)
-    - Or use the [Kiwi web client](https://kiwiirc.com/nextclient/irc.libera.chat/?#whipper)
+    - Or use the [Kiwi web client](https://kiwiirc.com/nextclient/irc.libera.chat/?#cyanrip)
