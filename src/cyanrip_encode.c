@@ -54,12 +54,17 @@ struct cyanrip_enc_ctx {
     int audio_stream_index;
 };
 
-struct cyanrip_dec_ctx {
+typedef struct cyanrip_filt_ctx {
     /* Deemphasis, and HDCD decoding (not at once) */
     AVFilterGraph *graph;
     AVFilterContext *buffersink_ctx;
     AVFilterContext *buffersrc_ctx;
     AVFilterGraph *filter_graph;
+} cyanrip_filt_ctx;
+
+struct cyanrip_dec_ctx {
+    cyanrip_filt_ctx filt;
+    cyanrip_filt_ctx peak;
 };
 
 void cyanrip_print_codecs(void)
@@ -258,6 +263,17 @@ static AVCodecContext *setup_out_avctx(cyanrip_ctx *ctx, AVFormatContext *avf,
     return avctx;
 }
 
+static void cyanrip_free_filt_ctx(cyanrip_ctx *ctx, cyanrip_filt_ctx *filt_ctx, int capture)
+{
+    if (filt_ctx->graph) {
+        if (capture)
+            cyanrip_set_av_log_capture(ctx, 1, AV_LOG_INFO);
+        avfilter_graph_free(&filt_ctx->graph);
+        if (capture)
+            cyanrip_set_av_log_capture(ctx, 0, 0);
+    }
+}
+
 void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
 {
     if (!s || !*s)
@@ -265,17 +281,14 @@ void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s)
 
     cyanrip_dec_ctx *dec_ctx = *s;
 
-    if (dec_ctx->graph) {
-        cyanrip_set_av_log_capture(ctx, 1, 1, AV_LOG_INFO);
-        avfilter_graph_free(&dec_ctx->graph);
-        cyanrip_set_av_log_capture(ctx, 0, 0, 0);
-    }
+    cyanrip_free_filt_ctx(ctx, &dec_ctx->filt, 0);
+    cyanrip_free_filt_ctx(ctx, &dec_ctx->peak, 0);
 
     av_freep(s);
 }
 
-static int init_filtering(cyanrip_ctx *ctx, cyanrip_dec_ctx *s,
-                          int hdcd, int deemphasis)
+static int init_filtering(cyanrip_ctx *ctx, cyanrip_filt_ctx *s,
+                          int hdcd, int deemphasis, int peak)
 {
     int ret = 0;
     AVFilterInOut *outputs = NULL;
@@ -300,41 +313,43 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_dec_ctx *s,
         goto fail;
     }
 
-    const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
-    ret = avfilter_graph_create_filter(&s->buffersink_ctx, abuffersink, "out",
-                                       NULL, NULL, s->graph);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error creating filter sink: %s!\n", av_err2str(ret));
-        goto fail;
-    }
+    if (!peak) {
+        const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
+        ret = avfilter_graph_create_filter(&s->buffersink_ctx, abuffersink, "out",
+                                           NULL, NULL, s->graph);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error creating filter sink: %s!\n", av_err2str(ret));
+            goto fail;
+        }
 
-    static const enum AVSampleFormat out_sample_fmts_hdcd[] = { AV_SAMPLE_FMT_S32, -1 };
-    static const enum AVSampleFormat out_sample_fmts_deemph[] = { AV_SAMPLE_FMT_DBLP, -1 };
+        static const enum AVSampleFormat out_sample_fmts_hdcd[] = { AV_SAMPLE_FMT_S32, -1 };
+        static const enum AVSampleFormat out_sample_fmts_deemph[] = { AV_SAMPLE_FMT_DBLP, -1 };
 
-    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_fmts",
-                              hdcd ? out_sample_fmts_hdcd :
-                              deemphasis ? out_sample_fmts_deemph :
-                              NULL,
-                              -1, AV_OPT_SEARCH_CHILDREN);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error setting filter sample format: %s!\n", av_err2str(ret));
-        goto fail;
-    }
+        ret = av_opt_set_int_list(s->buffersink_ctx, "sample_fmts",
+                                  hdcd ? out_sample_fmts_hdcd :
+                                  deemphasis ? out_sample_fmts_deemph :
+                                  NULL,
+                                  -1, AV_OPT_SEARCH_CHILDREN);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error setting filter sample format: %s!\n", av_err2str(ret));
+            goto fail;
+        }
 
-    static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
-    ret = av_opt_set_int_list(s->buffersink_ctx, "channel_layouts", out_channel_layouts, -1,
-                              AV_OPT_SEARCH_CHILDREN);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error setting filter channel layout: %s!\n", av_err2str(ret));
-        goto fail;
-    }
+        static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
+        ret = av_opt_set_int_list(s->buffersink_ctx, "channel_layouts", out_channel_layouts, -1,
+                                  AV_OPT_SEARCH_CHILDREN);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error setting filter channel layout: %s!\n", av_err2str(ret));
+            goto fail;
+        }
 
-    static const int out_sample_rates[] = { 44100, -1 };
-    ret = av_opt_set_int_list(s->buffersink_ctx, "sample_rates", out_sample_rates, -1,
-                              AV_OPT_SEARCH_CHILDREN);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error setting filter sample rate: %s!\n", av_err2str(ret));
-        goto fail;
+        static const int out_sample_rates[] = { 44100, -1 };
+        ret = av_opt_set_int_list(s->buffersink_ctx, "sample_rates", out_sample_rates, -1,
+                                  AV_OPT_SEARCH_CHILDREN);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error setting filter sample rate: %s!\n", av_err2str(ret));
+            goto fail;
+        }
     }
 
     outputs = avfilter_inout_alloc();
@@ -347,18 +362,22 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_dec_ctx *s,
     outputs->pad_idx       = 0;
     outputs->next          = NULL;
 
-    inputs = avfilter_inout_alloc();
-    if (!inputs) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
+    if (!peak) {
+        inputs = avfilter_inout_alloc();
+        if (!inputs) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        inputs->name          = av_strdup("out");
+        inputs->filter_ctx    = s->buffersink_ctx;
+        inputs->pad_idx       = 0;
+        inputs->next          = NULL;
     }
-    inputs->name          = av_strdup("out");
-    inputs->filter_ctx    = s->buffersink_ctx;
-    inputs->pad_idx       = 0;
-    inputs->next          = NULL;
 
     const char *filter_desc = hdcd ? "hdcd" :
-                              deemphasis ? "aemphasis=type=cd" : NULL;
+                              deemphasis ? "aemphasis=type=cd" :
+                              peak ? "ebur128,anullsink" :
+                              NULL;
 
     ret = avfilter_graph_parse_ptr(s->graph, filter_desc, &inputs, &outputs, NULL);
     if (ret < 0) {
@@ -396,12 +415,17 @@ int cyanrip_create_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s,
     if ((ctx->settings.decode_hdcd) ||
         (ctx->settings.deemphasis && t->preemphasis) ||
         (ctx->settings.force_deemphasis)) {
-        ret = init_filtering(ctx, dec_ctx,
+        ret = init_filtering(ctx, &dec_ctx->filt,
                              ctx->settings.decode_hdcd,
-                             (ctx->settings.deemphasis && t->preemphasis) || ctx->settings.force_deemphasis);
+                             (ctx->settings.deemphasis && t->preemphasis) || ctx->settings.force_deemphasis,
+                             0);
         if (ret < 0)
             goto fail;
     }
+
+    ret = init_filtering(ctx, &dec_ctx->peak, 0, 0, 1);
+    if (ret < 0)
+        goto fail;
 
     *s = dec_ctx;
 
@@ -438,10 +462,18 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     int ret = 0;
     AVFrame *dec_frame = NULL;
 
-    if (!dec_ctx->buffersrc_ctx)
+    ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, frame,
+                                       AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                       AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    if (!dec_ctx->filt.buffersrc_ctx)
         return push_frame_to_encs(ctx, enc_ctx, num_enc, frame);
 
-    ret = av_buffersrc_add_frame_flags(dec_ctx->buffersrc_ctx, frame,
+    ret = av_buffersrc_add_frame_flags(dec_ctx->filt.buffersrc_ctx, frame,
                                        AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
                                        AV_BUFFERSRC_FLAG_KEEP_REF);
     if (ret < 0) {
@@ -456,7 +488,7 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
             goto fail;
         }
 
-        ret = av_buffersink_get_frame_flags(dec_ctx->buffersink_ctx, dec_frame,
+        ret = av_buffersink_get_frame_flags(dec_ctx->filt.buffersink_ctx, dec_frame,
                                             AV_BUFFERSINK_FLAG_NO_REQUEST);
         if (ret == AVERROR(EAGAIN)) {
             av_frame_free(&dec_frame);
@@ -526,6 +558,16 @@ int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_init_track_encoding(ctx, t->enc_ctx, t,
                                     ctx->settings.outputs[i]);
+
+    return 0;
+}
+
+int cyanrip_finalize_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    cyanrip_free_filt_ctx(ctx, &t->dec_ctx->peak, 1);
+    if (ctx->settings.decode_hdcd)
+        cyanrip_log(ctx, 0, "\n  ");
+    cyanrip_free_filt_ctx(ctx, &t->dec_ctx->filt, ctx->settings.decode_hdcd);
 
     return 0;
 }

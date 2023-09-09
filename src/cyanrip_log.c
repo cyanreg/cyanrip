@@ -34,20 +34,32 @@
 
 static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 {
-    if (t->pregap_lsn != CDIO_INVALID_LSN)
-        cyanrip_log(ctx, 0, "    Pregap LSN:       %i\n", t->pregap_lsn);
+    if (t->pregap_lsn != CDIO_INVALID_LSN) {
+        char pregap_duration[16];
+        cyanrip_frames_to_duration(t->start_lsn - t->pregap_lsn, pregap_duration);
+
+        cyanrip_log(ctx, 0, "    Pregap LSN:  %i (duration: %s)\n",
+                    t->pregap_lsn, pregap_duration);
+    } else {
+        cyanrip_log(ctx, 0, "    Pregap LSN:  none\n");
+    }
 
     if (t->frames_before_disc_start)
-        cyanrip_log(ctx, 0, "    Silent frames:    %i prepended\n", t->frames_before_disc_start);
-    cyanrip_log(ctx, 0, "    Start LSN:        %i\n", t->start_lsn_sig);
+        cyanrip_log(ctx, 0, "    Prepended:   %i frames of silence\n", t->frames_before_disc_start);
+    cyanrip_log(ctx, 0,     "    Start LSN:   %i", t->start_lsn_sig);
     if (t->start_lsn != t->start_lsn_sig)
-        cyanrip_log(ctx, 0, "    Offset start:     %i\n", t->start_lsn);
+        cyanrip_log(ctx, 0, " (with offset: %i)\n", t->start_lsn);
+    else
+        cyanrip_log(ctx, 0, "\n");
 
-    cyanrip_log(ctx, 0, "    End LSN:          %i\n", t->end_lsn_sig);
+    cyanrip_log(ctx, 0,     "    End LSN:     %i", t->end_lsn_sig);
     if (t->end_lsn != t->end_lsn_sig)
-        cyanrip_log(ctx, 0, "    Offset end:       %i\n", t->end_lsn);
+        cyanrip_log(ctx, 0, " (with offset: %i)\n", t->end_lsn);
+    else
+        cyanrip_log(ctx, 0, "\n");
+
     if (t->frames_after_disc_end)
-        cyanrip_log(ctx, 0, "    Silent frames:    %i appended\n", t->frames_after_disc_end);
+        cyanrip_log(ctx, 0, "    Appended:    %i frames of silence\n", t->frames_after_disc_end);
 }
 
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -55,32 +67,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
     char length[16];
     cyanrip_samples_to_duration(t->nb_samples, length);
 
-    if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "    Data bytes:       %i (%.2f Mib)\n",
-                    t->frames*CDIO_CD_FRAMESIZE_RAW,
-                    t->frames*CDIO_CD_FRAMESIZE_RAW / (1024.0 * 1024.0));
-        cyanrip_log(ctx, 0, "    Frames:           %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
-        print_offsets(ctx, t);
-        cyanrip_log(ctx, 0, "\n");
-        return;
-    }
-
-    cyanrip_log(ctx, 0, "    File(s):\n");
-    for (int f = 0; f < ctx->settings.outputs_num; f++) {
-        char *path = crip_get_path(ctx, CRIP_PATH_TRACK, 0,
-                                   &crip_fmt_info[ctx->settings.outputs[f]],
-                                   t);
-        cyanrip_log(ctx, 0, "        %s\n", path);
-        av_free(path);
-    }
-
-    cyanrip_log(ctx, 0, "    Metadata:\n", length);
-
-    const AVDictionaryEntry *d = NULL;
-    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
-        cyanrip_log(ctx, 0, "        %s: %s\n", d->key, d->value);
-
-    cyanrip_log(ctx, 0, "    Preemphasis:      ");
+    cyanrip_log(ctx, 0, "  Preemphasis:   ");
     if (!t->preemphasis) {
         cyanrip_log(ctx, 0, "none detected");
 
@@ -98,6 +85,94 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
             cyanrip_log(ctx, 0, " (deemphasis applied)\n");
         else
             cyanrip_log(ctx, 0, "\n");
+    }
+
+    cyanrip_log(ctx, 0, "\n  Properties:\n");
+
+    if (t->track_is_data) {
+        cyanrip_log(ctx, 0, "    Data bytes:  %i (%.2f Mib)\n",
+                    t->frames*CDIO_CD_FRAMESIZE_RAW,
+                    t->frames*CDIO_CD_FRAMESIZE_RAW / (1024.0 * 1024.0));
+        cyanrip_log(ctx, 0, "    Frames:      %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
+        print_offsets(ctx, t);
+        cyanrip_log(ctx, 0, "\n");
+        return;
+    }
+
+    cyanrip_log(ctx, 0, "    Duration:    %s\n", length);
+    cyanrip_log(ctx, 0, "    Samples:     %u\n", t->nb_samples);
+    cyanrip_log(ctx, 0, "    Frames:      %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
+
+    print_offsets(ctx, t);
+
+    int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
+
+    cyanrip_log(ctx, 0, "    Accurip:     %s",
+                ctx->settings.disable_accurip ? "disabled" :
+                has_ar ? "disc found in database" : "not found");
+    if (has_ar)
+        cyanrip_log(ctx, 0, " (max confidence: %i)\n", t->ar_db_max_confidence);
+    else
+        cyanrip_log(ctx, 0, "\n");
+
+    if (t->computed_crcs) {
+        cyanrip_log(ctx, 0, "    EAC CRC32:   %08X", t->eac_crc);
+        if (t->total_repeats)
+            cyanrip_log(ctx, 0, " (after %i rips)\n", t->total_repeats);
+        else
+            cyanrip_log(ctx, 0, "\n");
+
+        int match_v1 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1, 0) : 0;
+        int match_v2 = has_ar ? crip_find_ar(t, t->acurip_checksum_v2, 0) : 0;
+
+        cyanrip_log(ctx, 0, "    Accurip v1:  %08X", t->acurip_checksum_v1);
+        if (has_ar && match_v1 > 0)
+            cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v1);
+        else if (has_ar && (match_v2 < 1))
+            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
+        else
+            cyanrip_log(ctx, 0, "\n");
+
+        cyanrip_log(ctx, 0, "    Accurip v2:  %08X", t->acurip_checksum_v2);
+        if (has_ar && (match_v2 > 0))
+            cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v2);
+        else if (has_ar && (match_v1 < 0))
+            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
+        else
+            cyanrip_log(ctx, 0, "\n");
+
+        if (!has_ar || ((match_v1 < 0) && (match_v2 < 0))) {
+            int match_450 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1_450, 1) : 0;
+
+            cyanrip_log(ctx, 0, "    Accurip 450: %08X", t->acurip_checksum_v1_450);
+            if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4)) && (t->acurip_checksum_v1_450 == 0x0)) {
+                cyanrip_log(ctx, 0, " (match found, confidence %i, but a checksum of 0 is meaningless)\n",
+                            match_450, t->ar_db_max_confidence);
+            } else if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4))) {
+                cyanrip_log(ctx, 0, " (matches Accurip DB, confidence %i, track is partially accurately ripped)\n",
+                            match_450, t->ar_db_max_confidence);
+            } else if (has_ar) {
+                cyanrip_log(ctx, 0, " (not found)\n");
+            } else {
+                cyanrip_log(ctx, 0, "\n");
+            }
+        }
+    }
+
+    cyanrip_log(ctx, 0, "\n  Metadata:\n", length);
+
+    int max_key_len = 0;
+    const AVDictionaryEntry *d = NULL;
+    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX)))
+        max_key_len = FFMAX(strlen(d->key), max_key_len);
+
+    d = NULL;
+    while ((d = av_dict_get(t->meta, "", d, AV_DICT_IGNORE_SUFFIX))) {
+        int key_len = strlen(d->key);
+        cyanrip_log(ctx, 0, "    %s: ", d->key);
+        for (int i = 0; i < (max_key_len - key_len); i++)
+            cyanrip_log(ctx, 0, " ");
+        cyanrip_log(ctx, 0, "%s\n", d->value);
     }
 
     if (t->art.source_url || ctx->nb_cover_arts) {
@@ -119,68 +194,21 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
                 codec_name = avcodec_get_name(art->params->codec_id);
         }
 
-        cyanrip_log(ctx, 0, "    Cover art:        %s\n",
-                    codec_name ? codec_name :
-                    (t->art.source_url ? art->source_url : dict_get(art->meta, "title")));
-    }
-    cyanrip_log(ctx, 0, "    Duration:         %s\n", length);
-    cyanrip_log(ctx, 0, "    Samples:          %u\n", t->nb_samples);
-    cyanrip_log(ctx, 0, "    Frames:           %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
-
-    print_offsets(ctx, t);
-
-    int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
-
-    if (!ctx->settings.disable_accurip) {
-        cyanrip_log(ctx, 0, "    Accurip:          %s", has_ar ? "disc found in database" : "not found");
-        if (has_ar)
-            cyanrip_log(ctx, 0, " (max confidence: %i)\n", t->ar_db_max_confidence);
+        if (ctx->settings.print_info_only)
+            cyanrip_log(ctx, 0, "\n  Embedded cover art:\n    %s: %s\n",
+                        dict_get(art->meta, "title"), art->source_url);
         else
-            cyanrip_log(ctx, 0, "\n");
+            cyanrip_log(ctx, 0, "\n  Embedded cover art:\n    %s: %ix%i %s\n",
+                        dict_get(art->meta, "title"), art->params->width, art->params->height, codec_name);
     }
 
-    if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:        %08X", t->eac_crc);
-        if (t->total_repeats)
-            cyanrip_log(ctx, 0, " (after %i rips)\n", t->total_repeats);
-        else
-            cyanrip_log(ctx, 0, "\n");
-
-        int match_v1 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1, 0) : 0;
-        int match_v2 = has_ar ? crip_find_ar(t, t->acurip_checksum_v2, 0) : 0;
-
-        cyanrip_log(ctx, 0, "    Accurip v1:       %08X", t->acurip_checksum_v1);
-        if (has_ar && match_v1 > 0)
-            cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v1);
-        else if (has_ar && (match_v2 < 1))
-            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
-        else
-            cyanrip_log(ctx, 0, "\n");
-
-        cyanrip_log(ctx, 0, "    Accurip v2:       %08X", t->acurip_checksum_v2);
-        if (has_ar && (match_v2 > 0))
-            cyanrip_log(ctx, 0, " (accurately ripped, confidence %i)\n", match_v2);
-        else if (has_ar && (match_v1 < 0))
-            cyanrip_log(ctx, 0, " (not found, either a new pressing, or bad rip)\n");
-        else
-            cyanrip_log(ctx, 0, "\n");
-
-        if (!has_ar || ((match_v1 < 0) && (match_v2 < 0))) {
-            int match_450 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1_450, 1) : 0;
-
-            cyanrip_log(ctx, 0, "    Accurip v1 450:   %08X", t->acurip_checksum_v1_450);
-            if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4)) && (t->acurip_checksum_v1_450 == 0x0)) {
-                cyanrip_log(ctx, 0, " (match found, confidence %i, but a checksum of 0 is meaningless)\n",
-                            match_450, t->ar_db_max_confidence);
-            } else if (has_ar && (match_450 > (3*(t->ar_db_max_confidence+1)/4))) {
-                cyanrip_log(ctx, 0, " (matches Accurip DB, confidence %i, track is partially accurately ripped)\n",
-                            match_450, t->ar_db_max_confidence);
-            } else if (has_ar) {
-                cyanrip_log(ctx, 0, " (not found)\n");
-            } else {
-                cyanrip_log(ctx, 0, "\n");
-            }
-        }
+    cyanrip_log(ctx, 0, "\n  File(s):\n");
+    for (int f = 0; f < ctx->settings.outputs_num; f++) {
+        char *path = crip_get_path(ctx, CRIP_PATH_TRACK, 0,
+                                   &crip_fmt_info[ctx->settings.outputs[f]],
+                                   t);
+        cyanrip_log(ctx, 0, "    %s\n", path);
+        av_free(path);
     }
 
     cyanrip_log(ctx, 0, "\n");
@@ -293,16 +321,18 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "\n");
     }
 
+    int has_status = 0;
     cyanrip_log(ctx, 0, "Paranoia status counts:\n");
 
 #define PCHECK(PROP)                                                           \
     if (paranoia_status[PARANOIA_CB_ ## PROP]) {                               \
-        const char *pstr = "    " #PROP ": ";                                  \
+        const char *pstr = "  " #PROP ": ";                                  \
         cyanrip_log(ctx, 0, "%s", pstr);                                       \
-        int padding = strlen("    FIXUP_DROPPED: ") - strlen(pstr);            \
+        int padding = strlen("  FIXUP_DROPPED: ") - strlen(pstr);            \
         for (int i = 0; i < padding; i++)                                      \
             cyanrip_log(ctx, 0, " ");                                          \
         cyanrip_log(ctx, 0, "%lu\n", paranoia_status[PARANOIA_CB_ ## PROP]);   \
+        has_status |= !!paranoia_status[PARANOIA_CB_ ## PROP];                 \
     }
 
     PCHECK(READ)
@@ -321,7 +351,7 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
     PCHECK(CACHEERR)
     PCHECK(WROTE)
     PCHECK(FINISHED)
-    cyanrip_log(ctx, 0, "\n");
+    cyanrip_log(ctx, 0, "%s\n", has_status ? "" : "  none\n");
 
 #undef PCHECK
 
@@ -412,7 +442,6 @@ fail:
 }
 
 static cyanrip_ctx *av_global_ctx = NULL;
-static int av_log_indent = 0;
 static int av_max_log_level = AV_LOG_QUIET;
 static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -429,18 +458,12 @@ static void av_log_capture(void *ptr, int lvl, const char *format,
             if (!av_global_ctx->logfile[i])
                 continue;
 
-            for (int j = 0; j < av_log_indent; j++)
-                fprintf(av_global_ctx->logfile[i], "    ");
-
             va_list args2;
             va_copy(args2, args);
             vfprintf(av_global_ctx->logfile[i], format, args2);
             va_end(args2);
         }
     }
-
-    for (int i = 0; i < av_log_indent; i++)
-        printf("    ");
 
     vprintf(format, args);
 
@@ -449,19 +472,17 @@ end:
 }
 
 void cyanrip_set_av_log_capture(cyanrip_ctx *ctx, int enable,
-                                int indent, int max_av_lvl)
+                                int max_av_lvl)
 {
     pthread_mutex_lock(&log_lock);
 
     if (enable) {
         av_global_ctx = ctx;
         av_max_log_level = max_av_lvl;
-        av_log_indent = indent;
         av_log_set_callback(av_log_capture);
     } else {
         av_log_set_callback(av_log_default_callback);
         av_global_ctx = NULL;
-        av_log_indent = 0;
         av_max_log_level = AV_LOG_QUIET;
     }
 

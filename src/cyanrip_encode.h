@@ -37,6 +37,7 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                  const uint8_t *data, int bytes);
 
 int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t);
+int cyanrip_finalize_encoding(cyanrip_ctx *ctx, cyanrip_track *t);
 
 int cyanrip_end_track_encoding(cyanrip_enc_ctx **s);
 void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s);

@@ -739,8 +739,10 @@ finalize_ripping:
     /* Flush encoders */
     ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
                                        t->dec_ctx, NULL, 0);
-    if (ret)
-        cyanrip_log(ctx, 0, "Error sending flush signal to encoders!\n");
+    if (ret) {
+        cyanrip_log(ctx, 0, "Error sending flush signal to encoders: %s\n", av_err2str(ret));
+        return ret;
+    }
 
 fail:
     if (!ret && !quit_now)
@@ -751,6 +753,7 @@ end:
 
     t->total_repeats = total_repeats;
     if (!ret) {
+        cyanrip_finalize_encoding(ctx, t);
         cyanrip_log_track_end(ctx, t);
         cyanrip_cue_track(ctx, t);
     } else {
@@ -1325,6 +1328,8 @@ int main(int argc, char **argv)
 {
     cyanrip_ctx *ctx = NULL;
     cyanrip_settings settings;
+
+    av_log_set_level(AV_LOG_QUIET);
 
     if (signal(SIGINT, on_quit_signal) == SIG_ERR)
         cyanrip_log(ctx, 0, "Can't init signal handler!\n");
