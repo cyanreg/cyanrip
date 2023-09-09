@@ -39,6 +39,7 @@ sources = [
     'utils.c',
 
     'fifo_frame.c',
+    'fifo_packet.c',
 
     'discid.c',
     'musicbrainz.c',
