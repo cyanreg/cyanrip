@@ -518,6 +518,18 @@ fail:
     return ret;
 }
 
+int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    for (int i = 0; i < ctx->settings.outputs_num; i++)
+        cyanrip_end_track_encoding(&t->enc_ctx[i]);
+
+    for (int i = 0; i < ctx->settings.outputs_num; i++)
+        cyanrip_init_track_encoding(ctx, t->enc_ctx, t,
+                                    ctx->settings.outputs[i]);
+
+    return 0;
+}
+
 static SwrContext *setup_init_swr(cyanrip_ctx *ctx, AVCodecContext *out_avctx,
                                   int hdcd, int deemphasis)
 {
@@ -751,8 +763,7 @@ fail:
 }
 
 int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
-                                cyanrip_dec_ctx *dec_ctx, cyanrip_track *t,
-                                enum cyanrip_output_formats format)
+                                cyanrip_track *t, enum cyanrip_output_formats format)
 {
     int ret = 0;
     const cyanrip_out_fmt *cfmt = &crip_fmt_info[format];

@@ -179,6 +179,9 @@ typedef struct cyanrip_track {
 
     struct cyanrip_track *pt;
     struct cyanrip_track *nt;
+
+    struct cyanrip_dec_ctx *dec_ctx;
+    struct cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB];
 } cyanrip_track;
 
 typedef struct cyanrip_ctx {

@@ -32,8 +32,8 @@
 #include "musicbrainz.h"
 #include "coverart.h"
 #include "accurip.h"
-#include "cyanrip_encode.h"
 #include "os_compat.h"
+#include "cyanrip_encode.h"
 
 int quit_now = 0;
 
@@ -52,6 +52,18 @@ const cyanrip_out_fmt crip_fmt_info[] = {
     [CYANRIP_FORMAT_PCM]      = { "pcm",      "PCM",  "pcm",   "s16le", 0,  0, 1, AV_CODEC_ID_NONE,      },
 };
 
+static void free_track(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    for (int i = 0; i < ctx->settings.outputs_num; i++)
+        cyanrip_end_track_encoding(&t->enc_ctx[i]);
+
+    cyanrip_free_dec_ctx(ctx, &t->dec_ctx);
+
+    crip_free_art(&t->art);
+    av_dict_free(&t->meta);
+    av_free(t->ar_db_entries);
+}
+
 static void cyanrip_ctx_end(cyanrip_ctx **s)
 {
     cyanrip_ctx *ctx;
@@ -59,11 +71,8 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
         return;
     ctx = *s;
 
-    for (int i = 0; i < ctx->nb_tracks; i++) {
-        crip_free_art(&ctx->tracks[i].art);
-        av_dict_free(&ctx->tracks[i].meta);
-        av_free(ctx->tracks[i].ar_db_entries);
-    }
+    for (int i = 0; i < ctx->nb_tracks; i++)
+        free_track(ctx, &ctx->tracks[i]);
 
     for (int i = 0; i < ctx->nb_cover_arts; i++)
         crip_free_art(&ctx->cover_arts[i]);
@@ -490,9 +499,6 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     /* Set creation time at the start of ripping */
     track_set_creation_time(ctx, t);
 
-    cyanrip_dec_ctx *dec_ctx = { NULL };
-    cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB] = { NULL };
-
     uint32_t start_frames_read;
     uint32_t *last_checksums = NULL;
     uint32_t nb_last_checksums = 0;
@@ -506,22 +512,6 @@ repeat_ripping:
     start_frames_read = ctx->frames_read;
 
     cdio_paranoia_seek(ctx->paranoia, t->start_lsn, SEEK_SET);
-
-    if (!ctx->settings.ripping_retries || repeat_mode_encode) {
-        ret = cyanrip_create_dec_ctx(ctx, &dec_ctx, t);
-        if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error initializing decoder!\n");
-            goto fail;
-        }
-        for (int i = 0; i < ctx->settings.outputs_num; i++) {
-            ret = cyanrip_init_track_encoding(ctx, &enc_ctx[i], dec_ctx, t,
-                                              ctx->settings.outputs[i]);
-            if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error initializing encoder!\n");
-                goto fail;
-            }
-        }
-    }
 
     int start_err = ctx->total_error_count;
 
@@ -542,10 +532,10 @@ repeat_ripping:
         crip_process_checksums(&checksum_ctx, data, bytes);
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
-            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                               dec_ctx, data, bytes);
+            ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
+                                               t->dec_ctx, data, bytes);
             if (ret) {
-                cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+                cyanrip_log(ctx, 0, "Error in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
             }
         }
@@ -597,10 +587,10 @@ repeat_ripping:
 
         /* Decode and encode */
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
-            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                               dec_ctx, data, bytes);
+            ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
+                                               t->dec_ctx, data, bytes);
             if (ret < 0) {
-                cyanrip_log(ctx, 0, "\nError in decoding/sending frame!\n");
+                cyanrip_log(ctx, 0, "\nError in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
             }
         }
@@ -686,10 +676,10 @@ repeat_ripping:
         crip_process_checksums(&checksum_ctx, data, bytes);
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
-            ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                               dec_ctx, data, bytes);
-            if (ret) {
-                cyanrip_log(ctx, 0, "Error in decoding/sending frame!\n");
+            ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
+                                               t->dec_ctx, data, bytes);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
             }
         }
@@ -732,14 +722,11 @@ repeat_ripping:
         last_checksums[nb_last_checksums] = checksum_ctx.eac_crc;
         nb_last_checksums++;
 
-        for (int j = 0; j < ctx->settings.outputs_num; j++) {
-            cyanrip_free_dec_ctx(ctx, &dec_ctx);
-            int err = cyanrip_end_track_encoding(&enc_ctx[j]);
-            if (err) {
-                cyanrip_log(ctx, 0, "Error in encoding!\n");
-                ret = err;
-                goto end;
-            }
+        int err = cyanrip_reset_encoding(ctx, t);
+        if (err < 0) {
+            cyanrip_log(ctx, 0, "Error in encoding: %s\n", av_err2str(err));
+            ret = err;
+            goto end;
         }
 
         ctx->frames_read = start_frames_read;
@@ -750,26 +737,16 @@ finalize_ripping:
     cyanrip_log(NULL, 0, "\nFlushing encoders...\n");
 
     /* Flush encoders */
-    ret = cyanrip_send_pcm_to_encoders(ctx, enc_ctx, ctx->settings.outputs_num,
-                                       dec_ctx, NULL, 0);
+    ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
+                                       t->dec_ctx, NULL, 0);
     if (ret)
         cyanrip_log(ctx, 0, "Error sending flush signal to encoders!\n");
 
 fail:
-    for (int i = 0; i < ctx->settings.outputs_num; i++) {
-        int err = cyanrip_end_track_encoding(&enc_ctx[i]);
-        if (err) {
-            cyanrip_log(ctx, 0, "Error in encoding!\n");
-            ret = err;
-            break;
-        }
-    }
-
     if (!ret && !quit_now)
         cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
 
 end:
-    cyanrip_free_dec_ctx(ctx, &dec_ctx);
     av_free(last_checksums);
 
     t->total_repeats = total_repeats;
@@ -2040,6 +2017,37 @@ int main(int argc, char **argv)
             ctx->frames_to_read += ctx->tracks[j].frames;
         }
 
+        /**
+         * Print-only mode, if requested.
+         */
+        if (ctx->settings.print_info_only) {
+            for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
+                idx = ctx->settings.rip_indices[i];
+
+                int j = 0;
+                for (; j < ctx->nb_tracks; j++) {
+                    if (ctx->tracks[j].number == idx)
+                        break;
+                }
+
+                cyanrip_track *t = &ctx->tracks[j];
+
+                cyanrip_log(ctx, 0, "Track %i info:\n", t->number);
+                track_read_extra(ctx, t);
+                cyanrip_log_track_end(ctx, t);
+
+                if (cdio_get_media_changed(ctx->cdio)) {
+                    cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
+                    break;
+                }
+            }
+
+            goto end;
+        }
+
+        /**
+         * Initialize all encoders for all tracks here.
+         */
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
             idx = ctx->settings.rip_indices[i];
 
@@ -2049,19 +2057,39 @@ int main(int argc, char **argv)
                     break;
             }
 
-            if (ctx->settings.print_info_only) {
-                cyanrip_log(ctx, 0, "Track %i info:\n", ctx->tracks[j].number);
-                track_read_extra(ctx, &ctx->tracks[j]);
-                cyanrip_log_track_end(ctx, &ctx->tracks[j]);
+            cyanrip_track *t = &ctx->tracks[j];
 
-                if (cdio_get_media_changed(ctx->cdio)) {
-                    cyanrip_log(ctx, 0, "Drive media changed, stopping!\n");
-                    break;
+            int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                goto end;
+            }
+            for (j = 0; j < ctx->settings.outputs_num; j++) {
+                ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                  ctx->settings.outputs[j]);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                    goto end;
                 }
-            } else {
-                if (cyanrip_rip_track(ctx, &ctx->tracks[j]))
+            }
+        }
+
+        /**
+         * Rip tracks.
+         */
+        for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
+            idx = ctx->settings.rip_indices[i];
+
+            int j = 0;
+            for (; j < ctx->nb_tracks; j++) {
+                if (ctx->tracks[j].number == idx)
                     break;
             }
+
+            cyanrip_track *t = &ctx->tracks[j];
+
+            if (cyanrip_rip_track(ctx, t))
+                break;
 
             if (quit_now)
                 break;
