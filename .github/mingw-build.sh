@@ -78,9 +78,9 @@ build_curl() {
     cyan_do_vcs "https://github.com/curl/curl.git" &&
     autoreconf -fi &&
     sed -ri "s;(^SUBDIRS = lib) src (include) scripts;\1 \2;" Makefile.in &&
-    CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
+#    CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
     cyan_do_separate_confmakeinstall --with-{winssl,winidn,nghttp2} \
-        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl}
+        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl,zstd,nghttp2}
 }
 
 build_neon() {
