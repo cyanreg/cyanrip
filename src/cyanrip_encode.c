@@ -29,6 +29,7 @@
 #include <libavutil/opt.h>
 
 #include "fifo_frame.h"
+#include "fifo_packet.h"
 #include "cyanrip_encode.h"
 #include "cyanrip_log.h"
 #include "os_compat.h"
@@ -52,6 +53,15 @@ struct cyanrip_enc_ctx {
     AVCodecContext *out_avctx;
     atomic_int status;
     int audio_stream_index;
+
+    pthread_mutex_t lock;
+
+    AVStream *st_aud;
+    AVStream *st_img;
+    const cyanrip_out_fmt *cfmt;
+    int separate_writeout;
+    AVBufferRef *packet_fifo;
+    AVPacket *cover_art_pkt;
 };
 
 typedef struct cyanrip_filt_ctx {
@@ -59,7 +69,6 @@ typedef struct cyanrip_filt_ctx {
     AVFilterGraph *graph;
     AVFilterContext *buffersink_ctx;
     AVFilterContext *buffersrc_ctx;
-    AVFilterGraph *filter_graph;
 } cyanrip_filt_ctx;
 
 struct cyanrip_dec_ctx {
@@ -291,8 +300,8 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_filt_ctx *s,
                           int hdcd, int deemphasis, int peak)
 {
     int ret = 0;
-    AVFilterInOut *outputs = NULL;
     AVFilterInOut *inputs = NULL;
+    AVFilterInOut *outputs = NULL;
 
     s->graph = avfilter_graph_alloc();
     if (!s->graph)
@@ -376,7 +385,7 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_filt_ctx *s,
 
     const char *filter_desc = hdcd ? "hdcd" :
                               deemphasis ? "aemphasis=type=cd" :
-                              peak ? "ebur128,anullsink" :
+                              peak ? "ebur128=peak=true,anullsink" :
                               NULL;
 
     ret = avfilter_graph_parse_ptr(s->graph, filter_desc, &inputs, &outputs, NULL);
@@ -390,9 +399,6 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_filt_ctx *s,
         cyanrip_log(ctx, 0, "Error configuring filter graph: %s!\n", av_err2str(ret));
         goto fail;
     }
-
-    avfilter_inout_free(&inputs);
-    avfilter_inout_free(&outputs);
 
     return 0;
 
@@ -468,6 +474,16 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
         goto fail;
+    }
+
+    if (frame) {
+        ret = av_buffersrc_add_frame_flags(ctx->peak_ctx->peak.buffersrc_ctx, frame,
+                                           AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                           AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+            goto fail;
+        }
     }
 
     if (!dec_ctx->filt.buffersrc_ctx)
@@ -556,7 +572,7 @@ int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_end_track_encoding(&t->enc_ctx[i]);
 
     for (int i = 0; i < ctx->settings.outputs_num; i++)
-        cyanrip_init_track_encoding(ctx, t->enc_ctx, t,
+        cyanrip_init_track_encoding(ctx, &t->enc_ctx[i], t,
                                     ctx->settings.outputs[i]);
 
     return 0;
@@ -564,10 +580,81 @@ int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
 
 int cyanrip_finalize_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
 {
+    AVFilterContext *filt_ctx = t->dec_ctx->peak.graph->filters[1];
+
+    av_opt_get_double(filt_ctx, "integrated", AV_OPT_SEARCH_CHILDREN, &t->ebu_integrated);
+    av_opt_get_double(filt_ctx, "range", AV_OPT_SEARCH_CHILDREN, &t->ebu_range);
+    av_opt_get_double(filt_ctx, "lra_low", AV_OPT_SEARCH_CHILDREN, &t->ebu_lra_low);
+    av_opt_get_double(filt_ctx, "lra_high", AV_OPT_SEARCH_CHILDREN, &t->ebu_lra_high);
+    av_opt_get_double(filt_ctx, "sample_peak", AV_OPT_SEARCH_CHILDREN, &t->ebu_sample_peak);
+    av_opt_get_double(filt_ctx, "true_peak", AV_OPT_SEARCH_CHILDREN, &t->ebu_true_peak);
+
     cyanrip_free_filt_ctx(ctx, &t->dec_ctx->peak, 1);
     if (ctx->settings.decode_hdcd)
         cyanrip_log(ctx, 0, "\n  ");
+    else
+        cyanrip_log(ctx, 0, "\n");
     cyanrip_free_filt_ctx(ctx, &t->dec_ctx->filt, ctx->settings.decode_hdcd);
+
+    return 0;
+}
+
+int cyanrip_initialize_ebur128(cyanrip_ctx *ctx)
+{
+    int ret = 0;
+
+    cyanrip_dec_ctx *dec_ctx = av_mallocz(sizeof(*dec_ctx));
+    if (!dec_ctx)
+        return AVERROR(ENOMEM);
+    ctx->peak_ctx = dec_ctx;
+
+    ret = init_filtering(ctx, &dec_ctx->peak, 0, 0, 1);
+    if (ret < 0)
+        goto fail;
+
+    return 0;
+
+fail:
+    cyanrip_finalize_ebur128(ctx, 0);
+    return ret;
+}
+
+int cyanrip_finalize_ebur128(cyanrip_ctx *ctx, int log)
+{
+    cyanrip_dec_ctx *dec_ctx = ctx->peak_ctx;
+
+    if (!log)
+        goto end;
+
+    AVFilterContext *filt_ctx = dec_ctx->peak.graph->filters[1];
+
+    int ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, NULL,
+                                           AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                           AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+        cyanrip_free_filt_ctx(ctx, &dec_ctx->peak, 0);
+        av_freep(ctx->peak_ctx);
+        return ret;
+    }
+
+    av_opt_get_double(filt_ctx, "integrated", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_integrated);
+    av_opt_get_double(filt_ctx, "range", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_range);
+    av_opt_get_double(filt_ctx, "lra_low", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_lra_low);
+    av_opt_get_double(filt_ctx, "lra_high", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_lra_high);
+    av_opt_get_double(filt_ctx, "sample_peak", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_sample_peak);
+    av_opt_get_double(filt_ctx, "true_peak", AV_OPT_SEARCH_CHILDREN, &ctx->ebu_true_peak);
+
+    cyanrip_log(ctx, 0, "Album Loudness ");
+
+end:
+    if (ctx->peak_ctx) {
+        cyanrip_free_filt_ctx(ctx, &ctx->peak_ctx->peak, log);
+        if (log)
+            cyanrip_log(ctx, 0, "\n");
+    }
+
+    av_freep(&ctx->peak_ctx);
 
     return 0;
 }
@@ -703,6 +790,7 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     cr_frame_fifo_push(ctx->fifo, NULL);
     pthread_join(ctx->thread, NULL);
+    pthread_mutex_destroy(&ctx->lock);
 
     swr_free(&ctx->swr);
 
@@ -713,11 +801,39 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
     avformat_free_context(ctx->avf);
 
     av_buffer_unref(&ctx->fifo);
+    av_buffer_unref(&ctx->packet_fifo);
     av_free(ctx->out_avctx);
+    av_packet_free(&ctx->cover_art_pkt);
 
     int status = ctx->status;
     av_freep(s);
     return status;
+}
+
+static int open_output(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
+{
+    int ret;
+
+    /* Write header */
+    ret = avformat_write_header(s->avf, NULL);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Couldn't write header: %s!\n", av_err2str(ret));
+        goto fail;
+    }
+
+    /* Mux cover image */
+    if (s->cover_art_pkt) {
+        AVPacket *pkt = av_packet_clone(s->cover_art_pkt);
+        pkt->stream_index = s->st_img->index;
+        if ((ret = av_interleaved_write_frame(s->avf, pkt)) < 0) {
+            cyanrip_log(ctx, 0, "Error writing picture packet: %s!\n", av_err2str(ret));
+            goto fail;
+        }
+        av_packet_free(&pkt);
+    }
+
+fail:
+    return ret;
 }
 
 static void *cyanrip_track_encoding(void *ctx)
@@ -778,12 +894,21 @@ static void *cyanrip_track_encoding(void *ctx)
             /* Rescale timestamps to container */
             av_packet_rescale_ts(out_pkt, src_tb, dst_tb);
 
-            /* Send frame to lavf */
-            ret = av_interleaved_write_frame(s->avf, out_pkt);
-            if (ret < 0) {
-                cyanrip_log(s->ctx, 0, "Error writing packet: %s!\n", av_err2str(ret));
-                goto fail;
-            }
+            if (s->separate_writeout) {
+                /* Put encoded frame in FIFO */
+                ret = cr_packet_fifo_push(s->packet_fifo, out_pkt);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error pushing packet to FIFO: %s!\n", av_err2str(ret));
+                    goto fail;
+                }
+            } else {
+                /* Send frame to lavf */
+                ret = av_interleaved_write_frame(s->avf, out_pkt);
+                if (ret < 0) {
+                    cyanrip_log(s->ctx, 0, "Error writing packet: %s!\n", av_err2str(ret));
+                    goto fail;
+                }
+             }
 
             /* Reset the packet */
             av_packet_unref(out_pkt);
@@ -791,6 +916,34 @@ static void *cyanrip_track_encoding(void *ctx)
     }
 
 write_trailer:
+    av_packet_free(&out_pkt);
+
+    if (s->separate_writeout) {
+        ret = cr_packet_fifo_push(s->packet_fifo, NULL);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error pushing packet to FIFO: %s!\n", av_err2str(ret));
+            goto fail;
+        }
+
+        pthread_mutex_lock(&s->lock);
+        pthread_mutex_unlock(&s->lock);
+
+        if ((ret = open_output(s->ctx, s)) < 0) {
+            cyanrip_log(s->ctx, 0, "Error writing to file: %s!\n", av_err2str(ret));
+            goto fail;
+        }
+
+        while ((out_pkt = cr_packet_fifo_pop(s->packet_fifo))) {
+            /* Send frames to lavf */
+            ret = av_interleaved_write_frame(s->avf, out_pkt);
+            av_packet_free(&out_pkt);
+            if (ret < 0) {
+                cyanrip_log(s->ctx, 0, "Error writing packet: %s!\n", av_err2str(ret));
+                goto fail;
+            }
+        }
+    }
+
     if ((ret = av_write_trailer(s->avf)) < 0) {
         cyanrip_log(s->ctx, 0, "Error writing trailer: %s!\n", av_err2str(ret));
         goto fail;
@@ -804,6 +957,14 @@ fail:
     return NULL;
 }
 
+int cyanrip_writeout_track(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
+{
+    if (s->separate_writeout)
+        pthread_mutex_unlock(&s->lock);
+
+    return 0;
+}
+
 int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 cyanrip_track *t, enum cyanrip_output_formats format)
 {
@@ -812,11 +973,11 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     cyanrip_enc_ctx *s = av_mallocz(sizeof(*s));
     int deemphasis = (ctx->settings.deemphasis && t->preemphasis) || ctx->settings.force_deemphasis;
 
-    AVStream *st_aud = NULL;
-    AVStream *st_img = NULL;
     const AVCodec *out_codec = NULL;
 
     s->ctx = ctx;
+    s->cfmt = cfmt;
+    s->separate_writeout = ctx->settings.enable_replaygain;
     atomic_init(&s->status, 0);
 
     char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, 1, cfmt, t);
@@ -828,8 +989,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
 
-    st_aud = avformat_new_stream(s->avf, NULL);
-    if (!st_aud) {
+    s->st_aud = avformat_new_stream(s->avf, NULL);
+    if (!s->st_aud) {
         cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -847,16 +1008,17 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     if (art->pkt && cfmt->coverart_supported &&
         !ctx->settings.disable_coverart_embedding) {
-        st_img = avformat_new_stream(s->avf, NULL);
-        if (!st_img) {
+        s->st_img = avformat_new_stream(s->avf, NULL);
+        if (!s->st_img) {
             cyanrip_log(ctx, 0, "Unable to alloc stream!\n");
             ret = AVERROR(ENOMEM);
             goto fail;
         }
-        memcpy(st_img->codecpar, art->params, sizeof(AVCodecParameters));
-        st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
-        st_img->time_base = (AVRational){ 1, 25 };
-        av_dict_copy(&st_img->metadata, art->meta, 0);
+        memcpy(s->st_img->codecpar, art->params, sizeof(AVCodecParameters));
+        s->st_img->disposition |= AV_DISPOSITION_ATTACHED_PIC;
+        s->st_img->time_base = (AVRational){ 1, 25 };
+        av_dict_copy(&s->st_img->metadata, art->meta, 0);
+        s->cover_art_pkt = av_packet_clone(art->pkt);
     }
 
     /* Find encoder */
@@ -882,11 +1044,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Set primary audio stream's parameters */
-    st_aud->time_base = (AVRational){ 1, s->out_avctx->sample_rate };
-    s->audio_stream_index = st_aud->index;
-
-    /* Add metadata */
-    av_dict_copy(&s->avf->metadata, t->meta, 0);
+    s->st_aud->time_base = (AVRational){ 1, s->out_avctx->sample_rate };
+    s->audio_stream_index = s->st_aud->index;
 
     /* Open encoder */
     ret = avcodec_open2(s->out_avctx, out_codec, NULL);
@@ -896,7 +1055,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Set codecpar */
-    ret = avcodec_parameters_from_context(st_aud->codecpar, s->out_avctx);
+    ret = avcodec_parameters_from_context(s->st_aud->codecpar, s->out_avctx);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Couldn't copy codec params!\n");
         goto fail;
@@ -907,26 +1066,6 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Couldn't open %s: %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
         goto fail;
-    }
-    av_freep(&filename);
-
-    /* Write header */
-    ret = avformat_write_header(s->avf, NULL);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Couldn't write header: %s!\n", av_err2str(ret));
-        goto fail;
-    }
-
-    /* Mux cover image */
-    if (art->pkt && cfmt->coverart_supported &&
-        !ctx->settings.disable_coverart_embedding) {
-        AVPacket *pkt = av_packet_clone(art->pkt);
-        pkt->stream_index = st_img->index;
-        if ((ret = av_interleaved_write_frame(s->avf, pkt)) < 0) {
-            cyanrip_log(ctx, 0, "Error writing picture packet: %s!\n", av_err2str(ret));
-            goto fail;
-        }
-        av_packet_free(&pkt);
     }
 
     /* SWR */
@@ -939,6 +1078,27 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->fifo = cr_frame_fifo_create(-1, FRAME_FIFO_BLOCK_NO_INPUT);
     if (!s->fifo)
         goto fail;
+
+    /* Packet fifo */
+    if (s->separate_writeout) {
+        s->packet_fifo = cr_packet_fifo_create(-1, 0);
+        if (!s->packet_fifo)
+            goto fail;
+
+        ret = pthread_mutex_init(&s->lock, NULL);
+        if (ret != 0) {
+            ret = AVERROR(ret);
+            goto fail;
+        }
+
+        pthread_mutex_lock(&s->lock);
+    } else {
+        ret = open_output(ctx, s);
+        if (ret < 0)
+            goto fail;
+    }
+
+    av_freep(&filename);
 
     pthread_create(&s->thread, NULL, cyanrip_track_encoding, s);
 

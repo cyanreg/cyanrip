@@ -11,6 +11,7 @@ Features
  * [HDCD detection and decoding](#hdcd-decoding)
  * [CD Deemphasis (TOC + subcode)](#deemphasis)
  * [Multi-disc album ripping](#multi-disc-albums)
+ * [ReplayGain v2 tagging](#replaygain)
  * Able to encode to multiple formats in parallel
  * [Cover image embedding](#cover-art-embedding) in mp3, flac, aac and opus
  * Automatic [cover art image downloading](#cover-art-downloading)
@@ -95,7 +96,8 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
 | -E                   | Force CD deemphasis, for CDs mastered with preemphasis without actually signalling it       |
-| -W                   | Disable automatic CD deemphasis. Read below for details                                     |
+| -W                   | Disable automatic CD deemphasis. Read [below](#deemphasis) for details.                     |
+| -K                   | Disable ReplayGain tag generation. Read [replaygain](#replaygain) for details.              |
 |                      | **Output options**                                                                          |
 | -o `list`            | Comma separated list of output formats (encodings). Use "help" to list all. Default is flac |
 | -b `int`             | Bitrate in kbps for lossy formats, 256 by default                                           |
@@ -250,6 +252,12 @@ Action may be either `(deemphasis applied)`, which applies a deemphasis filter t
 The `-E` flag can be useful for some CDs, which may have been mastered with preemphasis, but don't actually signal it via the track substream properties.
 
 An incomplete list of releases mastered with preemphasis can be found at [this wiki page](https://www.studio-nibble.com/cd/index.php?title=Pre-emphasis_(release_list)).
+
+ReplayGain
+----------
+cyanrip will automatically compute ReplayGain tags and add them to all files while ripping. Note, that this requires to hold all **compressed** audio data for the entire CD in RAM while ripping, which may be from 300 to 600 megabytes, depending on the output used. Low-power and low-RAM devices can turn this off via the `-K` switch.
+
+The tags generated are ReplayGain 2.0 compliant, which is backwards-compatible with ReplayGain 1.0. The **true peak** value is calculated and used.
 
 
 Paranoia status count

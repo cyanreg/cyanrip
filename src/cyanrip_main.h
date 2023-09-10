@@ -110,6 +110,7 @@ typedef struct cyanrip_settings {
     int force_deemphasis;
     int ripping_retries;
     int disable_coverart_embedding;
+    int enable_replaygain;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -177,6 +178,14 @@ typedef struct cyanrip_track {
     int ar_db_nb_entries;
     int ar_db_max_confidence;
 
+    /* EBUR128 values */
+    double ebu_integrated;
+    double ebu_range;
+    double ebu_lra_low;
+    double ebu_lra_high;
+    double ebu_sample_peak;
+    double ebu_true_peak;
+
     struct cyanrip_track *pt;
     struct cyanrip_track *nt;
 
@@ -225,6 +234,15 @@ typedef struct cyanrip_ctx {
     CRSlidingWinCtx eta_ctx;
     lsn_t frames_read;
     lsn_t frames_to_read;
+
+    /* Album EBUR128 values */
+    struct cyanrip_dec_ctx *peak_ctx;
+    double ebu_integrated;
+    double ebu_range;
+    double ebu_lra_low;
+    double ebu_lra_high;
+    double ebu_sample_peak;
+    double ebu_true_peak;
 } cyanrip_ctx;
 
 typedef struct cyanrip_out_fmt {

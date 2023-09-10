@@ -39,5 +39,10 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t);
 int cyanrip_finalize_encoding(cyanrip_ctx *ctx, cyanrip_track *t);
 
+int cyanrip_initialize_ebur128(cyanrip_ctx *ctx);
+int cyanrip_finalize_ebur128(cyanrip_ctx *ctx, int log);
+
+int cyanrip_writeout_track(cyanrip_ctx *ctx, cyanrip_enc_ctx *enc_ctx);
+
 int cyanrip_end_track_encoding(cyanrip_enc_ctx **s);
 void cyanrip_free_dec_ctx(cyanrip_ctx *ctx, cyanrip_dec_ctx **s);

@@ -77,6 +77,7 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
     for (int i = 0; i < ctx->nb_cover_arts; i++)
         crip_free_art(&ctx->cover_arts[i]);
 
+    cyanrip_finalize_ebur128(ctx, 0);
     av_free(ctx->mb_submission_url);
 
     if (ctx->paranoia)
@@ -237,6 +238,51 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     cdio_get_media_changed(ctx->cdio);
 
     *s = ctx;
+    return 0;
+}
+
+#define REPLAYGAIN_REF_LOUDNESS (-18.0)
+
+static int crip_replaygain_meta_track(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    char temp[32];
+
+    snprintf(temp, sizeof(temp), "%.2f dB", REPLAYGAIN_REF_LOUDNESS - t->ebu_integrated);
+    av_dict_set(&t->meta, "REPLAYGAIN_TRACK_GAIN", temp, 0);
+
+    av_dict_set_int(&t->meta, "R128_TRACK_GAIN", lrintf((REPLAYGAIN_REF_LOUDNESS - t->ebu_integrated + 5) * 256), 0);
+
+    snprintf(temp, sizeof(temp), "%.2f dB", t->ebu_range);
+    av_dict_set(&t->meta, "REPLAYGAIN_TRACK_RANGE", temp, 0);
+
+    snprintf(temp, sizeof(temp), "%.6f", powf(10, t->ebu_true_peak / 20.0));
+    av_dict_set(&t->meta, "REPLAYGAIN_TRACK_PEAK", temp, 0);
+
+    snprintf(temp, sizeof(temp), "%.2f LUFS", REPLAYGAIN_REF_LOUDNESS);
+    av_dict_set(&t->meta, "REPLAYGAIN_REFERENCE_LOUDNESS", temp, 0);
+
+    return 0;
+}
+
+static int crip_replaygain_meta_album(cyanrip_ctx *ctx)
+{
+    char temp[32];
+
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
+        cyanrip_track *t = &ctx->tracks[i];
+
+        snprintf(temp, sizeof(temp), "%.2f dB", REPLAYGAIN_REF_LOUDNESS - ctx->ebu_integrated);
+        av_dict_set(&t->meta, "REPLAYGAIN_ALBUM_GAIN", temp, 0);
+
+        av_dict_set_int(&t->meta, "R128_ALBUM_GAIN", lrintf((REPLAYGAIN_REF_LOUDNESS - ctx->ebu_integrated + 5) * 256), 0);
+
+        snprintf(temp, sizeof(temp), "%.2f dB", ctx->ebu_range);
+        av_dict_set(&t->meta, "REPLAYGAIN_ALBUM_RANGE", temp, 0);
+
+        snprintf(temp, sizeof(temp), "%.6f", powf(10, ctx->ebu_true_peak / 20.0));
+        av_dict_set(&t->meta, "REPLAYGAIN_ALBUM_PEAK", temp, 0);
+    }
+
     return 0;
 }
 
@@ -754,6 +800,7 @@ end:
     t->total_repeats = total_repeats;
     if (!ret) {
         cyanrip_finalize_encoding(ctx, t);
+        crip_replaygain_meta_track(ctx, t);
         cyanrip_log_track_end(ctx, t);
         cyanrip_cue_track(ctx, t);
     } else {
@@ -1327,7 +1374,7 @@ end:
 int main(int argc, char **argv)
 {
     cyanrip_ctx *ctx = NULL;
-    cyanrip_settings settings;
+    cyanrip_settings settings = { 0 };
 
     av_log_set_level(AV_LOG_QUIET);
 
@@ -1359,6 +1406,8 @@ int main(int argc, char **argv)
     settings.eject_on_success_rip = 0;
     settings.outputs[0] = CYANRIP_FORMAT_FLAC;
     settings.outputs_num = 1;
+    settings.disable_coverart_embedding = 0;
+    settings.enable_replaygain = 1;
     settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, sizeof(settings.pregap_action));
@@ -1381,7 +1430,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEGWOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1397,6 +1446,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -H                    Enable HDCD decoding. Do this if you're sure disc is HDCD\n");
             cyanrip_log(ctx, 0, "    -E                    Force CD deemphasis\n");
             cyanrip_log(ctx, 0, "    -W                    Disable automatic CD deemphasis\n");
+            cyanrip_log(ctx, 0, "    -K                    Disable ReplayGain tagging\n");
             cyanrip_log(ctx, 0, "\n  Output options:\n");
             cyanrip_log(ctx, 0, "    -o <string>           Comma separated list of outputs\n");
             cyanrip_log(ctx, 0, "    -b <kbps>             Bitrate of lossy files in kbps\n");
@@ -1461,6 +1511,9 @@ int main(int argc, char **argv)
                 cyanrip_log(ctx, 0, "Invalid release index %i!\n", mb_release_idx);
                 return 1;
             }
+            break;
+        case 'K':
+            settings.enable_replaygain = 0;
             break;
         case 's':
             settings.offset = strtol(optarg, NULL, 10);
@@ -1983,6 +2036,9 @@ int main(int argc, char **argv)
     if (ctx->settings.rip_indices_count == -1) {
         ctx->frames_to_read = ctx->duration_frames;
 
+        if (!ctx->settings.print_info_only)
+            cyanrip_initialize_ebur128(ctx);
+
         for (int i = 0; i < ctx->nb_tracks; i++) {
             cyanrip_track *t = &ctx->tracks[i];
             if (ctx->settings.print_info_only) {
@@ -1995,12 +2051,52 @@ int main(int argc, char **argv)
                     break;
                 }
             } else {
+                /* Initialize */
+                int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                    goto end;
+                }
+
+                for (int j = 0; j < ctx->settings.outputs_num; j++) {
+                    ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                      ctx->settings.outputs[j]);
+                    if (ret < 0) {
+                        cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        goto end;
+                    }
+                }
+
                 if (cyanrip_rip_track(ctx, t))
                     break;
             }
 
             if (quit_now)
                 break;
+        }
+
+        cyanrip_finalize_ebur128(ctx, 1);
+
+        if (ctx->settings.enable_replaygain) {
+            crip_replaygain_meta_album(ctx);
+
+            /**
+             * Writeout tracks.
+             */
+            for (int i = 0; i < ctx->nb_tracks; i++) {
+                cyanrip_track *t = &ctx->tracks[i];
+
+                for (int j = 0; j < ctx->settings.outputs_num; j++) {
+                    int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
+                    if (ret < 0) {
+                        cyanrip_log(ctx, 0, "Error encoding: %s\n", av_err2str(ret));
+                        goto end;
+                    }
+                }
+
+                if (quit_now)
+                    break;
+            }
         }
     } else {
         for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
@@ -2050,34 +2146,7 @@ int main(int argc, char **argv)
             goto end;
         }
 
-        /**
-         * Initialize all encoders for all tracks here.
-         */
-        for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
-            idx = ctx->settings.rip_indices[i];
-
-            int j = 0;
-            for (; j < ctx->nb_tracks; j++) {
-                if (ctx->tracks[j].number == idx)
-                    break;
-            }
-
-            cyanrip_track *t = &ctx->tracks[j];
-
-            int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
-            if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
-                goto end;
-            }
-            for (j = 0; j < ctx->settings.outputs_num; j++) {
-                ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
-                                                  ctx->settings.outputs[j]);
-                if (ret < 0) {
-                    cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
-                    goto end;
-                }
-            }
-        }
+        cyanrip_initialize_ebur128(ctx);
 
         /**
          * Rip tracks.
@@ -2093,11 +2162,63 @@ int main(int argc, char **argv)
 
             cyanrip_track *t = &ctx->tracks[j];
 
-            if (cyanrip_rip_track(ctx, t))
-                break;
+            /* Initialize */
+            int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                goto end;
+            }
+
+            for (j = 0; j < ctx->settings.outputs_num; j++) {
+                ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                  ctx->settings.outputs[j]);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                    goto end;
+                }
+            }
+
+            /* Rip */
+            ret = cyanrip_rip_track(ctx, t);
+            if (ret < 0) {
+                cyanrip_log(ctx, 0, "Error ripping: %s\n", av_err2str(ret));
+                goto end;
+            }
 
             if (quit_now)
                 break;
+        }
+
+        cyanrip_finalize_ebur128(ctx, 1);
+
+        if (ctx->settings.enable_replaygain) {
+            crip_replaygain_meta_album(ctx);
+
+            /**
+             * Writeout tracks.
+             */
+            for (int i = 0; i < ctx->settings.rip_indices_count; i++) {
+                idx = ctx->settings.rip_indices[i];
+
+                int j = 0;
+                for (; j < ctx->nb_tracks; j++) {
+                    if (ctx->tracks[j].number == idx)
+                        break;
+                }
+
+                cyanrip_track *t = &ctx->tracks[j];
+
+                for (j = 0; j < ctx->settings.outputs_num; j++) {
+                    int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
+                    if (ret < 0) {
+                        cyanrip_log(ctx, 0, "Error encoding: %s\n", av_err2str(ret));
+                        goto end;
+                    }
+                }
+
+                if (quit_now)
+                    break;
+            }
         }
     }
 

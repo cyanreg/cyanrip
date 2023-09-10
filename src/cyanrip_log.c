@@ -107,7 +107,15 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 
     int has_ar = t->ar_db_status == CYANRIP_ACCUDB_FOUND;
 
-    cyanrip_log(ctx, 0, "    Accurip:     %s",
+    if (t->computed_crcs) {
+        cyanrip_log(ctx, 0, "\n  EAC CRC32:   %08X", t->eac_crc);
+        if (t->total_repeats)
+            cyanrip_log(ctx, 0, " (after %i rips)\n", t->total_repeats);
+        else
+            cyanrip_log(ctx, 0, "\n");
+    }
+
+    cyanrip_log(ctx, 0, "  Accurip:     %s",
                 ctx->settings.disable_accurip ? "disabled" :
                 has_ar ? "disc found in database" : "not found");
     if (has_ar)
@@ -116,12 +124,6 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "\n");
 
     if (t->computed_crcs) {
-        cyanrip_log(ctx, 0, "    EAC CRC32:   %08X", t->eac_crc);
-        if (t->total_repeats)
-            cyanrip_log(ctx, 0, " (after %i rips)\n", t->total_repeats);
-        else
-            cyanrip_log(ctx, 0, "\n");
-
         int match_v1 = has_ar ? crip_find_ar(t, t->acurip_checksum_v1, 0) : 0;
         int match_v2 = has_ar ? crip_find_ar(t, t->acurip_checksum_v2, 0) : 0;
 
