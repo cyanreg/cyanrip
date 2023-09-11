@@ -471,17 +471,15 @@ static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     int ret = 0;
     AVFrame *dec_frame = NULL;
 
-    if (calc_global_peak) {
-        ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, frame,
-                                           AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
-                                           AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
-        if (ret < 0) {
-            cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
-            goto fail;
-        }
+    ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, frame,
+                                       AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                       AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+        goto fail;
     }
 
-    if (frame) {
+    if (frame && calc_global_peak) {
         ret = av_buffersrc_add_frame_flags(ctx->peak_ctx->peak.buffersrc_ctx, frame,
                                            AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
                                            AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);

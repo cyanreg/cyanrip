@@ -550,7 +550,8 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     uint32_t nb_last_checksums = 0;
     uint32_t repeat_mode_encode = 0;
     uint32_t total_repeats = 0;
-    int calc_global_peak = 1;
+    int calc_global_peak_set = 0;
+    int calc_global_peak = !ctx->settings.ripping_retries;
 repeat_ripping:
     const int frames_before_disc_start = t->frames_before_disc_start;
     const int frames = t->frames;
@@ -755,8 +756,13 @@ repeat_ripping:
 
         /* If the next match may be the last one, start encoding */
         if ((matches + 1) >= ctx->settings.ripping_retries ||
-            (total_repeats + 1) >= ctx->settings.max_retries)
+            (total_repeats + 1) >= ctx->settings.max_retries) {
             repeat_mode_encode = 1;
+            if (!calc_global_peak_set) {
+                calc_global_peak_set = 1;
+                calc_global_peak = 1;
+            }
+        }
 
         cyanrip_log(ctx, 0, "\nRepeating ripping (%i out of %i matches for current checksum %08X)\n",
                     matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
