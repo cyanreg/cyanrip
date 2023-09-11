@@ -106,7 +106,7 @@ build_ffmpeg() {
         --enable-parser=png,mjpeg --enable-decoder=mjpeg,png \
         --enable-demuxer={image2,image_jpeg_pipe,image_png_pipe} \
         --enable-{bzlib,zlib,lzma,iconv} \
-        --enable-filter={hdcd,aemphasis,ebur128} \
+        --enable-filter={hdcd,aemphasis,ebur128,anullsink,aresample} \
         --enable-lib{mp3lame,vorbis,opus} \
         --enable-encoder={libmp3lame,libvorbis,libopus}
 }
