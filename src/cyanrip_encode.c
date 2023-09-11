@@ -52,6 +52,7 @@ struct cyanrip_enc_ctx {
     SwrContext *swr;
     AVCodecContext *out_avctx;
     atomic_int status;
+    atomic_int quit;
     int audio_stream_index;
 
     pthread_mutex_t lock;
@@ -463,17 +464,20 @@ static int push_frame_to_encs(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 }
 
 static int filter_frame(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
-                        int num_enc, cyanrip_dec_ctx *dec_ctx, AVFrame *frame)
+                        int num_enc, cyanrip_dec_ctx *dec_ctx, AVFrame *frame,
+                        int calc_global_peak)
 {
     int ret = 0;
     AVFrame *dec_frame = NULL;
 
-    ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, frame,
-                                       AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
-                                       AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
-    if (ret < 0) {
-        cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
-        goto fail;
+    if (calc_global_peak) {
+        ret = av_buffersrc_add_frame_flags(dec_ctx->peak.buffersrc_ctx, frame,
+                                           AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                           AV_BUFFERSRC_FLAG_KEEP_REF | AV_BUFFERSRC_FLAG_PUSH);
+        if (ret < 0) {
+            cyanrip_log(ctx, 0, "Error filtering frame: %s!\n", av_err2str(ret));
+            goto fail;
+        }
     }
 
     if (frame) {
@@ -529,7 +533,8 @@ fail:
 
 int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                  int num_enc, cyanrip_dec_ctx *dec_ctx,
-                                 const uint8_t *data, int bytes)
+                                 const uint8_t *data, int bytes,
+                                 int calc_global_peak)
 {
     int ret = 0;
     AVFrame *frame = NULL;
@@ -560,7 +565,7 @@ int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     memcpy(frame->data[0], data, bytes);
 
 send:
-    ret = filter_frame(ctx, enc_ctx, num_enc, dec_ctx, frame);
+    ret = filter_frame(ctx, enc_ctx, num_enc, dec_ctx, frame, calc_global_peak);
 fail:
     av_frame_free(&frame);
     return ret;
@@ -568,6 +573,14 @@ fail:
 
 int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
 {
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        cyanrip_enc_ctx *s = t->enc_ctx[i];
+
+        atomic_store(&s->quit, 1);
+        if (s->separate_writeout)
+            pthread_mutex_unlock(&s->lock);
+    }
+
     for (int i = 0; i < ctx->settings.outputs_num; i++)
         cyanrip_end_track_encoding(&t->enc_ctx[i]);
 
@@ -928,6 +941,9 @@ write_trailer:
         pthread_mutex_lock(&s->lock);
         pthread_mutex_unlock(&s->lock);
 
+        if (atomic_load(&s->quit))
+            goto fail;
+
         if ((ret = open_output(s->ctx, s)) < 0) {
             cyanrip_log(s->ctx, 0, "Error writing to file: %s!\n", av_err2str(ret));
             goto fail;
@@ -979,6 +995,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->cfmt = cfmt;
     s->separate_writeout = ctx->settings.enable_replaygain;
     atomic_init(&s->status, 0);
+    atomic_init(&s->quit, 0);
 
     char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, 1, cfmt, t);
 

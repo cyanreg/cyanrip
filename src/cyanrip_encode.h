@@ -34,7 +34,8 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                 cyanrip_track *t, enum cyanrip_output_formats format);
 int cyanrip_send_pcm_to_encoders(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
                                  int num_enc, cyanrip_dec_ctx *dec_ctx,
-                                 const uint8_t *data, int bytes);
+                                 const uint8_t *data, int bytes,
+                                 int calc_global_peak);
 
 int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t);
 int cyanrip_finalize_encoding(cyanrip_ctx *ctx, cyanrip_track *t);

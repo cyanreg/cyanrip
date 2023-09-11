@@ -550,6 +550,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     uint32_t nb_last_checksums = 0;
     uint32_t repeat_mode_encode = 0;
     uint32_t total_repeats = 0;
+    int calc_global_peak = 1;
 repeat_ripping:
     const int frames_before_disc_start = t->frames_before_disc_start;
     const int frames = t->frames;
@@ -579,7 +580,7 @@ repeat_ripping:
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
-                                               t->dec_ctx, data, bytes);
+                                               t->dec_ctx, data, bytes, calc_global_peak);
             if (ret) {
                 cyanrip_log(ctx, 0, "Error in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
@@ -634,7 +635,7 @@ repeat_ripping:
         /* Decode and encode */
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
-                                               t->dec_ctx, data, bytes);
+                                               t->dec_ctx, data, bytes, calc_global_peak);
             if (ret < 0) {
                 cyanrip_log(ctx, 0, "\nError in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
@@ -723,13 +724,15 @@ repeat_ripping:
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
-                                               t->dec_ctx, data, bytes);
+                                               t->dec_ctx, data, bytes, calc_global_peak);
             if (ret < 0) {
                 cyanrip_log(ctx, 0, "Error in decoding/sending frame: %s\n", av_err2str(ret));
                 goto fail;
             }
         }
     }
+
+    calc_global_peak = 0;
 
     crip_finalize_checksums(&checksum_ctx, t);
 
@@ -784,7 +787,7 @@ finalize_ripping:
 
     /* Flush encoders */
     ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
-                                       t->dec_ctx, NULL, 0);
+                                       t->dec_ctx, NULL, 0, 0);
     if (ret) {
         cyanrip_log(ctx, 0, "Error sending flush signal to encoders: %s\n", av_err2str(ret));
         return ret;
