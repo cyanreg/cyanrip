@@ -54,6 +54,7 @@ struct cyanrip_enc_ctx {
     atomic_int status;
     atomic_int quit;
     int audio_stream_index;
+    cyanrip_track *t;
 
     pthread_mutex_t lock;
 
@@ -827,6 +828,9 @@ static int open_output(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
 {
     int ret;
 
+    /* Add metadata */
+    av_dict_copy(&s->avf->metadata, s->t->meta, 0);
+
     /* Write header */
     ret = avformat_write_header(s->avf, NULL);
     if (ret < 0) {
@@ -991,6 +995,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     const AVCodec *out_codec = NULL;
 
+    s->t = t;
     s->ctx = ctx;
     s->cfmt = cfmt;
     s->separate_writeout = ctx->settings.enable_replaygain;
