@@ -2084,9 +2084,11 @@ int main(int argc, char **argv)
                 break;
         }
 
-        cyanrip_finalize_ebur128(ctx, 1);
+        if (!ctx->settings.print_info_only)
+            cyanrip_finalize_ebur128(ctx, 1);
 
-        if (ctx->settings.enable_replaygain) {
+        if (ctx->settings.enable_replaygain &&
+            !ctx->settings.print_info_only) {
             crip_replaygain_meta_album(ctx);
 
             /**
