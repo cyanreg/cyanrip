@@ -85,7 +85,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         t->dropped_pregap_start == CDIO_INVALID_LSN &&
         t->merged_pregap_end == CDIO_INVALID_LSN) {
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
-            fprintf(ctx->cuefile[Z], "  TRACK 02 AUDIO\n");
+            fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->number);
 
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
@@ -112,7 +112,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                 ctx->settings.outputs[Z] == CYANRIP_FORMAT_MP3 ? "MP3" :
                 t->track_is_data ? "BINARY" : "WAVE");
 
-        fprintf(ctx->cuefile[Z], "  TRACK 01 %s\n",
+        fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
                 t->track_is_data ? "MODE1/2352" : "AUDIO");
 
         av_free(path);
