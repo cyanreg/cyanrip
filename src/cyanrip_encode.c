@@ -56,6 +56,7 @@ struct cyanrip_enc_ctx {
     int audio_stream_index;
     cyanrip_track *t;
 
+    int mutex_held;
     pthread_mutex_t lock;
 
     AVStream *st_aud;
@@ -576,8 +577,8 @@ int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_enc_ctx *s = t->enc_ctx[i];
 
         atomic_store(&s->quit, 1);
-        if (s->separate_writeout)
-            pthread_mutex_unlock(&s->lock);
+        pthread_mutex_unlock(&s->lock);
+        s->mutex_held = 0;
     }
 
     for (int i = 0; i < ctx->settings.outputs_num; i++)
@@ -800,6 +801,13 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     ctx = *s;
 
+    atomic_store(&ctx->quit, 1);
+
+    if (ctx->mutex_held) {
+        pthread_mutex_unlock(&ctx->lock);
+        ctx->mutex_held = 0;
+    }
+
     cr_frame_fifo_push(ctx->fifo, NULL);
     pthread_join(ctx->thread, NULL);
     pthread_mutex_destroy(&ctx->lock);
@@ -872,6 +880,9 @@ static void *cyanrip_track_encoding(void *ctx)
             flushing = !out_frame;
         }
 
+        if (atomic_load(&s->quit))
+            goto fail;
+
         ret = audio_process_frame(ctx, &out_frame, flushing);
         if (ret == AVERROR(EAGAIN))
             continue;
@@ -940,6 +951,9 @@ write_trailer:
             goto fail;
         }
 
+        if (atomic_load(&s->quit))
+            goto fail;
+
         pthread_mutex_lock(&s->lock);
         pthread_mutex_unlock(&s->lock);
 
@@ -977,8 +991,10 @@ fail:
 
 int cyanrip_writeout_track(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
 {
-    if (s->separate_writeout)
+    if (s->mutex_held) {
         pthread_mutex_unlock(&s->lock);
+        s->mutex_held = 0;
+    }
 
     return 0;
 }
@@ -993,6 +1009,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     const AVCodec *out_codec = NULL;
 
+    s->mutex_held = 1;
     s->t = t;
     s->ctx = ctx;
     s->cfmt = cfmt;
@@ -1099,19 +1116,20 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     if (!s->fifo)
         goto fail;
 
+    /* File write lock */
+    ret = pthread_mutex_init(&s->lock, NULL);
+    if (ret != 0) {
+        ret = AVERROR(ret);
+        goto fail;
+    }
+    pthread_mutex_lock(&s->lock);
+    s->mutex_held = 1;
+
     /* Packet fifo */
     if (s->separate_writeout) {
         s->packet_fifo = cr_packet_fifo_create(-1, 0);
         if (!s->packet_fifo)
             goto fail;
-
-        ret = pthread_mutex_init(&s->lock, NULL);
-        if (ret != 0) {
-            ret = AVERROR(ret);
-            goto fail;
-        }
-
-        pthread_mutex_lock(&s->lock);
     } else {
         ret = open_output(ctx, s);
         if (ret < 0)
