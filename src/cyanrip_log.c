@@ -177,7 +177,7 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "%s\n", d->value);
     }
 
-    if (t->art.source_url || ctx->nb_cover_arts) {
+    if (!ctx->settings.disable_coverart_embedding && (t->art.source_url || ctx->nb_cover_arts)) {
         const char *codec_name = NULL;
         CRIPArt *art = &t->art;
         if (!art->source_url) {
