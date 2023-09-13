@@ -1,3 +1,15 @@
+next
+=====
+ - ReplayGain 2.0 scanning and tagging
+ - Preemphasis detection via both TOC and subchannel
+ - Automatic deemphasis
+ - CUE file writing
+ - Repeat ripping mode for affirmation or badly damaged discs
+ - Tagging improvements (setting the media_type tag)
+ - Logfile reorganization and checksumming
+ - Windows compatibility improvements
+ - Migration to new FFmpeg 6.0 APIs
+
 0.9.0
 =====
  - Improve MusicBrainz query result handling and detect stub releases
