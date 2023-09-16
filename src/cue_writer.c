@@ -85,7 +85,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         t->dropped_pregap_start == CDIO_INVALID_LSN &&
         t->merged_pregap_end == CDIO_INVALID_LSN) {
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
-            fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->number);
+            fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->index);
 
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");

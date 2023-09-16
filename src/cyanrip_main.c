@@ -195,6 +195,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
+        t->index = i + 1;
         t->number = t->cd_track_number = i + first_track_nb;
         t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
         t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
@@ -1006,10 +1007,11 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
             setup_track_lsn(ctx, t);
     }
 
-    /* Setup next/previous pointers */
+    /* Setup next/previous pointers and redo track indices */
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
+        t->index = i + 1;
         t->pt = i ? &ctx->tracks[i - 1] : NULL;
         t->nt = i != (ctx->nb_tracks - 1) ? &ctx->tracks[i + 1] : NULL;
     }
