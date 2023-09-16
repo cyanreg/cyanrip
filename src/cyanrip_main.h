@@ -140,7 +140,7 @@ typedef struct cyanrip_track {
     int cd_track_number; /* Actual track on the CD, may be 0 */
     AVDictionary *meta; /* Disc's AVDictionary gets copied here */
     int total_repeats; /* How many times the track was re-ripped */
-    int index + 1; /* Array position + 1 */
+    int index; /* Array position + 1 */
 
     int track_is_data;
     int preemphasis;
