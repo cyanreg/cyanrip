@@ -65,6 +65,33 @@ docker pull ep76/cyanrip
 
 If the latest build is broken, you can find older ones in the [nightly release page](https://github.com/cyanreg/cyanrip/releases/tag/nightly)
 
+### Snap Store
+
+cyanrip is available as a snap package on supported Linux distros. Install the snapd service following the [instructions](https://snapcraft.io/docs/installing-snapd).
+
+Install cyanrip:
+```bash
+snap install cyanrip
+```
+
+#### Building the snap (testing only)
+
+Currently only supported on amd64 Linux systems. Tested on Ubuntu 22.04 which is also the recommended build environment. Install snapcraft per the [instructions](https://snapcraft.io/docs/snapcraft-overview):
+```bash
+snap install snapcraft --classic
+lxd init --auto
+```
+
+From the root of the source code directory:
+```bash
+snapcraft
+```
+
+Resulting snap will **not** be signed and must be installed in devmode:
+```bash
+snap install cyanrip_<version>_amd64.snap --devmode
+```
+
 ### Compiling
 Complete list of dependencies:
 
