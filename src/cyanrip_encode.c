@@ -132,7 +132,7 @@ const char *cyanrip_fmt_folder(enum cyanrip_output_formats format)
     return format < CYANRIP_FORMATS_NB ? crip_fmt_info[format].folder_suffix : NULL;
 }
 
-static const AVChannelLayout pick_codec_channel_layout(const AVCodec *codec)
+static AVChannelLayout pick_codec_channel_layout(const AVCodec *codec)
 {
     int i = 0;
     int max_channels = 0;
