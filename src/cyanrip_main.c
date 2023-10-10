@@ -699,7 +699,7 @@ repeat_ripping:
                                  ", ETA - %im", minutes);
         else
             line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %lis", seconds);
+                                 ", ETA - %" PRId64 "s", seconds);
 
         if (ctx->total_error_count - start_err)
             line_len += snprintf(line + line_len, sizeof(line) - line_len,

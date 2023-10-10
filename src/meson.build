@@ -9,6 +9,11 @@ build_opts = [
     '-Werror=implicit-function-declaration',
 ]
 
+#fix for MinGW32
+if host_machine.system() == 'windows' and cc.sizeof('void*') == 4
+  build_opts += '-D__MINGW_USE_VC2005_COMPAT'
+endif
+
 static_build = get_option('default_library') == 'static'
 
 # Required dependencies
