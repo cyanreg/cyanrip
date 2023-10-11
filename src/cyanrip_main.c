@@ -553,7 +553,7 @@ static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
     uint32_t total_repeats = 0;
     int calc_global_peak_set = 0;
     int calc_global_peak = !ctx->settings.ripping_retries;
-repeat_ripping:
+repeat_ripping:;
     const int frames_before_disc_start = t->frames_before_disc_start;
     const int frames = t->frames;
     const int frames_after_disc_end = t->frames_after_disc_end;
