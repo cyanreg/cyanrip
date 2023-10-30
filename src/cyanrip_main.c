@@ -810,7 +810,8 @@ end:
     t->total_repeats = total_repeats;
     if (!ret) {
         cyanrip_finalize_encoding(ctx, t);
-        crip_replaygain_meta_track(ctx, t);
+        if (ctx->settings.enable_replaygain)
+            crip_replaygain_meta_track(ctx, t);
         cyanrip_log_track_end(ctx, t);
         cyanrip_cue_track(ctx, t);
     } else {
