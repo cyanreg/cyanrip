@@ -32,6 +32,11 @@ pacaur -S cyanrip
 ```
 Or use your favorite AUR installation method.
 
+### Debian (and derivatives)
+```bash
+apt install cyanrip
+```
+
 ### Void Linux
 ```bash
 xbps-install -S cyanrip
