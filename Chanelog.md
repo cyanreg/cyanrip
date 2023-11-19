@@ -1,4 +1,4 @@
-next
+0.9.2
 =====
  - ReplayGain 2.0 scanning and tagging
  - Preemphasis detection via both TOC and subchannel
