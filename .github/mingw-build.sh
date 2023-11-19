@@ -90,7 +90,7 @@ build_neon() {
 }
 
 build_libmusicbrainz() {
-    cyan_do_vcs "https://github.com/wiiaboo/libmusicbrainz.git" &&
+    cyan_do_vcs "https://github.com/metabrainz/libmusicbrainz.git" &&
     cyan_do_cmakeinstall
 }
 
