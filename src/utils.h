@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#pragma once
+
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>
@@ -37,6 +39,8 @@ typedef struct CRSlidingWinCtx {
 
 int64_t cr_sliding_win(CRSlidingWinCtx *ctx, int64_t num, int64_t pts,
                        AVRational tb, int64_t len, int do_avg);
+
+char *cr_ffmpeg_file_path(const char *path);
 
 static inline const char *dict_get(AVDictionary *dict, const char *key)
 {

@@ -22,6 +22,7 @@
 
 #include "coverart.h"
 #include "cyanrip_log.h"
+#include "utils.h"
 
 #define COVERART_DB_URL_BASE "http://coverartarchive.org/release"
 
@@ -38,8 +39,14 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     if (!filepath)
         return 0;
 
+    char *ffpath = cr_ffmpeg_file_path(filepath);
+    if (!ffpath) {
+        av_free(filepath);
+        return 0;
+    }
+
     AVFormatContext *avf = NULL;
-    ret = avformat_alloc_output_context2(&avf, NULL, NULL, filepath);
+    ret = avformat_alloc_output_context2(&avf, NULL, NULL, ffpath);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context: %s!\n", av_err2str(ret));
         goto fail;
@@ -58,12 +65,11 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     av_dict_copy(&avf->metadata, art->meta, 0);
 
     /* Open for writing */
-    ret = avio_open(&avf->pb, filepath, AVIO_FLAG_WRITE);
+    ret = avio_open(&avf->pb, ffpath, AVIO_FLAG_WRITE);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Couldn't open %s for writing: %s!\n", filepath, av_err2str(ret));
         goto fail;
     }
-    av_freep(&filepath);
 
     /* Silence libavformat warning */
     AVDictionary *opts = NULL;
@@ -79,11 +85,13 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
 
     AVPacket *pkt = av_packet_clone(art->pkt);
     pkt->stream_index = st->index;
+
+    ret = av_interleaved_write_frame(avf, pkt);
+    av_packet_free(&pkt);
     if ((ret = av_interleaved_write_frame(avf, pkt)) < 0) {
         cyanrip_log(ctx, 0, "Error writing picture packet: %s!\n", av_err2str(ret));
         goto fail;
     }
-    av_packet_free(&pkt);
 
     if ((ret = av_write_trailer(avf)) < 0) {
         cyanrip_log(ctx, 0, "Error writing trailer: %s!\n", av_err2str(ret));
@@ -91,6 +99,9 @@ int crip_save_art(cyanrip_ctx *ctx, CRIPArt *art, const cyanrip_out_fmt *fmt)
     }
 
 fail:
+    av_free(filepath);
+    av_free(ffpath);
+
     if (avf)
         avio_closep(&avf->pb);
     avformat_free_context(avf);

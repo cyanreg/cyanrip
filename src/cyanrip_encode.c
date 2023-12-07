@@ -1019,8 +1019,11 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, 1, cfmt, t);
 
+    /* Filename with protocol override */
+    char *ffpath = cr_ffmpeg_file_path(filename);
+
     /* lavf init */
-    ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, filename);
+    ret = avformat_alloc_output_context2(&s->avf, NULL, cfmt->lavf_name, ffpath);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Unable to init lavf context: %s!\n", av_err2str(ret));
         goto fail;
@@ -1099,7 +1102,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     }
 
     /* Open for writing */
-    ret = avio_open(&s->avf->pb, filename, AVIO_FLAG_WRITE);
+    ret = avio_open(&s->avf->pb, ffpath, AVIO_FLAG_WRITE);
     if (ret < 0) {
         cyanrip_log(ctx, 0, "Couldn't open %s: %s! Invalid folder name? Try -D <folder>.\n", filename, av_err2str(ret));
         goto fail;
@@ -1145,6 +1148,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     return 0;
 
 fail:
+    av_free(ffpath);
     av_free(filename);
     cyanrip_end_track_encoding(&s);
 

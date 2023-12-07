@@ -17,6 +17,8 @@
  */
 
 #include "utils.h"
+#include <libavutil/avstring.h>
+#include <libavutil/mem.h>
 
 int64_t cr_sliding_win(CRSlidingWinCtx *ctx, int64_t num, int64_t pts,
                        AVRational tb, int64_t len, int do_avg)
@@ -56,4 +58,17 @@ calc:
         sum /= ctx->num_entries;
 
     return sum;
+}
+
+char *cr_ffmpeg_file_path(const char *path)
+{
+    const char *file_proto = "file:";
+    const int len = strlen(path) + strlen(file_proto) + 1;
+    char *rep_str = av_mallocz(len);
+    if (!rep_str)
+        return NULL;
+
+    av_strlcpy(rep_str, file_proto, len);
+    av_strlcat(rep_str, path, len);
+    return rep_str;
 }
