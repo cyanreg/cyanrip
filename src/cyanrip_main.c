@@ -92,7 +92,6 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
 
     free(ctx->settings.dev_path);
     av_dict_free(&ctx->meta);
-    av_freep(&ctx->base_dst_folder);
     av_freep(&ctx);
 
     *s = NULL;

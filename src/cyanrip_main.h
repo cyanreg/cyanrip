@@ -222,9 +222,7 @@ typedef struct cyanrip_ctx {
     AVDictionary *meta;
     enum CRIPAccuDBStatus ar_db_status;
 
-    /* Destination folder */
-    const char *base_dst_folder;
-
+    /* State */
     int success;
     int total_error_count;
     lsn_t start_lsn;
