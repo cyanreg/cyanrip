@@ -1,0 +1,97 @@
+name: cyanrip
+base: core22
+version: git
+summary: Fully featured CD ripping program able to take out most of the tedium
+license: LGPL-2.1-or-later
+description: |
+  Fully featured CD ripping program able to take out most of the tedium. Fully
+  accurate, has advanced features most rippers don't, yet has no bloat and is
+  cross-platform.
+
+contact: https://github.com/cyanreg/
+issues: https://github.com/cyanreg/cyanrip/issues
+source-code: https://github.com/cyanreg/cyanrip
+architectures:
+  # TODO: test other archs
+  - build-on: [amd64]
+    build-for: [amd64]
+grade: devel # must be 'stable' to release into candidate/stable channels
+confinement: strict
+
+parts:
+  part-ffmpeg:
+    # Ubuntu 22.04 LTS bundles too old ffmpeg libraries, so build it here
+    # TODO: tests? https://ffmpeg.org/fate.html
+    plugin: autotools
+    source: https://git.ffmpeg.org/ffmpeg.git
+    source-branch: release/6.1
+    autotools-configure-parameters: [
+      # TODO: consider refactoring with build_ffmpeg() in mingw-build.sh
+      '--prefix="/usr"',
+      '--disable-autodetect',
+      '--disable-programs',
+      '--disable-doc',
+      '--disable-avdevice',
+      '--disable-swscale',
+      '--disable-postproc',
+      '--disable-network',
+      '--disable-bsfs',
+      '--disable-devices',
+      '--enable-shared',
+      '--enable-pthreads',
+      '--enable-bzlib',
+      '--enable-iconv',
+      '--enable-libfdk-aac',
+      '--enable-libmp3lame',
+      '--enable-libopus',
+      '--enable-libvorbis',
+      '--enable-lzma',
+      '--enable-zlib',
+    ]
+    build-packages:
+      - autoconf
+      - automake
+      - build-essential
+      - cmake
+      - git-core
+      - libbz2-dev
+      - libfdk-aac-dev
+      - libjconv-dev
+      - liblzma-dev
+      - libmp3lame-dev
+      - libopus-dev
+      - libtool
+      - libvorbis-dev
+      - yasm
+      - zlib1g-dev
+    stage-packages:
+      - libfdk-aac2
+      - libmp3lame0
+      - libopus0
+      - libvorbisenc2
+      
+  part-cyanrip:
+    after: [part-ffmpeg]
+    plugin: meson
+    meson-parameters: ['--prefix=/usr']
+    source: .
+    # TODO: override-pull can be used to parse `git describe` and set
+    #   grade/version accordingly (for tarball builds, etc.)
+    build-packages:
+      - gcc
+      - meson
+      - ninja-build
+      - libcdio-paranoia-dev
+      - libmusicbrainz5-dev
+      - libcurl4-openssl-dev
+    stage-packages:
+      - libcdio-paranoia2
+      - libcurl4
+      - libmusicbrainz5-2
+      
+apps:
+  cyanrip:
+    command: /usr/bin/cyanrip
+    plugs:
+      - network
+      - optical-drive
