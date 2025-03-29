@@ -987,7 +987,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         if (ct->start_lsn == (lt->end_lsn + 1))
             continue;
 
-        int discont_frames = ct->start_lsn - lt->end_lsn;
+        int discont_frames = ct->start_lsn - lt->end_lsn - 1;
 
         cyanrip_log(ctx, 0, "    %i frame discontinuity between tracks %i and %i, ",
                     discont_frames, ct->number, lt->number);

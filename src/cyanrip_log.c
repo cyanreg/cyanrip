@@ -36,7 +36,7 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (t->pregap_lsn != CDIO_INVALID_LSN) {
         char pregap_duration[16];
-        cyanrip_frames_to_duration(t->start_lsn - t->pregap_lsn, pregap_duration);
+        cyanrip_frames_to_duration(t->start_lsn_sig - t->pregap_lsn, pregap_duration);
 
         cyanrip_log(ctx, 0, "    Pregap LSN:  %i (duration: %s)\n",
                     t->pregap_lsn, pregap_duration);
