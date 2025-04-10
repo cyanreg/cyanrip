@@ -575,8 +575,6 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     const int iso = ctx->settings.data_as_iso;
-    int offset_frames = iso ? 0 : (ctx->settings.offset << 2) / CDIO_CD_FRAMESIZE_RAW;
-    int offset_bytes = iso ? 0 : (ctx->settings.offset << 2) % CDIO_CD_FRAMESIZE_RAW;
 
 repeat_ripping:;
     cyanrip_checksum_ctx checksum_ctx;
@@ -585,6 +583,9 @@ repeat_ripping:;
     int next_lsn = t->start_lsn;
     int frames_done = 0;
     int tries = 0;
+    int sync_found = 0;
+    int offset_frames = 0;
+    int offset_bytes = 0;
     while (frames_done < t->frames) {
         if (quit_now)
             return AVERROR(EINVAL);
@@ -613,18 +614,37 @@ repeat_ripping:;
             memset(buf, 0, framesize*2);
         }
 
-        uint8_t *frameptr = buf + offset_bytes;
+        uint8_t *frameptr;
 
-        if (!iso) {
-            for (int i=0; i<CDIO_CD_SYNC_SIZE; i++) {
-                if (frameptr[i] != CDIO_SECTOR_SYNC_HEADER[i])
-                    printf("bad sync header\n");
+        if (iso) {
+            frameptr = buf;
+        } else {
+            if (!sync_found) {
+                for (offset_bytes=0; offset_bytes<CDIO_CD_FRAMESIZE_RAW; offset_bytes++)
+                    if (!memcmp(&buf[offset_bytes], CDIO_SECTOR_SYNC_HEADER, CDIO_CD_SYNC_SIZE))
+                        break;
+                printf("Detected sync with %d byte offset\n", offset_bytes);
+                sync_found = 1;
+            }
+
+            frameptr = buf + offset_bytes;
+            if (memcmp(&buf[offset_bytes], CDIO_SECTOR_SYNC_HEADER, CDIO_CD_SYNC_SIZE)) {
+                printf("did not find sync header at lsn %d\n", next_lsn);
+                exit(1);    // needs strategy to handle
             }
 
             uint16_t poly = 1;
             for (int i=CDIO_CD_SYNC_SIZE; i<framesize; i++) {
                 frameptr[i] ^= poly;
                 poly = (((poly ^ (poly >> 1)) & 0xff) << 7) ^ (poly >> 8);
+            }
+
+            lsn_t lsn = cdio_msf_to_lsn((msf_t*)&frameptr[12]);
+
+            if (lsn != next_lsn) {
+                printf("Detected sync with %d frame offset\n", next_lsn - lsn);
+                offset_frames += next_lsn - lsn;
+                continue;
             }
         }
 
