@@ -199,6 +199,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return AVERROR(EINVAL);
     }
 
+    ctx->nb_data_tracks = 0;
     int first_track_nb = cdio_get_first_track_num(ctx->cdio);
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
@@ -223,6 +224,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         t->end_lsn_sig = t->end_lsn;
 
         if (t->track_is_data) {
+            ctx->nb_data_tracks += 1;
             if (ctx->settings.pregap_action[t->number - 1] == CYANRIP_PREGAP_DEFAULT)
                 ctx->settings.pregap_action[t->number - 1] = CYANRIP_PREGAP_DROP;
             if (ctx->settings.pregap_action[t->number - 0] == CYANRIP_PREGAP_DEFAULT)
