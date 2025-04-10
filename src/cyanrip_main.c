@@ -567,14 +567,16 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     const int framesize = ctx->settings.data_as_iso ? CDIO_CD_FRAMESIZE : CDIO_CD_FRAMESIZE_RAW;
-    const int frames_per_read = 1;
-    const int bytes = frames_per_read * framesize;
-    buf = av_mallocz(bytes);
+    buf = av_mallocz(framesize * 2);
     if (!buf) {
         cyanrip_log(ctx, 0, "Unable to allocate memory\n");
         ret = AVERROR(ENOMEM);
         goto out;
     }
+
+    const int iso = ctx->settings.data_as_iso;
+    int offset_frames = iso ? 0 : (ctx->settings.offset << 2) / CDIO_CD_FRAMESIZE_RAW;
+    int offset_bytes = iso ? 0 : (ctx->settings.offset << 2) % CDIO_CD_FRAMESIZE_RAW;
 
 repeat_ripping:;
     cyanrip_checksum_ctx checksum_ctx;
@@ -587,19 +589,17 @@ repeat_ripping:;
         if (quit_now)
             return AVERROR(EINVAL);
 
-        const int frames_to_do = FFMIN(frames_per_read, t->frames - frames_done);
-        const int full = !ctx->settings.data_as_iso;
-        printf("Reading %d/%d ending %d\n", frames_done, t->frames, frames_done + frames_to_do);
-        driver_return_code_t drc = mmc_read_cd(ctx->cdio, buf, next_lsn,
-                                               0,  // any sector type
-                                               0,  // do not mask digital audio errors
-                                               full ? 1 : 0,  // return sync header
-                                               full ? 3 : 0,  // full sector header
-                                               1,  // return user data
-                                               full ? 1 : 0,  // return edc/ecc
-                                               0,  // do not return C2 correction info
-                                               0,  // do not return subchannel data
-                                               framesize, frames_to_do);
+        printf("Reading %d/%d\n", frames_done, t->frames);
+        driver_return_code_t drc = mmc_read_cd(ctx->cdio, buf, next_lsn + offset_frames,
+                                               iso ? 0 : 1,  // sector type (any / audio)
+                                               0,   // do not mask digital audio errors
+                                               0,   // do not return sync header
+                                               0,   // full sector header
+                                               1,   // return user data
+                                               0,   // return edc/ecc
+                                               0,   // do not return C2 correction info
+                                               0,   // do not return subchannel data
+                                               framesize, iso ? 1 : 2);
 
         if (drc == DRIVER_OP_SUCCESS) {
             tries = 0;
@@ -610,15 +610,30 @@ repeat_ripping:;
             if (tries < ctx->settings.max_retries)
                 continue;
             tries = 0;
-            memset(buf, 0, bytes);
+            memset(buf, 0, framesize*2);
         }
 
-        crip_process_checksums(&checksum_ctx, buf, bytes);
+        uint8_t *frameptr = buf + offset_bytes;
+
+        if (!iso) {
+            for (int i=0; i<CDIO_CD_SYNC_SIZE; i++) {
+                if (frameptr[i] != CDIO_SECTOR_SYNC_HEADER[i])
+                    printf("bad sync header\n");
+            }
+
+            uint16_t poly = 1;
+            for (int i=CDIO_CD_SYNC_SIZE; i<framesize; i++) {
+                frameptr[i] ^= poly;
+                poly = (((poly ^ (poly >> 1)) & 0xff) << 7) ^ (poly >> 8);
+            }
+        }
+
+        crip_process_checksums(&checksum_ctx, frameptr, framesize);
 
         for (int i = 0; i < ctx->settings.outputs_num; i++)
-            fwrite(buf, framesize, frames_to_do, binfps[i]);
-        frames_done += frames_to_do;
-        next_lsn += frames_to_do;
+            fwrite(frameptr, framesize, 1, binfps[i]);
+        frames_done += 1;
+        next_lsn += 1;
     }
 
     crip_finalize_checksums(&checksum_ctx, t);
