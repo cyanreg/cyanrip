@@ -30,6 +30,7 @@
 
 #include <cdio/paranoia/paranoia.h>
 #include <cdio/audio.h>
+#include <cdio/mmc_ll_cmds.h>
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
@@ -120,6 +121,7 @@ typedef struct cyanrip_settings {
     int disable_coverart_embedding;
     enum coverart_lookup_sizes coverart_lookup_size;
     int enable_replaygain;
+    int data_as_iso;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;

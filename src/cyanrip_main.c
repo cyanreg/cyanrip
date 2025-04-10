@@ -18,6 +18,7 @@
 
 #include <time.h>
 #include <getopt.h>
+#include <stdio.h>
 #include <sys/stat.h>
 
 #ifdef _WIN32
@@ -538,6 +539,139 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
             }
         }
     }
+}
+
+static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    int ret = 0;
+    uint32_t total_repeats = 0;
+    uint32_t *last_checksums = NULL;
+    uint32_t nb_last_checksums = 0;
+
+    FILE *binfps[CYANRIP_FORMATS_NB] = {0};
+    uint8_t *buf = NULL;
+
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        const cyanrip_out_fmt *cfmt = &crip_fmt_info[ctx->settings.outputs[i]];
+        char *filename = crip_get_path(ctx, CRIP_PATH_TRACK, 1, cfmt, t);
+        binfps[i] = fopen(filename, "wb");
+        av_free(filename);
+
+        if (!binfps[i]) {
+            cyanrip_log(ctx, 0, "Unable to open output file %s\n", filename);
+            ret = AVERROR(EINVAL);
+            goto out;
+        }
+    }
+
+    const int framesize = ctx->settings.data_as_iso ? CDIO_CD_FRAMESIZE : CDIO_CD_FRAMESIZE_RAW;
+    const int frames_per_read = 1;
+    const int bytes = frames_per_read * framesize;
+    buf = av_mallocz(bytes);
+    if (!buf) {
+        cyanrip_log(ctx, 0, "Unable to allocate memory\n");
+        ret = AVERROR(ENOMEM);
+        goto out;
+    }
+
+repeat_ripping:;
+    cyanrip_checksum_ctx checksum_ctx;
+    crip_init_checksum_ctx(ctx, &checksum_ctx, t);
+
+    int next_lsn = t->start_lsn;
+    int frames_done = 0;
+    int tries = 0;
+    while (frames_done < t->frames) {
+        if (quit_now)
+            return AVERROR(EINVAL);
+
+        const int frames_to_do = FFMIN(frames_per_read, t->frames - frames_done);
+        const int full = !ctx->settings.data_as_iso;
+        printf("Reading %d/%d ending %d\n", frames_done, t->frames, frames_done + frames_to_do);
+        driver_return_code_t drc = mmc_read_cd(ctx->cdio, buf, next_lsn,
+                                               0,  // any sector type
+                                               0,  // do not mask digital audio errors
+                                               full ? 1 : 0,  // return sync header
+                                               full ? 3 : 0,  // full sector header
+                                               1,  // return user data
+                                               full ? 1 : 0,  // return edc/ecc
+                                               0,  // do not return C2 correction info
+                                               0,  // do not return subchannel data
+                                               framesize, frames_to_do);
+
+        if (drc == DRIVER_OP_SUCCESS) {
+            tries = 0;
+        } else {
+            const char *msg = cdio_driver_errmsg(drc);
+            cyanrip_log(ctx, 0, "Read error: %s\n", msg);
+            tries += 1;
+            if (tries < ctx->settings.max_retries)
+                continue;
+            tries = 0;
+            memset(buf, 0, bytes);
+        }
+
+        crip_process_checksums(&checksum_ctx, buf, bytes);
+
+        for (int i = 0; i < ctx->settings.outputs_num; i++)
+            fwrite(buf, framesize, frames_to_do, binfps[i]);
+        frames_done += frames_to_do;
+        next_lsn += frames_to_do;
+    }
+
+    crip_finalize_checksums(&checksum_ctx, t);
+    printf("crc: %x\n", checksum_ctx.eac_crc);
+
+    if (ctx->settings.ripping_retries) {
+        int matches = 0;
+        for (int i = 0; i < nb_last_checksums; i++)
+            matches += last_checksums[i] == checksum_ctx.eac_crc;
+
+        total_repeats++;
+        if (matches >= ctx->settings.ripping_retries) {
+            cyanrip_log(ctx, 0, "\nDone; (%i out of %i matches for current checksum %08X)\n",
+                        matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
+            goto finalize_ripping;
+        }
+        if (total_repeats >= ctx->settings.max_retries) {
+            cyanrip_log(ctx, 0, "\nDone; (no matches found, but hit repeat limit of %i)\n",
+                        ctx->settings.max_retries);
+            goto finalize_ripping;
+        }
+
+        cyanrip_log(ctx, 0, "\nRepeating ripping (%i out of %i matches for current checksum %08X)\n",
+                    matches, ctx->settings.ripping_retries, checksum_ctx.eac_crc);
+
+        last_checksums = av_realloc(last_checksums,
+                                    (nb_last_checksums + 1)*sizeof(*last_checksums));
+        if (!last_checksums) {
+            ret = AVERROR(ENOMEM);
+            goto out;
+        }
+
+        last_checksums[nb_last_checksums] = checksum_ctx.eac_crc;
+        nb_last_checksums++;
+
+        for (int i = 0; i < ctx->settings.outputs_num; i++)
+            fseek(binfps[i], 0, SEEK_SET);
+
+        goto repeat_ripping;
+    }
+
+finalize_ripping:
+
+    cyanrip_log_track_end(ctx, t);
+    cyanrip_cue_track(ctx, t);
+
+out:
+    for (int i = 0; i < ctx->settings.outputs_num; i++)
+        if (binfps[i])
+            fclose(binfps[i]);
+
+    if (buf)
+        av_free(buf);
+
+    return ret;
 }
 
 static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -1375,7 +1509,10 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
         if (process_cond(ctx, &buf, t->meta, fmt->name, &dir_list, &dir_list_nb,
                          ctx->settings.track_name_scheme))
             goto end;
-        ext = av_strdup(t->track_is_data ? "bin" : fmt->ext);
+        if (t->track_is_data)
+            ext = av_strdup(ctx->settings.data_as_iso ? "iso" : "bin");
+        else
+            ext = av_strdup(fmt->ext);
     }
 
     if (ext)
@@ -1440,6 +1577,7 @@ int main(int argc, char **argv)
     settings.disable_coverart_embedding = 0;
     settings.enable_replaygain = 1;
     settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
+    settings.data_as_iso = 0;
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, 198*sizeof(*settings.pregap_action));
 
@@ -1462,7 +1600,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOil:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1488,6 +1626,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -M <string>           CUE file name scheme, by default its \"%s\"\n", settings.cue_name_scheme);
             cyanrip_log(ctx, 0, "    -l <list>             Select which tracks to rip (default: all)\n");
             cyanrip_log(ctx, 0, "    -T <string>           Filename sanitation: simple, os_simple, unicode (default), os_unicode\n");
+            cyanrip_log(ctx, 0, "    -i                    Rip data tracks as ISO files (default: .bin with mode1/2352 sectors)\n");
             cyanrip_log(ctx, 0, "\n  Metadata options:\n");
             cyanrip_log(ctx, 0, "    -I                    Only print CD and track info\n");
             cyanrip_log(ctx, 0, "    -a <string>           Album metadata, key=value:key=value\n");
@@ -1640,6 +1779,9 @@ int main(int argc, char **argv)
             break;
         case 'O':
             settings.overread_leadinout = 1;
+            break;
+        case 'i':
+            settings.data_as_iso = 1;
             break;
         case 'Z':
             settings.ripping_retries = strtol(optarg, NULL, 10);
@@ -1888,7 +2030,9 @@ int main(int argc, char **argv)
 
     /* Set default track title */
     for (int i = 0; i < ctx->nb_tracks; i++)
-        av_dict_set(&ctx->meta, "title", "Unknown track", 0);
+        av_dict_set(&ctx->meta, "title",
+                    ctx->tracks[i].track_is_data ? "Data track" : "Unknown track",
+                    0);
 
     /* Fill musicbrainz metadata */
     if (crip_fill_metadata(ctx,
@@ -2104,24 +2248,29 @@ int main(int argc, char **argv)
                     break;
                 }
             } else {
-                /* Initialize */
-                int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
-                if (ret < 0) {
-                    cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
-                    goto end;
-                }
-
-                for (int j = 0; j < ctx->settings.outputs_num; j++) {
-                    ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
-                                                      ctx->settings.outputs[j]);
+                if (t->track_is_data) {
+                    if (cyanrip_rip_data_track(ctx, t))
+                        break;
+                } else {
+                    /* Initialize */
+                    int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
                     if (ret < 0) {
-                        cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
                         goto end;
                     }
-                }
 
-                if (cyanrip_rip_track(ctx, t))
-                    break;
+                    for (int j = 0; j < ctx->settings.outputs_num; j++) {
+                        ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                          ctx->settings.outputs[j]);
+                        if (ret < 0) {
+                            cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                            goto end;
+                        }
+                    }
+
+                    if (cyanrip_rip_track(ctx, t))
+                        break;
+                }
             }
 
             if (quit_now)
@@ -2142,6 +2291,8 @@ int main(int argc, char **argv)
                 cyanrip_track *t = &ctx->tracks[i];
 
                 for (int j = 0; j < ctx->settings.outputs_num; j++) {
+                    if (t->track_is_data)
+                        continue;
                     int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
                     if (ret < 0) {
                         cyanrip_log(ctx, 0, "Error encoding: %s\n", av_err2str(ret));
@@ -2217,27 +2368,35 @@ int main(int argc, char **argv)
 
             cyanrip_track *t = &ctx->tracks[j];
 
-            /* Initialize */
-            int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
-            if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
-                goto end;
-            }
-
-            for (j = 0; j < ctx->settings.outputs_num; j++) {
-                ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
-                                                  ctx->settings.outputs[j]);
+            if (t->track_is_data) {
+                int ret = cyanrip_rip_data_track(ctx, t);
                 if (ret < 0) {
-                    cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                    cyanrip_log(ctx, 0, "Error ripping: %s\n", av_err2str(ret));
                     goto end;
                 }
-            }
+            } else {
+                /* Initialize */
+                int ret = cyanrip_create_dec_ctx(ctx, &t->dec_ctx, t);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error initializing decoder: %s\n", av_err2str(ret));
+                    goto end;
+                }
 
-            /* Rip */
-            ret = cyanrip_rip_track(ctx, t);
-            if (ret < 0) {
-                cyanrip_log(ctx, 0, "Error ripping: %s\n", av_err2str(ret));
-                goto end;
+                for (j = 0; j < ctx->settings.outputs_num; j++) {
+                    ret = cyanrip_init_track_encoding(ctx, &t->enc_ctx[j], t,
+                                                      ctx->settings.outputs[j]);
+                    if (ret < 0) {
+                        cyanrip_log(ctx, 0, "Error initializing encoder: %s\n", av_err2str(ret));
+                        goto end;
+                    }
+                }
+
+                /* Rip */
+                ret = cyanrip_rip_track(ctx, t);
+                if (ret < 0) {
+                    cyanrip_log(ctx, 0, "Error ripping: %s\n", av_err2str(ret));
+                    goto end;
+                }
             }
 
             if (quit_now)
@@ -2263,11 +2422,13 @@ int main(int argc, char **argv)
 
                 cyanrip_track *t = &ctx->tracks[j];
 
-                for (j = 0; j < ctx->settings.outputs_num; j++) {
-                    int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
-                    if (ret < 0) {
-                        cyanrip_log(ctx, 0, "Error encoding: %s\n", av_err2str(ret));
-                        goto end;
+                if (!t->track_is_data) {
+                    for (j = 0; j < ctx->settings.outputs_num; j++) {
+                        int ret = cyanrip_writeout_track(ctx, t->enc_ctx[j]);
+                        if (ret < 0) {
+                            cyanrip_log(ctx, 0, "Error encoding: %s\n", av_err2str(ret));
+                            goto end;
+                        }
                     }
                 }
 
