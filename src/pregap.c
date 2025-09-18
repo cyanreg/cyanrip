@@ -245,7 +245,7 @@ lsn_t crip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
     // First track pregap is the start of the user area, lsn = 0.
     const track_t first_track = cdio_get_first_track_num(p_cdio);
     if (i_track == first_track)
-        return 0;
+        return -CDIO_PREGAP_SECTORS;
 
     // Is there a libcdio method for previous track? I'm not 100% sure it's
     // always safe to just subtract 1.
