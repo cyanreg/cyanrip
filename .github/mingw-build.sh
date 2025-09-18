@@ -64,7 +64,7 @@ cyan_do_separate_confmakeinstall() {
 }
 
 cyan_do_cmakeinstall() {
-    PKG_CONFIG=pkg-config cmake -B _build -G Ninja -DBUILD_SHARED_LIBS=off \
+    PKG_CONFIG=pkg-config cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -B _build -G Ninja -DBUILD_SHARED_LIBS=off \
             -DCMAKE_INSTALL_PREFIX="$CYANRIPINSTALLDIR" -DUNIX=on \
             -DCMAKE_FIND_ROOT_PATH="$(cygpath -pm "$CYANRIPINSTALLDIR:$MINGW_PREFIX:$MINGW_PREFIX/$MINGW_CHOST")" \
             -DCMAKE_PREFIX_PATH="$(cygpath -pm "$CYANRIPINSTALLDIR:$MINGW_PREFIX:$MINGW_PREFIX/$MINGW_CHOST")" \
@@ -80,7 +80,8 @@ build_curl() {
     sed -ri "s;(^SUBDIRS = lib) src (include) scripts;\1 \2;" Makefile.in &&
 #    CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
     cyan_do_separate_confmakeinstall --with-{winssl,winidn,nghttp2} \
-        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl,zstd,nghttp2,ldap,ldaps,ldap-lib}
+        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl,zstd,nghttp2,ldap,ldap-lib} \
+        --disable-{ldap,ldaps}
 }
 
 build_neon() {
@@ -98,7 +99,7 @@ build_ffmpeg() {
     cyan_do_vcs "https://git.ffmpeg.org/ffmpeg.git"
     cyan_do_separate_confmakeinstall --pkg-config-flags=--static \
         --disable-{programs,devices,filters,decoders,hwaccels,encoders,muxers} \
-        --disable-{debug,protocols,demuxers,parsers,doc,swscale,postproc,network} \
+        --disable-{debug,protocols,demuxers,parsers,doc,swscale,network} \
         --disable-{avdevice,autodetect} \
         --disable-bsfs --enable-protocol=file,data \
         --enable-encoder=flac,tta,aac,wavpack,alac,pcm_s16le,pcm_s32le \
@@ -117,7 +118,7 @@ build_cyanrip() {
     PKG_CONFIG=pkg-config \
     CFLAGS+=" -DLIBXML_STATIC -DCURL_STATICLIB $(printf ' -I%s' "$(cygpath -m "$CYANRIPINSTALLDIR/include")")" \
         LDFLAGS+="$(printf ' -L%s' "$(cygpath -m "$CYANRIPINSTALLDIR/lib")")" \
-        meson build --default-library=static --buildtype=release --prefix="$CYANRIPINSTALLDIR" --backend=ninja &&
+        meson setup build --default-library=static --buildtype=release --prefix="$CYANRIPINSTALLDIR" --backend=ninja &&
     ninja -C build && strip --strip-all build/src/cyanrip.exe -o cyanrip.exe
 }
 
