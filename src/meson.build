@@ -58,6 +58,8 @@ sources = [
 
     'cue_writer.c',
 
+    'pregap.c',
+
     # Version
     vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],
                       input: 'version.c.in', output: 'version.c',
