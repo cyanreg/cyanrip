@@ -1389,7 +1389,7 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
 end:
     for (int i = 0; i < dir_list_nb; i++) {
         if (create_dirs) {
-            struct stat st_req = { 0 };
+            crip_stat_t st_req = { 0 };
             if (crip_stat(dir_list[i], &st_req) == -1)
                 mkdir(dir_list[i], 0700);
         }

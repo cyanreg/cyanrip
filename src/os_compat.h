@@ -28,6 +28,8 @@
 #include <wchar.h>
 #include <libavutil/mem.h>
 
+typedef struct __stat64 crip_stat_t;
+
 static inline int utf8towchar(const char *filename_utf8, wchar_t **filename_w)
 {
     int num_chars = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, NULL, 0);
@@ -37,7 +39,6 @@ static inline int utf8towchar(const char *filename_utf8, wchar_t **filename_w)
     MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, *filename_w, num_chars);
     return 0;
 }
-
 static inline int win32_mkdir(const char *filename_utf8)
 {
     wchar_t *filename_w;
@@ -49,7 +50,7 @@ static inline int win32_mkdir(const char *filename_utf8)
     return ret;
 }
 
-static inline int crip_stat(const char *filename_utf8, struct stat* statbuf)
+static inline int crip_stat(const char *filename_utf8, crip_stat_t* statbuf)
 {
     wchar_t *filename_w;
     int ret;
@@ -64,6 +65,7 @@ static inline int crip_stat(const char *filename_utf8, struct stat* statbuf)
 
 #define mkdir(path, mode) win32_mkdir(path)
 #else
+typedef struct stat crip_stat_t;
 #define crip_stat stat
 #endif
 
