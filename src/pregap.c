@@ -17,6 +17,8 @@
 // data, namely p_cdio->env.fd. Right now we just copy-paste some struct
 // definitions to work around this. Is there a less brittle way to do do this? :-/
 
+#ifdef __APPLE__
+
 // lib/driver/mmc/mmc_private.h
 typedef driver_return_code_t (*mmc_run_cmd_fn_t) 
      ( void *p_user_data, 
@@ -134,6 +136,8 @@ typedef struct {
     int            scsi_mmc_sense_valid;
     char *scsi_tuple;
 } generic_img_private_t;
+
+#endif
 
 
 #pragma pack(push, 1)
