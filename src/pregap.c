@@ -164,9 +164,9 @@ typedef struct user_subq_t {
 } user_subq_t;
 
 
-static driver_return_code_t get_lsn_index_mmc(
+static driver_return_code_t get_lba_index_mmc(
     CdIo_t *p_cdio,
-    const lsn_t i_lsn,
+    const lba_t i_lba,
     user_subq_t *p_user_subq,
     uint8_t *p_index)
 {
@@ -181,6 +181,7 @@ static driver_return_code_t get_lsn_index_mmc(
     const uint16_t i_blocksize = CDIO_CD_FRAMESIZE_RAW + 16;
     const uint32_t i_blocks = 1;
 
+    const lsn_t i_lsn = cdio_lba_to_lsn(i_lba);
     driver_return_code_t rc =
     mmc_read_cd(p_cdio, p_user_subq, i_lsn, expected_sector_type,
         b_digital_audio_play, b_sync, header_codes, b_user_data, b_edc_ecc,
@@ -195,7 +196,7 @@ static driver_return_code_t get_lsn_index_mmc(
 }
 
 #ifdef __APPLE__
-static driver_return_code_t get_lsn_index_mac(
+static driver_return_code_t get_lba_index_osx(
     CdIo_t *p_cdio,
     const lsn_t i_lsn,
     user_subq_t *p_user_subq,
@@ -208,7 +209,7 @@ static driver_return_code_t get_lsn_index_mac(
     const CDSectorSize cdda_sect_size_subq = 16;
     const CDSectorSize sect_read_size = cdda_sect_size_user + cdda_sect_size_subq;
     dk_cd_read_t cd_read = {
-        .offset = i_lsn*sect_read_size,
+        .offset = cdio_lba_to_lsn(i_lsn)*sect_read_size,
         .sectorArea = kCDSectorAreaUser | kCDSectorAreaSubChannelQ,
         .sectorType = kCDSectorTypeCDDA,
         .bufferLength = sizeof(user_subq_t),
@@ -225,65 +226,63 @@ static driver_return_code_t get_lsn_index_mac(
 #endif
 
 
-static driver_return_code_t get_lsn_index(
+static driver_return_code_t get_lba_index(
     CdIo_t *p_cdio,
     const lsn_t i_lsn,
     user_subq_t *user_subq,
     uint8_t *index_p)
 {
     #ifdef __APPLE__
-        return get_lsn_index_mac(p_cdio, i_lsn, user_subq, index_p);
+        return get_lba_index_osx(p_cdio, i_lsn, user_subq, index_p);
     #else
-        return get_lsn_index_mmc(p_cdio, i_lsn, user_subq, index_p);
+        return get_lba_index_mmc(p_cdio, i_lsn, user_subq, index_p);
     #endif
 }
 
 
-lsn_t crip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
-    // TODO more error checking and reporting?
+lba_t cyanrip_get_track_pregap_lba(CdIo_t *p_cdio, track_t i_track) {
+    // Try to use libcdio. If libcdio doesn't implement pregap finding
+    // for a driver, it will return CDIO_INVALID_LBA.
+    const lba_t i_cdio_index0_lba = cdio_get_track_pregap_lba(p_cdio, i_track);
+    if (i_cdio_index0_lba != CDIO_INVALID_LBA)
+        return i_cdio_index0_lba;
 
-    // Use libcdio implementation, if it exists.
-    if (p_cdio->op.get_track_pregap_lba)
-        return p_cdio->op.get_track_pregap_lba (p_cdio->env, i_track);
-
-    // First track pregap is the start of the user area, lsn = 0.
+    // First track pregap is lsn = 0, lba = CDIO_PREGAP_SECTORS.
     const track_t first_track = cdio_get_first_track_num(p_cdio);
     if (i_track == first_track)
-        return -CDIO_PREGAP_SECTORS;
+        return CDIO_PREGAP_SECTORS;
 
-    // Is there a libcdio method for previous track? I'm not 100% sure it's
-    // always safe to just subtract 1.
-    const lsn_t i_prev_index1 = cdio_get_track_lsn(p_cdio, i_track - 1);
+    const lba_t i_prev_index1 = cdio_get_track_lba(p_cdio, i_track - 1);
 
     // First check one sector before track start to see if there is any
     // pregap at all.
-    const lsn_t i_track_lsn = cdio_get_track_lsn(p_cdio, i_track);
-    lsn_t i_lsn = i_track_lsn - 1;
+    const lba_t i_track_lba = cdio_get_track_lba(p_cdio, i_track);
+    lba_t i_lba = i_track_lba - 1;
     const uint16_t i_blocksize = CDIO_CD_FRAMESIZE_RAW + 16;
     user_subq_t *p_user_subq = malloc(i_blocksize);
 
     uint8_t index;
     driver_return_code_t rc;
-    rc = get_lsn_index(p_cdio, i_lsn, p_user_subq, &index);
+    rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
     if (rc) {
         free(p_user_subq);
         return CDIO_INVALID_LBA;
     }
     if (index != 0) {
         free(p_user_subq);
-        return i_track_lsn;
+        return i_track_lba;
     }
 
     // There is a pregap. Backtrack in 2 second increments until we're before
     // the start of the pregap. A 2 second pregap is common so this will often
     // backtrack to the exact index boundary.
-    while (index == 0 && i_lsn > i_prev_index1) {
-        const lsn_t backtrack = 150;
-        if (i_lsn < backtrack)
-            i_lsn = 0;
+    while (index == 0 && i_lba > i_prev_index1) {
+        const lba_t backtrack = 150;
+        if (i_lba < backtrack)
+            i_lba = 0;
         else
-            i_lsn -= backtrack;
-        rc = get_lsn_index(p_cdio, i_lsn, p_user_subq, &index);
+            i_lba -= backtrack;
+        rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
         if (rc) {
             free(p_user_subq);
             return CDIO_INVALID_LSN;
@@ -293,15 +292,15 @@ lsn_t crip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
     // Check if we backtracked all the way to the start of the previous track.
     // This shouldn't happen on a valid disc.
     if (index == 0) {
-        // error, entire track of index
+        // error, entire track of index 0
         free(p_user_subq);
         return CDIO_INVALID_LSN;
     }
 
     // Scan forward one sector at a time to find start of pregap.
     while (index != 0) {
-        i_lsn += 1;
-        rc = get_lsn_index(p_cdio, i_lsn, p_user_subq, &index);
+        i_lba += 1;
+        rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
         if (rc) {
             free(p_user_subq);
             return CDIO_INVALID_LBA;
@@ -309,5 +308,9 @@ lsn_t crip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
     }
 
     free(p_user_subq);
-    return i_lsn;
+    return i_lba;
+}
+
+lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
+    return cdio_lba_to_lsn(cyanrip_get_track_pregap_lba(p_cdio, i_track));
 }
