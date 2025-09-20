@@ -62,7 +62,7 @@ static int get_media_changed(CdIo_t *cdio) {
     if (rc == 0 || rc == DRIVER_OP_UNSUPPORTED)
         return 0;
     else
-        return 1;;
+        return 1;
 }
 
 static void free_track(cyanrip_ctx *ctx, cyanrip_track *t)
