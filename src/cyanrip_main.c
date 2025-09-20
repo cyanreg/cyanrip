@@ -1389,8 +1389,8 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
 end:
     for (int i = 0; i < dir_list_nb; i++) {
         if (create_dirs) {
-            crip_stat_t st_req = { 0 };
-            if (crip_stat(dir_list[i], &st_req) == -1)
+            cyanrip_stat_t st_req = { 0 };
+            if (cyanrip_stat(dir_list[i], &st_req) == -1)
                 mkdir(dir_list[i], 0700);
         }
         av_free(dir_list[i]);
