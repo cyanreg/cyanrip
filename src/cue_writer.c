@@ -141,7 +141,8 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
             !ctx->settings.force_deemphasis)
             fprintf(ctx->cuefile[Z], "    FLAGS PRE\n");
 
-        if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
+        if (t->dropped_pregap_start != CDIO_INVALID_LSN &&
+            t->dropped_pregap_start != t->start_lsn) {
             fprintf(ctx->cuefile[Z], "    PREGAP %s\n",   time_00);
             fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
         } else if (t->merged_pregap_end != CDIO_INVALID_LSN) {
