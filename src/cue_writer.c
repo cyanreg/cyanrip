@@ -81,9 +81,10 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
     char time_01[16];
 
     /* Finish over the pregap which has been appended to the last track */
-    if (t->pregap_lsn != CDIO_INVALID_LSN && t->pt &&
+    const int write_appended_pregap = (t->pregap_lsn != CDIO_INVALID_LSN && t->pt &&
         t->dropped_pregap_start == CDIO_INVALID_LSN &&
-        t->merged_pregap_end == CDIO_INVALID_LSN) {
+        t->merged_pregap_end == CDIO_INVALID_LSN);
+    if (write_appended_pregap) {
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
             fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->index);
 
@@ -112,13 +113,14 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                 ctx->settings.outputs[Z] == CYANRIP_FORMAT_MP3 ? "MP3" :
                 t->track_is_data ? "BINARY" : "WAVE");
 
-        fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
-                t->track_is_data ? "MODE1/2352" : "AUDIO");
+        if (!write_appended_pregap)
+            fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
+                    t->track_is_data ? "MODE1/2352" : "AUDIO");
 
         av_free(path);
     }
 
-    if (!t->track_is_data) {
+    if (!t->track_is_data && !write_appended_pregap) {
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
         CLOG("    ISRC %s\n", t->meta, "isrc");
