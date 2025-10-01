@@ -219,6 +219,12 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_start_report(cyanrip_ctx *ctx)
 {
     cyanrip_log(ctx, 0, "cyanrip %s (%s)\n", PROJECT_VERSION_STRING, vcstag);
+    cdio_hwinfo_t hwinfo;
+    const int hwinfo_success = cdio_get_hwinfo(ctx->cdio, &hwinfo);
+    if (!hwinfo_success)
+        cyanrip_log(ctx, 0, "Drive used:     error retrieving drive info\n");
+    else
+        cyanrip_log(ctx, 0, "Drive used:     %s %s (revision %s)\n", hwinfo.psz_vendor, hwinfo.psz_model, hwinfo.psz_revision);
     cyanrip_log(ctx, 0, "System device:  %s\n", ctx->settings.dev_path);
     if (ctx->drive->drive_model)
         cyanrip_log(ctx, 0, "Device model:   %s\n", ctx->drive->drive_model);
