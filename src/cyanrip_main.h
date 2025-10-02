@@ -30,6 +30,7 @@
 
 #include <cdio/paranoia/paranoia.h>
 #include <cdio/audio.h>
+#include <cdio/mmc_ll_cmds.h>
 #include <libavutil/mem.h>
 #include <libavutil/dict.h>
 #include <libavutil/avstring.h>
@@ -120,6 +121,7 @@ typedef struct cyanrip_settings {
     int disable_coverart_embedding;
     enum coverart_lookup_sizes coverart_lookup_size;
     int enable_replaygain;
+    int data_as_iso;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -213,6 +215,7 @@ typedef struct cyanrip_ctx {
 
     cyanrip_track tracks[198];
     int nb_tracks; /* Total number of output tracks */
+    int nb_data_tracks; /* Total number of output tracks which are data, not audio */
     int nb_cd_tracks; /* Total tracks the CD signals */
     int disregard_cd_isrc; /* If one track doesn't have ISRC, universally the rest won't */
 

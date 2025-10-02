@@ -112,8 +112,12 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                 ctx->settings.outputs[Z] == CYANRIP_FORMAT_MP3 ? "MP3" :
                 t->track_is_data ? "BINARY" : "WAVE");
 
-        fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
-                t->track_is_data ? "MODE1/2352" : "AUDIO");
+        const char *mode;
+        if (t->track_is_data)
+            mode = ctx->settings.data_as_iso ? "MODE1/2048" : "MODE1/2352";
+        else
+            mode = "AUDIO";
+        fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number, mode);
 
         av_free(path);
     }

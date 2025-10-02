@@ -322,7 +322,7 @@ void cyanrip_log_finish_report(cyanrip_ctx *ctx)
                     accurip_partial++;
             }
         }
-        cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n", accurip_verified, ctx->nb_tracks);
+        cyanrip_log(ctx, 0, "Tracks ripped accurately: %i/%i\n", accurip_verified, ctx->nb_tracks - ctx->nb_data_tracks);
         if (accurip_partial)
             cyanrip_log(ctx, 0, "Tracks ripped partially accurately: %i/%i\n",
                         accurip_partial, ctx->nb_tracks - accurip_verified);
