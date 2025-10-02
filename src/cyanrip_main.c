@@ -815,8 +815,12 @@ finalize_ripping:
     }
 
 fail:
-    if (!ret && !quit_now)
-        cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
+    if (!ret && !quit_now) {
+        if (ctx->total_error_count - start_err)
+            cyanrip_log(ctx, 0, "Track %i ripped and encoded with errors.\n", t->number);
+        else
+            cyanrip_log(ctx, 0, "Track %i ripped and encoded successfully!\n", t->number);
+    }
 
 end:
     av_free(last_checksums);
