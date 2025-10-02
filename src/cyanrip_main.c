@@ -58,11 +58,8 @@ const cyanrip_out_fmt crip_fmt_info[] = {
 };
 
 static int get_media_changed(CdIo_t *cdio) {
-    const int rc = cdio_get_media_changed(cdio);
-    if (rc == 0 || rc == DRIVER_OP_UNSUPPORTED)
-        return 0;
-    else
-        return 1;
+    const int ret = cdio_get_media_changed(cdio);
+    return ret != 0 && ret != DRIVER_OP_UNSUPPORTED;
 }
 
 static void free_track(cyanrip_ctx *ctx, cyanrip_track *t)
