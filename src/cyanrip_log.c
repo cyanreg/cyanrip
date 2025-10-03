@@ -66,7 +66,7 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
-    /* 2-second lead-in is conventially counted as part of track 1 pre-gap */
+    /* 2-second lead-in is conventionally counted as part of track 1 pre-gap */
     const int lead_in_samples = 2*44100;
     if (t->number == 1)
         cyanrip_samples_to_duration(t->nb_samples + lead_in_samples, length);
