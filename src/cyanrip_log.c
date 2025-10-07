@@ -37,7 +37,12 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (t->pregap_lsn != CDIO_INVALID_LSN) {
         char pregap_duration[16];
-        cyanrip_frames_to_duration(t->start_lsn_sig - t->pregap_lsn, pregap_duration);
+        /* 2-second lead-in is conventionally counted as part of track 1 pre-gap duration */
+        const int lead_in_sectors = 2*75;
+        if (t->number == 1)
+            cyanrip_frames_to_duration(t->start_lsn_sig - t->pregap_lsn + lead_in_sectors, pregap_duration);
+        else
+            cyanrip_frames_to_duration(t->start_lsn_sig - t->pregap_lsn, pregap_duration);
 
         cyanrip_log(ctx, 0, "    Pregap LSN:  %i (duration: %s)\n",
                     t->pregap_lsn, pregap_duration);
@@ -66,12 +71,7 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
-    /* 2-second lead-in is conventionally counted as part of track 1 pre-gap */
-    const int lead_in_samples = 2*44100;
-    if (t->number == 1)
-        cyanrip_samples_to_duration(t->nb_samples + lead_in_samples, length);
-    else
-        cyanrip_samples_to_duration(t->nb_samples, length);
+    cyanrip_samples_to_duration(t->nb_samples, length);
 
     cyanrip_log(ctx, 0, "  Preemphasis:   ");
     if (!t->preemphasis) {
