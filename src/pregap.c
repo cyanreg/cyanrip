@@ -199,6 +199,28 @@ static driver_return_code_t read_audio_subq_sectors_mac(
 #endif
 
 
+static driver_return_code_t read_audio_subq_sectors_mmc(
+    const CdIo_t *p_cdio,
+    uint8_t *audio_subq_buf,
+    const lsn_t lsn,
+    const uint32_t blocks)
+{
+    const int expected_sector_type = 1; /* CD-DA sectors */
+    const bool b_digital_audio_play = false;
+    const bool b_sync = false;
+    const uint8_t header_codes = 0; /* no header information */
+    const bool b_user_data = true;
+    const bool b_edc_ecc = false;
+    const uint8_t c2_error_information = 0;
+    const uint8_t subchannel_selection = 2; /* Q sub-channel */
+    const uint16_t i_blocksize = CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ;
+
+    return mmc_read_cd(p_cdio, audio_subq_buf, lsn, expected_sector_type,
+        b_digital_audio_play, b_sync, header_codes, b_user_data, b_edc_ecc,
+        c2_error_information, subchannel_selection, i_blocksize, blocks);
+}
+
+
 static driver_return_code_t read_audio_subq_sector(
     const CdIo_t *p_cdio,
     uint8_t *audio_subq_buf,
