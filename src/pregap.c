@@ -21,6 +21,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+// remove after testing
+#include <inttypes.h>
+#ifdef N_DEBUG
+#undef N_DEBUG
+#endif
+#include <assert.h>
+
 #include <cdio/cdio.h>
 #include <cdio/mmc_ll_cmds.h>
 // #include <cdio/iso9660.h>
@@ -326,23 +333,40 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
     lsn_t lsn;
     subq_t subq;
     unsigned crc_comp;
+    // UltraFuzzy: Based on brief informal testing, successful subchannel Q read
+    // retries become rare after ~5-10 attempts but I've seen a correct read
+    // first occur as late as 180 attempts. The large harder_retry_max value
+    // will only be used for bad sectors that cannot be ruled out as possibly
+    // containing the start of a pregap. This should be rare and when it does
+    // happen these sectors must be read for pregap finding to succeed.
     int retry_max = 5;
-    const int harder_retry_max = 100;
+    const int harder_retry_max = 200;
     driver_return_code_t ret;
 
+    // The main idea of this algorithm is to track a left bound, representing
+    // our current latest known sector that belongs to the previous track, and a
+    // right bound, representing our current earliest known sector that belongs
+    // to the pregap. We traverse between our known boundaries contracting
+    // them when possible until they converge or until CRC mismatches make that
+    // impossible. When encountering bad sectors with repeated CRC mismatches we
+    // sometimes attempt to skip over them and find a good sector that we can
+    // use to contract our bounds and rule out the bad sectors from containing
+    // the start of the pregap.
     lsn_t left_bound = prev_track_start_lsn;
     lsn_t right_bound = track_start_lsn;
 
     // Check one sector before track start to see if there is any pregap.
     lsn = track_start_lsn - 1;
     ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+    assert(!ret);
     decode_subq(&subq, subq_buf);
     crc_comp = crc_subq(subq_buf);
     if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == prev_track_number)
         return track_start_lsn;
 
-    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == track_number)
+    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == track_number) {
         right_bound = lsn;
+    }
 
     // There is a pregap or the result was ambiguous. Backtrack in 2
     // second increments until we find a position that can be confirmed to be
@@ -355,6 +379,7 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             break;
         }
         ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+        assert(!ret);
         decode_subq(&subq, subq_buf);
         crc_comp = crc_subq(subq_buf);
         if (subq.crc != crc_comp || subq.adr != 1) {
@@ -364,14 +389,16 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             right_bound = lsn;
         }
         else {
+            assert(subq.track_number == prev_track_number);
             break;
         }
     }
     left_bound = lsn;
 
-    // Loop over sectors from left bound to right bound attempting to contract bounds until
-    // they meet. This allows us to skip over sectors with bad CRCs and only come back to
-    // them if necessary.
+    // Loop over sectors from left bound to right bound attempting to contract
+    // bounds until they meet. Skip over sectors with repeated bad CRCs and
+    // attempt to find a good sector that alllows us to contract the bounds and
+    // rule out those bad sectors as the pregap start.
     while ((left_bound + 1) != right_bound) {
         lsn += 1;
         if (lsn == right_bound) {
@@ -379,12 +406,14 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             // If we've already been here, give up.
             if (retry_max == harder_retry_max)
                 break;
-            // If this is the first time, try harder.
+            // Getting here means we skipped over bad sectors that it turns must
+            // be read in order to decide where the pregap starts. TRY HARDER.
             retry_max = harder_retry_max;
             lsn = left_bound;
             continue;
         }
         ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+        assert(!ret);
         decode_subq(&subq, subq_buf);
         crc_comp = crc_subq(subq_buf);
         if (subq.crc != crc_comp) {
@@ -406,7 +435,7 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             lsn = left_bound;
         }
     }
-    // TODO Error reporting for failing to find pregap due to CRC mismatches.
+    // TODO Log failure to find pregap due to CRC mismatches.
     lsn = (left_bound + 1 == right_bound) ? right_bound : DRIVER_OP_ERROR;
 
     free(audio_subq_buf);
