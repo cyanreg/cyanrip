@@ -22,21 +22,27 @@
 #include <stdint.h>
 
 #include <cdio/cdio.h>
-#include <cdio/iso9660.h>
 #include <cdio/mmc_ll_cmds.h>
+// #include <cdio/iso9660.h>
 
 #ifdef __APPLE__
 #include <IOKit/storage/IOCDTypes.h>
 #include <IOKit/storage/IOCDMediaBSDClient.h>
+#include <sys/errno.h>
 #endif
 
 
-// TODO The implementation for macOS requires access to private internal cdio
-// data, namely p_cdio->env.fd. Right now we just copy-paste some struct
-// definitions to work around this. Is there a less brittle way to do do this? :-/
+// Size of reads of audio + subchannel Q data. 2352 bytes for audio + 16 bytes for subchannel Q
+#define CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ (CDIO_CD_FRAMESIZE_RAW + 16)
 
+
+// TODO The implementation for macOS currently requires access to private
+// internal cdio data, namely p_cdio->env.fd. Right now we just copy-paste some
+// struct definitions to work around this. libcdio accepted a pull request for
+// a function cdio_get_device_fd() (https://github.com/libcdio/libcdio/pull/37)
+// that solves this issue. When that works its way into package managers it
+// should be used here.
 #ifdef __APPLE__
-
 // lib/driver/mmc/mmc_private.h
 typedef driver_return_code_t (*mmc_run_cmd_fn_t) 
      ( void *p_user_data, 
@@ -142,193 +148,267 @@ typedef struct {
     int   ioctls_debugged;
     void *data_source;
     int     fd;
-    track_t i_first_track;
-    track_t i_tracks;
-    uint8_t u_joliet_level;
-    iso9660_pvd_t pvd;
-    iso9660_svd_t svd;
-    CdIo_t   *cdio;
-    cdtext_t *cdtext;
-    track_flags_t track_flags[CDIO_CD_MAX_TRACKS+1];
-    unsigned char  scsi_mmc_sense[263];
-    int            scsi_mmc_sense_valid;
-    char *scsi_tuple;
+    // track_t i_first_track;
+    // track_t i_tracks;
+    // uint8_t u_joliet_level;
+    // iso9660_pvd_t pvd;
+    // iso9660_svd_t svd;
+    // CdIo_t   *cdio;
+    // cdtext_t *cdtext;
+    // track_flags_t track_flags[CDIO_CD_MAX_TRACKS+1];
+    // unsigned char  scsi_mmc_sense[263];
+    // int            scsi_mmc_sense_valid;
+    // char *scsi_tuple;
 } generic_img_private_t;
 
+
+static driver_return_code_t read_audio_subq_sectors_mac(
+    const CdIo_t *p_cdio,
+    uint8_t *audio_subq_buf,
+    const lsn_t lsn,
+    const uint32_t blocks)
+{
+    generic_img_private_t *p_gen = (generic_img_private_t*)(p_cdio->env);
+    const int fd = p_gen->fd;
+
+    const unsigned block_size = CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ;
+    dk_cd_read_t cd_read = {
+        .offset = block_size*lsn,
+        .sectorArea = kCDSectorAreaUser | kCDSectorAreaSubChannelQ,
+        .sectorType = kCDSectorTypeCDDA,
+        .bufferLength = block_size*blocks,
+        .buffer = audio_subq_buf,
+    };
+    if (!ioctl(fd, DKIOCCDREAD, &cd_read))
+        return DRIVER_OP_SUCCESS;
+    const int ioctl_errno = errno;
+    // TODO More detailed error handling? errno will be one of:
+    // EBADF
+    // EINVAL
+    // ENOTTY
+    // printf("ioctl() errno: %d\n", ioctl_errno);
+    return DRIVER_OP_ERROR;
+}
 #endif
 
 
-#pragma pack(push, 1)
+static driver_return_code_t read_audio_subq_sector(
+    const CdIo_t *p_cdio,
+    uint8_t *audio_subq_buf,
+    const lsn_t lsn)
+{
+    #ifdef __APPLE__
+        return read_audio_subq_sectors_mac(p_cdio, audio_subq_buf, lsn, 1);
+    #else
+        return read_audio_subq_sectors_mmc(p_cdio, audio_subq_buf, lsn, 1);
+    #endif
+}
+
+
+// #pragma pack(push, 1)
+// typedef struct subq_encoded_t {
+//     uint8_t  control:4;
+//     uint8_t  adr    :4;
+//     uint8_t  track_number;
+//     uint8_t  index_number;
+//     uint8_t  min;
+//     uint8_t  sec;
+//     uint8_t  frame;
+//     uint8_t  zero;
+//     uint8_t  amin;
+//     uint8_t  asec;
+//     uint8_t  aframe;
+//     uint16_t crc;
+//     uint8_t  reserved[4];
+// } subq_encoded_t;
+// #pragma pack(pop)
+
 typedef struct subq_t {
-    uint8_t  adr    :4;
-    uint8_t  control:4;
+    uint8_t  control;
+    uint8_t  adr;
     uint8_t  track_number;
     uint8_t  index_number;
     uint8_t  min;
     uint8_t  sec;
     uint8_t  frame;
-    uint8_t  zero;
     uint8_t  amin;
     uint8_t  asec;
     uint8_t  aframe;
-    uint16_t crc16;
-    uint8_t  reserved[4];
+    unsigned crc;
 } subq_t;
-#pragma pack(pop)
 
-typedef struct user_subq_t {
-    int16_t samples[1176];
-    subq_t subq;
-} user_subq_t;
+static inline uint8_t bcd_to_bin(uint8_t x){
+    return 10*((x & 0xF0) >> 4) + (x & 0x0F);
+}
 
-
-static driver_return_code_t get_lba_index_mmc(
-    CdIo_t *p_cdio,
-    const lba_t i_lba,
-    user_subq_t *p_user_subq,
-    uint8_t *p_index)
+// CRC-16/GSM with length 10
+static inline unsigned crc_subq(const uint8_t* subq_buf)
 {
-    const int expected_sector_type = 1; /* CD-DA sectors */
-    const bool b_digital_audio_play = false;
-    const bool b_sync = false;
-    const uint8_t header_codes = 0; /* no header information */
-    const bool b_user_data = true;
-    const bool b_edc_ecc = false;
-    const uint8_t c2_error_information = 0;
-    const uint8_t subchannel_selection = 2; /* Q sub-channel */
-    const uint16_t i_blocksize = CDIO_CD_FRAMESIZE_RAW + 16;
-    const uint32_t i_blocks = 1;
-
-    const lsn_t i_lsn = cdio_lba_to_lsn(i_lba);
-    driver_return_code_t rc =
-    mmc_read_cd(p_cdio, p_user_subq, i_lsn, expected_sector_type,
-        b_digital_audio_play, b_sync, header_codes, b_user_data, b_edc_ecc,
-        c2_error_information, subchannel_selection, i_blocksize, i_blocks);
-    if (rc) {
-        return rc;
+    int length = 10;
+    const unsigned crc_poly = 0x1021;
+    unsigned r = 0x0000;
+    while (length--) {
+        r ^= *subq_buf++ << 8;
+        for (int i = 0; i < 8; i++)
+            r = r & 0x8000 ? (r << 1) ^ crc_poly : r << 1;
     }
-    else {
-        *p_index = p_user_subq->subq.index_number;
-        return rc;
+    return ~r & 0xFFFF;
+}
+
+// MMC-3 Table 38 - Formatted Q sub-channel response data
+static void decode_subq(subq_t *subq, const uint8_t *src) {
+    subq->control       = (src[0] & 0xF0) >> 4;
+    subq->adr           = (src[0] & 0x0F) >> 0;
+    // TODO Unclear if these will always be BCD.  From MMC-3, the answer is yes.
+    subq->track_number  = bcd_to_bin(src[1]);
+    subq->index_number  = bcd_to_bin(src[2]);
+    subq->min           = bcd_to_bin(src[3]);
+    subq->sec           = bcd_to_bin(src[4]);
+    subq->frame         = bcd_to_bin(src[5]);
+    subq->amin          = bcd_to_bin(src[7]);
+    subq->asec          = bcd_to_bin(src[8]);
+    subq->aframe        = bcd_to_bin(src[9]);
+    subq->crc           = (src[10] << 8) | src[11];
+}
+
+
+static driver_return_code_t read_audio_subq_sector_with_retries(
+    const CdIo_t *p_cdio,
+    uint8_t *audio_subq_buf,
+    const lsn_t lsn,
+    const int retry_max)
+{
+    driver_return_code_t ret = read_audio_subq_sector(p_cdio, audio_subq_buf, lsn);
+    const uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
+    unsigned crc_read = (subq_buf[10] << 8) | subq_buf[11];
+    unsigned crc_comp = crc_subq(subq_buf);
+    int retry = 0;
+    while (retry++ < retry_max && crc_read != crc_comp) {
+        // TODO Is a cache defeat here ever necessary? Testing on macOS with an
+        // ASUS SDRW-08U7M-U, it didn't have an effect.
+        // overflow_device_read_cache(p_cdio, lsn);
+        if ((ret = read_audio_subq_sector(p_cdio, audio_subq_buf, lsn)))
+            return ret;
+        // TODO ret error handling
+        crc_read = (subq_buf[10] << 8) | subq_buf[11];
+        crc_comp = crc_subq(subq_buf);
     }
-}
-
-#ifdef __APPLE__
-static driver_return_code_t get_lba_index_osx(
-    CdIo_t *p_cdio,
-    const lsn_t i_lsn,
-    user_subq_t *p_user_subq,
-    uint8_t *p_index)
-{
-    generic_img_private_t *p_gen = (generic_img_private_t*)(p_cdio->env);
-    const int fd = p_gen->fd;
-
-    const CDSectorSize cdda_sect_size_user = 2352;
-    const CDSectorSize cdda_sect_size_subq = 16;
-    const CDSectorSize sect_read_size = cdda_sect_size_user + cdda_sect_size_subq;
-    dk_cd_read_t cd_read = {
-        .offset = cdio_lba_to_lsn(i_lsn)*sect_read_size,
-        .sectorArea = kCDSectorAreaUser | kCDSectorAreaSubChannelQ,
-        .sectorType = kCDSectorTypeCDDA,
-        .bufferLength = sizeof(user_subq_t),
-        .buffer = p_user_subq,
-    };
-    int err = ioctl(fd, DKIOCCDREAD, &cd_read);
-    if (err)
-        return DRIVER_OP_ERROR;
-
-    const uint8_t index = p_user_subq->subq.index_number;
-    *p_index = index;
-    return DRIVER_OP_SUCCESS;
-}
-#endif
-
-
-static driver_return_code_t get_lba_index(
-    CdIo_t *p_cdio,
-    const lsn_t i_lsn,
-    user_subq_t *user_subq,
-    uint8_t *index_p)
-{
-    #ifdef __APPLE__
-        return get_lba_index_osx(p_cdio, i_lsn, user_subq, index_p);
-    #else
-        return get_lba_index_mmc(p_cdio, i_lsn, user_subq, index_p);
-    #endif
+    return ret;
 }
 
 
-lba_t cyanrip_get_track_pregap_lba(CdIo_t *p_cdio, track_t i_track) {
+lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
     // Try to use libcdio. If libcdio doesn't implement pregap finding
-    // for a driver, it will return CDIO_INVALID_LBA.
-    const lba_t i_cdio_index0_lba = cdio_get_track_pregap_lba(p_cdio, i_track);
-    if (i_cdio_index0_lba != CDIO_INVALID_LBA)
-        return i_cdio_index0_lba;
+    // for a driver, it will return CDIO_INVALID_LSN.
+    const lsn_t cdio_track_pregap_lsn = cdio_get_track_pregap_lsn(p_cdio, track_number);
+    if (cdio_track_pregap_lsn != CDIO_INVALID_LSN)
+        return cdio_track_pregap_lsn;
 
     // First track pregap is lsn = 0, lba = CDIO_PREGAP_SECTORS.
-    const track_t first_track = cdio_get_first_track_num(p_cdio);
-    if (i_track == first_track)
-        return CDIO_PREGAP_SECTORS;
+    // TODO Under what circumstances does libcdio give a first track not equal
+    // to 1? Does this ever happen for a rippable CD?
+    const track_t first_track_number = cdio_get_first_track_num(p_cdio);
+    if (track_number == first_track_number)
+        return 0;
 
-    const lba_t i_prev_index1 = cdio_get_track_lba(p_cdio, i_track - 1);
+    const lsn_t track_start_lsn = cdio_get_track_lsn(p_cdio, track_number);
+    // TODO Is (track_number - 1) always safe? e.g. non-continuous track numbers?
+    const uint8_t prev_track_number = track_number - 1;
+    const lsn_t prev_track_start_lsn = cdio_get_track_lsn(p_cdio, prev_track_number);
 
-    // First check one sector before track start to see if there is any
-    // pregap at all.
-    const lba_t i_track_lba = cdio_get_track_lba(p_cdio, i_track);
-    lba_t i_lba = i_track_lba - 1;
-    const uint16_t i_blocksize = CDIO_CD_FRAMESIZE_RAW + 16;
-    user_subq_t *p_user_subq = malloc(i_blocksize);
+    // Handle single sector previous track.
+    if (prev_track_start_lsn + 1 == track_start_lsn)
+        return track_start_lsn;
 
-    uint8_t index;
-    driver_return_code_t rc;
-    rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
-    if (rc) {
-        free(p_user_subq);
-        return CDIO_INVALID_LBA;
-    }
-    if (index != 0) {
-        free(p_user_subq);
-        return i_track_lba;
-    }
+    uint8_t *audio_subq_buf = malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
+    const uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
 
-    // There is a pregap. Backtrack in 2 second increments until we're before
-    // the start of the pregap. A 2 second pregap is common so this will often
-    // backtrack to the exact index boundary.
-    while (index == 0 && i_lba > i_prev_index1) {
-        const lba_t backtrack = 150;
-        if (i_lba < backtrack)
-            i_lba = 0;
-        else
-            i_lba -= backtrack;
-        rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
-        if (rc) {
-            free(p_user_subq);
-            return CDIO_INVALID_LSN;
+    lsn_t lsn;
+    subq_t subq;
+    unsigned crc_comp;
+    int retry_max = 5;
+    const int harder_retry_max = 100;
+    driver_return_code_t ret;
+
+    lsn_t left_bound = prev_track_start_lsn;
+    lsn_t right_bound = track_start_lsn;
+
+    // Check one sector before track start to see if there is any pregap.
+    lsn = track_start_lsn - 1;
+    ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+    decode_subq(&subq, subq_buf);
+    crc_comp = crc_subq(subq_buf);
+    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == prev_track_number)
+        return track_start_lsn;
+
+    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == track_number)
+        right_bound = lsn;
+
+    // There is a pregap or the result was ambiguous. Backtrack in 2
+    // second increments until we find a position that can be confirmed to be
+    // before any pregap. A 2 second pregap is common so this will often
+    // backtrack right to the pregap boundary.
+    const lsn_t backtrack = 150;
+    for (;;) {
+        lsn = lsn - backtrack >= prev_track_start_lsn ? lsn - backtrack : prev_track_start_lsn;
+        if (lsn == prev_track_start_lsn) {
+            break;
+        }
+        ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+        decode_subq(&subq, subq_buf);
+        crc_comp = crc_subq(subq_buf);
+        if (subq.crc != crc_comp || subq.adr != 1) {
+            continue;
+        }
+        else if (subq.track_number == track_number) {
+            right_bound = lsn;
+        }
+        else {
+            break;
         }
     }
+    left_bound = lsn;
 
-    // Check if we backtracked all the way to the start of the previous track.
-    // This shouldn't happen on a valid disc.
-    if (index == 0) {
-        // error, entire track of index 0
-        free(p_user_subq);
-        return CDIO_INVALID_LSN;
-    }
-
-    // Scan forward one sector at a time to find start of pregap.
-    while (index != 0) {
-        i_lba += 1;
-        rc = get_lba_index(p_cdio, i_lba, p_user_subq, &index);
-        if (rc) {
-            free(p_user_subq);
-            return CDIO_INVALID_LBA;
+    // Loop over sectors from left bound to right bound attempting to contract bounds until
+    // they meet. This allows us to skip over sectors with bad CRCs and only come back to
+    // them if necessary.
+    while ((left_bound + 1) != right_bound) {
+        lsn += 1;
+        if (lsn == right_bound) {
+            // Skipping over sectors with bad CRCs failed.
+            // If we've already been here, give up.
+            if (retry_max == harder_retry_max)
+                break;
+            // If this is the first time, try harder.
+            retry_max = harder_retry_max;
+            lsn = left_bound;
+            continue;
+        }
+        ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
+        decode_subq(&subq, subq_buf);
+        crc_comp = crc_subq(subq_buf);
+        if (subq.crc != crc_comp) {
+            // Attempt to skip over sectors with bad CRCs.
+            continue;
+        }
+        else if (subq.adr != 1) {
+            // If a mode 2 or mode 3 sector immediately follows left bound,
+            // consider it part of previous track and contract left bound.
+            if (lsn - 1 == left_bound)
+                left_bound = lsn;
+        }
+        else if (subq.track_number == prev_track_number) {
+            left_bound = lsn;
+        }
+        else if (subq.track_number == track_number) {
+            right_bound = lsn;
+            // Restart loop.
+            lsn = left_bound;
         }
     }
+    // TODO Error reporting for failing to find pregap due to CRC mismatches.
+    lsn = (left_bound + 1 == right_bound) ? right_bound : DRIVER_OP_ERROR;
 
-    free(p_user_subq);
-    return i_lba;
-}
-
-lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, track_t i_track) {
-    return cdio_lba_to_lsn(cyanrip_get_track_pregap_lba(p_cdio, i_track));
+    free(audio_subq_buf);
+    return lsn;
 }
