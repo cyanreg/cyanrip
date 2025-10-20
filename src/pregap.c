@@ -221,6 +221,8 @@ static driver_return_code_t read_audio_subq_sectors_mmc(
 }
 
 
+// Reading Q subchannel using the READ CD command is an MMC-2 feature. Ancient
+// drives don't support it and will return zeroes.
 static driver_return_code_t read_audio_subq_sector(
     const CdIo_t *p_cdio,
     uint8_t *audio_subq_buf,
@@ -270,6 +272,15 @@ static inline uint8_t bcd_to_bin(uint8_t x){
     return 10*((x & 0xF0) >> 4) + (x & 0x0F);
 }
 
+/* MMC-3 4.1.3.2.1. Q sub-channel Mode-1: "Bytes in the Q sub-channel that
+ * contains bcd contents may also contain illegal BCD values. Then values start
+ * with 0A0h and continue to 0FFh. No conversion of these to hex for
+ * transmission to/from the initiator is performed."
+ */
+static inline uint8_t subq_bcd_to_bin(uint8_t x){
+    return x >= 0xA0 ? x : bcd_to_bin(x);
+}
+
 // CRC-16/GSM with length 10
 static inline unsigned crc_subq(const uint8_t* subq_buf)
 {
@@ -289,14 +300,14 @@ static void decode_subq(subq_t *subq, const uint8_t *src) {
     subq->control       = (src[0] & 0xF0) >> 4;
     subq->adr           = (src[0] & 0x0F) >> 0;
     // TODO Unclear if these will always be BCD.  From MMC-3, the answer is yes.
-    subq->track_number  = bcd_to_bin(src[1]);
-    subq->index_number  = bcd_to_bin(src[2]);
-    subq->min           = bcd_to_bin(src[3]);
-    subq->sec           = bcd_to_bin(src[4]);
-    subq->frame         = bcd_to_bin(src[5]);
-    subq->amin          = bcd_to_bin(src[7]);
-    subq->asec          = bcd_to_bin(src[8]);
-    subq->aframe        = bcd_to_bin(src[9]);
+    subq->track_number  = subq_bcd_to_bin(src[1]);
+    subq->index_number  = subq_bcd_to_bin(src[2]);
+    subq->min           = subq_bcd_to_bin(src[3]);
+    subq->sec           = subq_bcd_to_bin(src[4]);
+    subq->frame         = subq_bcd_to_bin(src[5]);
+    subq->amin          = subq_bcd_to_bin(src[7]);
+    subq->asec          = subq_bcd_to_bin(src[8]);
+    subq->aframe        = subq_bcd_to_bin(src[9]);
     subq->crc           = (src[10] << 8) | src[11];
 }
 
@@ -326,6 +337,7 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
 }
 
 
+// TODO: Check that drive is actually returning Q subchannel data and not just zeroes.
 lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
     // Try to use libcdio. If libcdio doesn't implement pregap finding
     // for a driver, it will return CDIO_INVALID_LSN.
@@ -386,9 +398,8 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
     if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == prev_track_number)
         return track_start_lsn;
 
-    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == track_number) {
+    if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == track_number)
         right_bound = lsn;
-    }
 
     // There is a pregap or the result was ambiguous. Backtrack in 2
     // second increments until we find a position that can be confirmed to be
@@ -419,8 +430,11 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
 
     // Loop over sectors from left bound to right bound attempting to contract
     // bounds until they meet. Skip over sectors with repeated bad CRCs and
-    // attempt to find a good sector that alllows us to contract the bounds and
+    // attempt to find a good sector that allows us to contract the bounds and
     // rule out those bad sectors as the pregap start.
+    assert(left_bound >= prev_track_start_lsn);
+    assert(right_bound <= track_start_lsn);
+    assert(lsn == left_bound);
     while ((left_bound + 1) != right_bound) {
         lsn += 1;
         if (lsn == right_bound) {
@@ -445,13 +459,17 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
         else if (subq.adr != 1) {
             // If a mode 2 or mode 3 sector immediately follows left bound,
             // consider it part of previous track and contract left bound.
-            if (lsn - 1 == left_bound)
+            if (lsn - 1 == left_bound) {
+                assert(lsn >= left_bound);
                 left_bound = lsn;
+            }
         }
         else if (subq.track_number == prev_track_number) {
+            assert(lsn >= left_bound);
             left_bound = lsn;
         }
         else if (subq.track_number == track_number) {
+            assert(lsn <= right_bound);
             right_bound = lsn;
             // Restart loop.
             lsn = left_bound;
