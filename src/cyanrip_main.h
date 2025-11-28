@@ -93,6 +93,7 @@ enum coverart_lookup_sizes {
 
 typedef struct cyanrip_settings {
     char *dev_path;
+    char *toc_path;
     char *folder_name_scheme;
     char *track_name_scheme;
     char *log_name_scheme;

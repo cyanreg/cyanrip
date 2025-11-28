@@ -129,12 +129,21 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_init();
 
-    if (!ctx->settings.dev_path)
-        ctx->settings.dev_path = cdio_get_default_device(NULL);
+    if (ctx->settings.toc_path) {
+        ctx->cdio = cdio_open_cdrdao(ctx->settings.toc_path);
+        if (!ctx->cdio) {
+            cyanrip_log(ctx, 0, "Unable to open TOC file: %s\n", ctx->settings.toc_path);
+            cyanrip_ctx_end(&ctx);
+            return AVERROR(EINVAL);
+        }
+    } else {
+        if (!ctx->settings.dev_path)
+            ctx->settings.dev_path = cdio_get_default_device(NULL);
 
-    if (!(ctx->cdio = cdio_open(ctx->settings.dev_path, DRIVER_UNKNOWN))) {
-        cyanrip_log(ctx, 0, "Unable to init cdio context\n");
-        return AVERROR(EINVAL);
+        if (!(ctx->cdio = cdio_open(ctx->settings.dev_path, DRIVER_UNKNOWN))) {
+            cyanrip_log(ctx, 0, "Unable to init cdio context\n");
+            return AVERROR(EINVAL);
+        }
     }
 
     cdio_get_drive_cap(ctx->cdio, &ctx->rcap, &ctx->wcap, &ctx->mcap);
@@ -1422,6 +1431,7 @@ int main(int argc, char **argv)
 
     /* Default settings */
     settings.dev_path = NULL;
+    settings.toc_path = NULL;
     settings.folder_name_scheme = "{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]";
     settings.track_name_scheme = "{if #totaldiscs# > #1#|disc|.}{track} - {title}";
     settings.log_name_scheme = "{album}{if #totaldiscs# > #1# CD|disc|}";
@@ -1471,12 +1481,13 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:e:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
             cyanrip_log(ctx, 0, "\n  Ripping options:\n");
             cyanrip_log(ctx, 0, "    -d <path>             Set device path\n");
+            cyanrip_log(ctx, 0, "    -e <path>             Set TOC file path\n");
             cyanrip_log(ctx, 0, "    -s <int>              CD Drive offset in samples (default: 0)\n");
             cyanrip_log(ctx, 0, "    -r <int>              Maximum number of retries for frames and repeated rips (default: 10)\n");
             cyanrip_log(ctx, 0, "    -Z <int>              Rips tracks until their checksums match <int> number of times. For very damaged CDs.\n");
@@ -1806,6 +1817,9 @@ int main(int argc, char **argv)
             return 0;
         case 'd':
             settings.dev_path = strdup(optarg);
+            break;
+        case 'e':
+            settings.toc_path = strdup(optarg);
             break;
         case '?':
             return 1;

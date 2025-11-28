@@ -2,3 +2,4 @@ build
 *.log
 .github/_build
 .github/_install
+.vscode/
