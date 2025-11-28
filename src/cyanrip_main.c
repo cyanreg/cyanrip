@@ -129,7 +129,7 @@ static int cyanrip_ends_with(const char *str, const char *suffix)
     if (lensuffix > lenstr)
         return 0;
 
-    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+    return !strncmp(str + lenstr - lensuffix, suffix, lensuffix);
 }
 
 /*
@@ -137,15 +137,14 @@ static int cyanrip_ends_with(const char *str, const char *suffix)
  */
 static CdIo_t *cyanrip_open_dev(const char *dev_path)
 {
-    if (cyanrip_ends_with(dev_path, ".bin")) {
+    if (cyanrip_ends_with(dev_path, ".bin"))
         return cdio_open_bincue(dev_path);
-    } else if (cyanrip_ends_with(dev_path, ".cue")) {
+    else if (cyanrip_ends_with(dev_path, ".cue"))
         return cdio_open_cue(dev_path);
-    } else if (cyanrip_ends_with(dev_path, ".nrg")) {
+    else if (cyanrip_ends_with(dev_path, ".nrg"))
         return cdio_open_nrg(dev_path);
-    } else if (cyanrip_ends_with(dev_path, ".toc")) {
+    else if (cyanrip_ends_with(dev_path, ".toc"))
         return cdio_open_cdrdao(dev_path);
-    }
 
     return cdio_open(dev_path, DRIVER_UNKNOWN);
 }
