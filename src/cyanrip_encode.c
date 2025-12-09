@@ -44,6 +44,13 @@
 #define AV_CODEC_ID_PCM_F64 AV_CODEC_ID_PCM_F64LE
 #endif
 
+
+typedef enum {
+    MUTEX_STATUS_NOT_INITIALIZED,
+    MUTEX_STATUS_ACQUIRED,
+    MUTEX_STATUS_FREE,
+} mutex_status_t;
+
 struct cyanrip_enc_ctx {
     cyanrip_ctx *ctx;
     AVBufferRef *fifo;
@@ -56,7 +63,7 @@ struct cyanrip_enc_ctx {
     int audio_stream_index;
     cyanrip_track *t;
 
-    int mutex_held;
+    mutex_status_t mutex_status;
     pthread_mutex_t lock;
 
     AVStream *st_aud;
@@ -594,9 +601,9 @@ int cyanrip_reset_encoding(cyanrip_ctx *ctx, cyanrip_track *t)
     for (int i = 0; i < ctx->settings.outputs_num; i++) {
         cyanrip_enc_ctx *s = t->enc_ctx[i];
 
-        if (s->mutex_held) {
+        if (s->mutex_status == MUTEX_STATUS_ACQUIRED) {
             pthread_mutex_unlock(&s->lock);
-            s->mutex_held = 0;
+            s->mutex_status = MUTEX_STATUS_FREE;
         }
     }
 
@@ -820,15 +827,19 @@ int cyanrip_end_track_encoding(cyanrip_enc_ctx **s)
 
     ctx = *s;
 
-    if (ctx->mutex_held) {
+    if (ctx->mutex_status == MUTEX_STATUS_ACQUIRED) {
         pthread_mutex_unlock(&ctx->lock);
-        ctx->mutex_held = 0;
+        ctx->mutex_status = MUTEX_STATUS_FREE;
     }
 
     /* Send EOF, needed in case we haven't sent it yet and the user cancels. */
     cr_frame_fifo_push(ctx->fifo, NULL);
-    pthread_join(ctx->thread, NULL);
-    pthread_mutex_destroy(&ctx->lock);
+    if (ctx->thread) {
+        pthread_join(ctx->thread, NULL);
+    }
+    if (ctx->mutex_status != MUTEX_STATUS_NOT_INITIALIZED) {
+        pthread_mutex_destroy(&ctx->lock);
+    }
 
     swr_free(&ctx->swr);
 
@@ -1007,9 +1018,9 @@ fail:
 
 int cyanrip_writeout_track(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
 {
-    if (s->mutex_held) {
+    if (s->mutex_status == MUTEX_STATUS_ACQUIRED) {
         pthread_mutex_unlock(&s->lock);
-        s->mutex_held = 0;
+        s->mutex_status = MUTEX_STATUS_FREE;
     }
 
     return 0;
@@ -1025,7 +1036,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
 
     const AVCodec *out_codec = NULL;
 
-    s->mutex_held = 1;
+    s->mutex_status = MUTEX_STATUS_NOT_INITIALIZED;
     s->t = t;
     s->ctx = ctx;
     s->cfmt = cfmt;
@@ -1142,7 +1153,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         goto fail;
     }
     pthread_mutex_lock(&s->lock);
-    s->mutex_held = 1;
+    s->mutex_status = MUTEX_STATUS_ACQUIRED;
 
     /* Packet fifo */
     if (s->separate_writeout) {
