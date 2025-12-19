@@ -311,7 +311,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
             t->data_mode = (format == TRACK_FORMAT_XA || format == TRACK_FORMAT_CDI ||
                             format == TRACK_FORMAT_PSX) ? 2 : 1;
         }
-        t->pregap_lsn = cyanrip_get_track_pregap_lsn(ctx->cdio, t->number);
+        t->pregap_lsn = cyanrip_get_track_pregap_lsn(ctx, t->number);
         t->dropped_pregap_start = CDIO_INVALID_LSN;
         t->merged_pregap_end = CDIO_INVALID_LSN;
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
