@@ -38,6 +38,23 @@ genopt_test = executable('genopt_test',
 )
 test('Option parsing', genopt_test)
 
+## pregap_test defines its own cdio_get_*()/cyanrip_read_audio_subq_sectors()
+## (see pregap_test.c) to drive pregap.c against a synthetic disc, so it must
+## not link the real libcdio/libcdio_paranoia - only their headers, for types.
+pregap_test_deps = [
+    dependency('libavutil'),
+    dependency('libavcodec'),
+    dependency('libcdio').partial_dependency(compile_args: true, includes: true),
+    dependency('libcdio_paranoia').partial_dependency(compile_args: true, includes: true),
+]
+pregap_test = executable('pregap_test',
+    sources: [ 'pregap_test.c' ],
+    include_directories: [ '../src' ],
+    objects: cyanrip_exe.extract_objects([ 'pregap.c' ]),
+    dependencies: pregap_test_deps,
+)
+test('Pregap search', pregap_test)
+
 ## Integration tests
 ## =================
 ## Rip the disc image fixtures with the built binary and verify the
