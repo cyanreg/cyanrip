@@ -517,6 +517,7 @@ void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
     }
 
     vprintf(format, args);
+    fflush(stdout);
 
     va_end(args);
 
