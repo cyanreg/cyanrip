@@ -38,6 +38,7 @@
 #include "accurip.h"
 #include "os_compat.h"
 #include "cyanrip_encode.h"
+#include "pregap.h"
 
 int quit_now = 0;
 
@@ -249,7 +250,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         t->index = i + 1;
         t->number = t->cd_track_number = i + first_track_nb;
         t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
-        t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
+        t->pregap_lsn = cyanrip_get_track_pregap_lsn(ctx->cdio, t->number);
         t->dropped_pregap_start = CDIO_INVALID_LSN;
         t->merged_pregap_end = CDIO_INVALID_LSN;
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
