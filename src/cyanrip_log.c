@@ -65,7 +65,7 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     char length[16];
-    cyanrip_samples_to_duration(t->nb_samples, length);
+    cyanrip_frames_to_duration(t->frames, length);
 
     cyanrip_log(ctx, 0, "  Preemphasis:   ");
     if (!t->preemphasis) {

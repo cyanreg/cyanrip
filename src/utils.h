@@ -58,28 +58,20 @@ static inline void cyanrip_frames_to_cue(uint32_t frames, char *str)
     snprintf(str, 16, "%02i:%02i:%02i", min, sec, left);
 }
 
+/**
+ * Writes the duration, in MSF as IEC/MMC specify the string (min:sec.ff), to
+ * the char*. Min can be larger than 59. Make sure that the char* is at least 13
+ * bytes long. Frames is nice to avoid any potential rounding error.
+ */
 static inline void cyanrip_frames_to_duration(uint32_t frames, char *str)
 {
     if (!str)
         return;
-    const double tot = frames/75.0; /* 75 frames per second */
-    const int hr    = tot/3600.0;
-    const int min   = (tot/60.0) - (hr * 60.0);
-    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
-    const int msec  = tot*1000.0 - ((hr * 3600.0) + (min * 60.0) + sec)*1000.0;
-    snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
-}
-
-static inline void cyanrip_samples_to_duration(uint32_t samples, char *str)
-{
-    if (!str)
-        return;
-    const double tot = samples/44100.0; /* 44100 samples per second */
-    const int hr    = tot/3600.0;
-    const int min   = (tot/60.0) - (hr * 60.0);
-    const int sec   = tot - ((hr * 3600.0) + min * 60.0);
-    const int msec  = tot*1000.0 - ((hr * 3600.0) + (min * 60.0) + sec)*1000.0;
-    snprintf(str, 13, "%02i:%02i:%02i.%03i", hr, min, sec, msec);
+    // 75 frames per second
+    const uint32_t min    = frames / (75 * 60);
+    const uint32_t sec    = (frames / 75) % 60;
+    const uint32_t remain = frames % 75;
+    snprintf(str, 13, "%02i:%02i.%02i", min, sec, remain);
 }
 
 static inline int cmp_numbers(const void *a, const void *b)
