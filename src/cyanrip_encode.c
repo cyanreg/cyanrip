@@ -386,7 +386,7 @@ static int init_filtering(cyanrip_ctx *ctx, cyanrip_filt_ctx *s,
 
     const char *filter_desc = hdcd ? "hdcd" :
                               deemphasis ? "aemphasis=type=cd" :
-                              peak ? "ebur128=peak=true,anullsink" :
+                              peak ? "ebur128=peak=true+sample,anullsink" :
                               NULL;
 
     ret = avfilter_graph_parse_ptr(s->graph, filter_desc, &inputs, &outputs, NULL);

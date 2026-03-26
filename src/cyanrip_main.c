@@ -584,6 +584,29 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 }
 
+static double sample_peak_rel_amp(const uint8_t *data, const int bytes) {
+    const int16_t* samples = (int16_t*)data;
+    const int bytes_per_sample = 2;
+    const int sample_num = bytes / bytes_per_sample;
+
+    /* At least 32 bits needed to accomodate abs(INT16_MIN) */
+    int32_t sample_peak = 0;
+    for (int i = 0; i < sample_num; ++i) {
+        /* int is usually 32-bit but technically it can be 16-bit. Make sure
+         * we're using a wide enough abs() just in case someone runs this on a
+         * toaster.
+         */
+        #if (INT_MAX >= 32768)
+            sample_peak = FFMAX(sample_peak, abs(samples[i]));
+        #else
+            sample_peak = FFMAX(sample_peak, labs(samples[i]));
+        #endif
+    }
+
+    /* The greatest sample absolute value is abs(INT16_MIN) = 32768 */
+    return (double)sample_peak/32768.0;
+}
+
 static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
@@ -649,6 +672,7 @@ repeat_ripping:;
     }
 
     int64_t frame_last_read = av_gettime_relative();
+    double track_sample_peak_rel_amp_precise = 0.0;
 
     /* Read the actual CD data */
     for (int i = 0; i < frames; i++) {
@@ -691,6 +715,11 @@ repeat_ripping:;
 
         /* Update checksums */
         crip_process_checksums(&checksum_ctx, data, bytes);
+
+        /* Update sample peak */
+        const double frame_sample_peak_rel_amp_precise = sample_peak_rel_amp(data, bytes);
+        track_sample_peak_rel_amp_precise =
+            FFMAX(frame_sample_peak_rel_amp_precise, track_sample_peak_rel_amp_precise);
 
         /* Decode and encode */
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
@@ -872,6 +901,14 @@ end:
     t->total_repeats = total_repeats;
     if (!quit_now && !ret) {
         cyanrip_finalize_encoding(ctx, t);
+        const double track_true_peak_rel_amp_ebu = pow(10, t->ebu_true_peak/20);
+        const double track_sample_peak_rel_amp_ebu = pow(10, t->ebu_sample_peak/20);
+        cyanrip_log(ctx, 0, "  Sample peak relative amplitude (calculated from ebur128 dBFS):\n");
+        cyanrip_log(ctx, 0, "    Peak:        %f\n\n", track_sample_peak_rel_amp_ebu); 
+        cyanrip_log(ctx, 0, "  Sample peak relative amplitude (precise):\n");
+        cyanrip_log(ctx, 0, "    Peak:        %f\n\n", track_sample_peak_rel_amp_precise); 
+        cyanrip_log(ctx, 0, "  True peak relative amplitude (calculated from ebur128 dBFS):\n");
+        cyanrip_log(ctx, 0, "    Peak:        %f\n\n", track_true_peak_rel_amp_ebu); 
         if (ctx->settings.enable_replaygain)
             crip_replaygain_meta_track(ctx, t);
         cyanrip_log_track_end(ctx, t);
