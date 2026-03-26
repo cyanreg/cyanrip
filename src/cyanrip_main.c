@@ -1510,7 +1510,7 @@ int main(int argc, char **argv)
     int track_cover_arts_map[198] = { 0 };
     int nb_track_cover_arts = 0;
 
-    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
+    while ((c = getopt(argc, argv, "hNAUfHIVQEGWKOJl:a:t:b:c:r:d:o:s:S:D:p:C:R:P:F:L:T:M:Z:m:")) != -1) {
         switch (c) {
         case 'h':
             cyanrip_log(ctx, 0, "cyanrip %s (%s) help:\n", PROJECT_VERSION_STRING, vcstag);
@@ -1548,6 +1548,7 @@ int main(int argc, char **argv)
             cyanrip_log(ctx, 0, "    -U                    Disables Cover art DB database query and retrieval\n");
             cyanrip_log(ctx, 0, "    -m                    Lookup cover art with max size: 250, 500, 1200, -1 (no limit, default)\n");
             cyanrip_log(ctx, 0, "    -G                    Disables embedding of cover art images\n");
+            cyanrip_log(ctx, 0, "    -J                    Generate CUE sheet only\n");
             cyanrip_log(ctx, 0, "\n  Misc. options:\n");
             cyanrip_log(ctx, 0, "    -Q                    Eject tray once successfully done\n");
             cyanrip_log(ctx, 0, "    -V                    Print program version\n");
@@ -1682,6 +1683,9 @@ int main(int argc, char **argv)
             break;
         case 'G':
             settings.disable_coverart_embedding = 1;
+            break;
+        case 'J':
+            settings.generate_cue_only = 1;
             break;
         case 'H':
             settings.decode_hdcd = 1;
@@ -1866,6 +1870,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (settings.print_info_only && settings.generate_cue_only) {
+        cyanrip_log(ctx, 0, "-J (Just CUE) cannot be used with -I (Info only).\n");
+        return 1;
+    }
+
     if (find_drive_offset_range) {
         settings.disable_accurip = 0;
         settings.disable_mb = 1;
@@ -2015,10 +2024,13 @@ int main(int argc, char **argv)
             av_dict_set(&ctx->meta, "album_artist", artist, 0);
     }
 
-    /* Create log file */
+    /* Create log/cue files */
     if (!ctx->settings.print_info_only) {
-        if (cyanrip_log_init(ctx))
-            return 1;
+        if (!ctx->settings.generate_cue_only) {
+            if (cyanrip_log_init(ctx))
+                return 1;
+        }
+
         if (cyanrip_cue_init(ctx))
             return 1;
     } else {
@@ -2083,6 +2095,21 @@ int main(int argc, char **argv)
             ctx->total_error_count++;
             goto end;
         }
+    }
+
+    /* Write cue and exit */
+    if (ctx->settings.generate_cue_only) {
+        cyanrip_log(ctx, 0, "Generating CUE sheet...\n");
+        
+        for (int i = 0; i < ctx->nb_tracks; i++) {
+            cyanrip_track *t = &ctx->tracks[i];
+            track_read_extra(ctx, t); /* For isrc & preemphasis */
+            cyanrip_cue_track(ctx, t);
+        }
+        
+        cyanrip_log(ctx, 0, "Cue sheet generated successfully!\n");
+
+        goto end;
     }
 
     /* Copy track cover arts */
