@@ -29,6 +29,11 @@ cc = meson.get_compiler('c')
 subdir('src')
 subdir('tests')
 
+install_data(
+    'com.github.cyanreg.cyanrip.metainfo.xml',
+    install_dir: get_option('datadir') / 'metainfo',
+)
+
 configure_file(
     output: 'config.h',
     configuration: conf,
