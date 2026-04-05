@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>com.github.cyanreg.cyanrip</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LGPL-2.1-or-later</project_license>
+  <name>cyanrip</name>
+  <summary>Fully featured CD ripping program</summary>
+  <description>
+    <p>
+      cyanrip is a fully featured CD ripping program able to take out most of
+      the tedium. Fully accurate, has advanced features most rippers don't,
+      yet has no bloat and is cross-platform.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Automatic tag lookup from the MusicBrainz database</li>
+      <li>Encoded and muxed via FFmpeg (supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)</li>
+      <li>Drive offset compensation and error recovery via cd-paranoia</li>
+      <li>Full pregap handling</li>
+      <li>HDCD detection and decoding</li>
+      <li>CD Deemphasis (TOC + subcode)</li>
+      <li>Multi-disc album ripping</li>
+      <li>ReplayGain v2 tagging</li>
+      <li>Able to encode to multiple formats in parallel</li>
+      <li>Cover image embedding in mp3, flac, aac and opus</li>
+      <li>Automatic cover art image downloading</li>
+      <li>Provides and automatically verifies EAC CRC32, AccurateRip V1 and V2 checksums</li>
+      <li>Accurate ripping verification of partially damaged tracks</li>
+      <li>Automatic drive offset finding</li>
+    </ul>
+  </description>
+  <developer id="github.cyanreg">
+    <name>cyanreg</name>
+  </developer>
+  <url type="homepage">https://github.com/cyanreg/cyanrip</url>
+  <url type="bugtracker">https://github.com/cyanreg/cyanrip/issues</url>
+  <provides>
+    <binary>cyanrip</binary>
+  </provides>
+  <releases>
+    <release version="0.9.3.1" date="2024-06-05"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>
