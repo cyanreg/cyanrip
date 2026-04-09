@@ -37,6 +37,13 @@ Or use your favorite AUR installation method.
 apt install cyanrip
 ```
 
+### Fedora (COPR)
+```bash
+dnf copr enable gierth/tools-misc
+dnf install cyanrip
+```
+See the COPR repository: [gierth/tools-misc](https://copr.fedorainfracloud.org/coprs/gierth/tools-misc/)
+
 ### OpenSUSE
 ```bash
 zypper install cyanrip
