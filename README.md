@@ -102,7 +102,7 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -Z `int`             | Rips tracks until their checksums match `<int>` number of times. For very damaged CDs.      |
 | -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                        |
 | -p `number=string`   | Specifies what to do with the pregap, syntax is described below                             |
-| -P `int`             | Sets the paranoia level to use, by default its max, 0 disables all checking completely      |
+| -P `int`             | Sets the [paranoia level](#paranoia-level), default is max, 0 disables checking completely  |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
 | -E                   | Force CD deemphasis, for CDs mastered with preemphasis without actually signalling it       |
@@ -272,6 +272,18 @@ ReplayGain
 cyanrip will automatically compute ReplayGain tags and add them to all files while ripping. Note, that this requires to hold all **compressed** audio data for the entire CD in RAM while ripping, which may be from 300 to 600 megabytes, depending on the output used. Low-power and low-RAM devices can turn this off via the `-K` switch.
 
 The tags generated are ReplayGain 2.0 compliant, which is backwards-compatible with ReplayGain 1.0. The **true peak** value is calculated and used.
+
+
+Paranoia level
+--------------
+cyanrip can apply four levels of `cdparanoia` error detection and correction:
+
+| Argument         | Description                   | Purpose                                                                           | `cdparanoia` CLI equivalent |
+|------------------|-------------------------------|-----------------------------------------------------------------------------------|-----------------------------|
+| -P `0` or `none` | Disabled                      | Fastest ripping with no error correction                                          | -Z                          |
+| -P `1`           | Overlapped reads              | Correct errors when optical drives skip sectors while reading audio discs         | -Y                          |
+| -P `2`           | Overlapped and verified reads | Re-read sectors to correct for optical drives that supply inconsistent audio data | *n/a*                       |
+| -P `3` or `max`  | All paranoia features         | At present, same as `-P 2`, but includes future `cdparanoia` improvements         | *default*                   |
 
 
 Paranoia status count
