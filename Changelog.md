@@ -1,3 +1,17 @@
+0.9.4-rc1
+=========
+ - New option parser: long options, typed values, saner errors
+ - CUE sheet-only mode, without ripping anything (-J)
+ - Rip log checksum verification (-Y)
+ - Label and catalog number tagging from MusicBrainz
+ - Embedded cover art is now typed as a front cover, so file managers thumbnail it
+ - Automatic deemphasis of preemphasized discs now actually happens
+ - CUE sheets reference their files relative to the sheet
+ - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
+ - Data tracks no longer leave stray files
+ - Fixed a crash on overlong filenames
+ - FFmpeg 8.0+ compatibility
+
 0.9.3
 =====
  - FFmpeg 7.0 compatibility
