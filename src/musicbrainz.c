@@ -195,7 +195,7 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
     }
 
     char *names[] = { "inc" };
-    char *values[] = { "recordings artist-credits" };
+    char *values[] = { "recordings artist-credits labels" };
     const char *discid = dict_get(ctx->meta, "musicbrainz_discid");
     if (!discid) {
         cyanrip_log(ctx, 0, "Missing DiscID!\n");
@@ -333,8 +333,8 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
 
     /* Label info */
     Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
-    if (mb5_labelinfo_list_size(labelinfolist) == 1) {
-        Mb5LabelInfo *labelinfo = mb5_label_list_item(labelinfolist, 0);
+    if (mb5_labelinfo_list_size(labelinfolist) >= 1) {
+        Mb5LabelInfo *labelinfo = mb5_labelinfo_list_item(labelinfolist, 0);
         READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalog", 0);
 
         Mb5Label *label = mb5_labelinfo_get_label(labelinfo);
