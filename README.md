@@ -93,6 +93,24 @@ All are available on any up-to-date Linux distribution's package repositories. T
 cyanrip can be also built and ran under Windows using MinGW
 
 
+### Flatpak
+
+#### Prepare environment
+```
+flatpak install -y flathub org.flatpak.Builder
+flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+#### Install
+```
+flatpak run --command=flathub-build org.flatpak.Builder --install com.github.cyanreg.cyanrip.yaml
+```
+
+#### Run
+```
+flatpak run com.github.cyanreg.cyanrip
+```
+
 CLI
 ---
 Arguments are optional, except `-s`. By default cyanrip will rip all tracks from the default CD drive, output to flac only, enables all cd-paranoia error checking, performs a MusicBrainz lookup, and downloads and embeds the cover art if one is found.
