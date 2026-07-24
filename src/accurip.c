@@ -99,7 +99,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     }
 
     /* Format all the data in the needed way */
-    uint32_t cddb_id = strtol(cddb_id_str, NULL, 16);
+    uint32_t cddb_id = strtoul(cddb_id_str, NULL, 16);
     char id_type_1_s[9] = { 0 };
     snprintf(id_type_1_s, sizeof(id_type_1_s), "%08x", id_type_1);
 
