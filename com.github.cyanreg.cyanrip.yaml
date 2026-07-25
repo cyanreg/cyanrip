@@ -41,8 +41,8 @@ modules:
           - --disable-static
       sources:
           - type: archive
-            url: https://notroj.github.io/neon/neon-0.33.0.tar.gz
-            sha256: 659a5cc9cea05e6e7864094f1e13a77abbbdbab452f04d751a8c16a9447cf4b8
+            url: https://notroj.github.io/neon/neon-0.37.1.tar.gz
+            sha256: a99b7262525a454d1065cf76dd17240fd808dfc4ef15636990ff83a5d0d9e740
 
     - name: libmusicbrainz5
       buildsystem: cmake-ninja
