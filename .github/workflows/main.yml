@@ -5,6 +5,7 @@ on:
     branches: [ master, workflow ]
   release:
     types: [ released ]
+  workflow_dispatch:
 
 jobs:
   linux:
