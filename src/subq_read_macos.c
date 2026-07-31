@@ -29,7 +29,7 @@ driver_return_code_t cyanrip_read_audio_subq_sectors(
     const lsn_t lsn,
     const uint32_t blocks)
 {
-    const int fd = cdio_get_device_fd(Cdio_t *)p_cdio);
+    const int fd = cdio_get_device_fd((Cdio_t *)p_cdio);
     if (fd < 0) {
         return DRIVER_OP_ERROR;
     }
