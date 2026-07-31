@@ -21,6 +21,7 @@
 #include <IOKit/storage/IOCDTypes.h>
 #include <IOKit/storage/IOCDMediaBSDClient.h>
 #include <sys/errno.h>
+#include <cdio/cdio.h>
 
 driver_return_code_t cyanrip_read_audio_subq_sectors(
     const CdIo_t *p_cdio,
