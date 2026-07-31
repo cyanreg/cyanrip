@@ -1,10 +1,16 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
-    branches: [ master, workflow ]
+    branches:
+      - master
+      - workflow
   release:
-    types: [ released ]
+    types: 
+      - released
   workflow_dispatch:
 
 jobs:
