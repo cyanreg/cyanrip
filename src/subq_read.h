@@ -24,6 +24,12 @@
 // Size of reads of audio + subchannel Q data. 2352 bytes for audio + 16 bytes for subchannel Q
 #define CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ (CDIO_CD_FRAMESIZE_RAW + 16)
 
+/**
+ * Reads audio + subchannel Q data from a CD device
+ * into audio_subq_buf.
+ * 
+ * The buffer must be large enough to hold (blocks * CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ) bytes.
+ */
 driver_return_code_t cyanrip_read_audio_subq_sectors(
     const CdIo_t *p_cdio,
     uint8_t *audio_subq_buf,
