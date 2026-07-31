@@ -18,6 +18,7 @@
 
 #include "subq_read.h"
 #include "pregap.h"
+#include "cyanrip_log.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -130,6 +131,7 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
     unsigned crc_read = (subq_buf[10] << 8) | subq_buf[11];
     unsigned crc_comp = crc_subq(subq_buf);
     int retry = 0;
+
     while (retry++ < retry_max && crc_read != crc_comp) {
         // TODO Is a cache defeat here ever necessary? Testing on macOS with an
         // ASUS SDRW-08U7M-U, it didn't have an effect.
@@ -140,9 +142,9 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
         crc_read = (subq_buf[10] << 8) | subq_buf[11];
         crc_comp = crc_subq(subq_buf);
     }
+
     return ret;
 }
-
 
 // TODO: Check that drive is actually returning Q subchannel data and not just zeroes.
 lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
@@ -199,7 +201,8 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
     // Check one sector before track start to see if there is any pregap.
     lsn = track_start_lsn - 1;
     ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
-    assert(!ret);
+    if (ret)
+        goto fail;
     decode_subq(&subq, subq_buf);
     crc_comp = crc_subq(subq_buf);
     if (subq.crc == crc_comp && subq.adr == 1 && subq.track_number == prev_track_number)
@@ -219,7 +222,8 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             break;
         }
         ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
-        assert(!ret);
+        if (ret)
+            goto fail;
         decode_subq(&subq, subq_buf);
         crc_comp = crc_subq(subq_buf);
         if (subq.crc != crc_comp || subq.adr != 1) {
@@ -256,7 +260,8 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             continue;
         }
         ret = read_audio_subq_sector_with_retries(p_cdio, audio_subq_buf, lsn, retry_max);
-        assert(!ret);
+        if (ret)
+            goto fail;
         decode_subq(&subq, subq_buf);
         crc_comp = crc_subq(subq_buf);
         if (subq.crc != crc_comp) {
@@ -282,9 +287,21 @@ lsn_t cyanrip_get_track_pregap_lsn(CdIo_t *p_cdio, const track_t track_number) {
             lsn = left_bound;
         }
     }
-    // TODO Log failure to find pregap due to CRC mismatches.
-    lsn = (left_bound + 1 == right_bound) ? right_bound : DRIVER_OP_ERROR;
+    if (left_bound + 1 == right_bound) {
+        lsn = right_bound;
+    } else {
+        cyanrip_log(NULL, 0, "Warning: repeated subq CRC mismatches prevented finding the "
+                    "pregap of track %i, skipping pregap detection\n", track_number);
+        lsn = CDIO_INVALID_LSN;
+    }
 
     free(audio_subq_buf);
     return lsn;
+
+fail:
+    cyanrip_log(NULL, 0, "Warning: failed to read subq data at lsn %i (error %i) while "
+                "searching for the pregap of track %i, skipping pregap detection\n",
+                lsn, ret, track_number);
+    free(audio_subq_buf);
+    return CDIO_INVALID_LSN;
 }
