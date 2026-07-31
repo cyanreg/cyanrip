@@ -43,7 +43,7 @@ driver_return_code_t cyanrip_read_audio_subq_sectors(
     };
     if (!ioctl(fd, DKIOCCDREAD, &cd_read))
         return DRIVER_OP_SUCCESS;
-    const int ioctl_errno = errno;
+
     // TODO More detailed error handling? errno will be one of:
     // EBADF
     // EINVAL
