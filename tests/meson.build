@@ -5,6 +5,7 @@ unit_test_deps = [
     dependency('libavutil'),
     dependency('libavcodec'),
     dependency('libcdio'),
+    dependency('libcdio_paranoia'),
 ]
 
 fun512_test = executable('fun512_test',
