@@ -127,13 +127,18 @@ static int verify_subq_crc(cyanrip_ctx *ctx, uint8_t *subq_buf)
 
 // Reading Q subchannel using the READ CD command is an MMC-2 feature. Ancient
 // drives don't support it and will return zeroes.
+//
+// Not part of cyanrip_pregap_ops: unlike the libcdio metadata calls below,
+// cyanrip_read_audio_subq_sectors() is our own symbol (implemented per
+// platform in subq_read_mmc.c/subq_read_macos.c, not a shared library), so
+// tests can substitute it by simply not linking those files and providing
+// their own definition instead - no indirection needed here.
 static driver_return_code_t read_audio_subq_sector(
     cyanrip_ctx *ctx,
-    const cyanrip_pregap_ops *ops,
     uint8_t *audio_subq_buf,
     const lsn_t lsn)
 {
-    return ops->read_audio_subq_sectors(ctx->cdio, audio_subq_buf, lsn, 1);
+    return cyanrip_read_audio_subq_sectors(ctx->cdio, audio_subq_buf, lsn, 1);
 }
 
 // Returns the driver error code (if any) via the return value, and whether
@@ -143,14 +148,13 @@ static driver_return_code_t read_audio_subq_sector(
 // already-fixed-up buffer would re-apply the fixup and corrupt it.
 static driver_return_code_t read_audio_subq_sector_with_retries(
     cyanrip_ctx *ctx,
-    const cyanrip_pregap_ops *ops,
     uint8_t *audio_subq_buf,
     const lsn_t lsn,
     const int retry_max,
     int *total_failures,
     int *out_valid)
 {
-    driver_return_code_t ret = read_audio_subq_sector(ctx, ops, audio_subq_buf, lsn);
+    driver_return_code_t ret = read_audio_subq_sector(ctx, audio_subq_buf, lsn);
     uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
     int retry = 0;
     int valid = !ret && verify_subq_crc(ctx, subq_buf);
@@ -160,7 +164,7 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
         // TODO Is a cache defeat here ever necessary? Testing on macOS with an
         // ASUS SDRW-08U7M-U, it didn't have an effect.
         // overflow_device_read_cache(p_cdio, lsn);
-        if ((ret = read_audio_subq_sector(ctx, ops, audio_subq_buf, lsn))) {
+        if ((ret = read_audio_subq_sector(ctx, audio_subq_buf, lsn))) {
             *out_valid = 0;
             return ret;
         }
@@ -250,14 +254,14 @@ lsn_t cyanrip_get_track_pregap_lsn_impl(cyanrip_ctx *ctx, const cyanrip_pregap_o
     // sector before that, to see if there is no pregap at all.
     int subq_valid;
     lsn = track_start_lsn - 1;
-    ret = read_audio_subq_sector_with_retries(ctx, ops, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+    ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
     if (ret)
         goto fail;
     if (subq_valid) {
         decode_subq(&subq, subq_buf);
         if (subq.adr == 1 && subq.track_number == prev_track_number) {
             const lsn_t confirm_lsn = lsn - 1;
-            ret = read_audio_subq_sector_with_retries(ctx, ops, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
+            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
             if (ret)
                 goto fail;
             if (subq_valid) {
@@ -281,7 +285,7 @@ lsn_t cyanrip_get_track_pregap_lsn_impl(cyanrip_ctx *ctx, const cyanrip_pregap_o
         if (lsn == prev_track_start_lsn) {
             break;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, ops, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
@@ -302,7 +306,7 @@ lsn_t cyanrip_get_track_pregap_lsn_impl(cyanrip_ctx *ctx, const cyanrip_pregap_o
                 right_bound = lsn;
                 continue;
             }
-            ret = read_audio_subq_sector_with_retries(ctx, ops, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
+            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
             if (ret)
                 goto fail;
             if (total_failures > total_failure_budget)
@@ -342,7 +346,7 @@ lsn_t cyanrip_get_track_pregap_lsn_impl(cyanrip_ctx *ctx, const cyanrip_pregap_o
             right_bound_candidate = CDIO_INVALID_LSN;
             continue;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, ops, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
@@ -405,14 +409,13 @@ fail:
     return CDIO_INVALID_LSN;
 }
 
-// libcdio's and cyanrip_read_audio_subq_sectors()'s real signatures already
-// match cyanrip_pregap_ops exactly, so no adapter thunks are needed here.
+// libcdio's real signatures already match cyanrip_pregap_ops exactly, so no
+// adapter thunks are needed here.
 static const cyanrip_pregap_ops libcdio_pregap_ops = {
-    .get_track_pregap_lsn    = cdio_get_track_pregap_lsn,
-    .get_first_track_num     = cdio_get_first_track_num,
-    .get_track_lsn           = cdio_get_track_lsn,
-    .get_track_format        = cdio_get_track_format,
-    .read_audio_subq_sectors = cyanrip_read_audio_subq_sectors,
+    .get_track_pregap_lsn = cdio_get_track_pregap_lsn,
+    .get_first_track_num  = cdio_get_first_track_num,
+    .get_track_lsn        = cdio_get_track_lsn,
+    .get_track_format     = cdio_get_track_format,
 };
 
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number) {

@@ -24,11 +24,10 @@ naming_test = executable('naming_test',
 )
 test('Naming schemes', naming_test)
 
-pregap_test_src = host_machine.system() == 'darwin' ? 'subq_read_macos.c' : 'subq_read_mmc.c'
 pregap_test = executable('pregap_test',
     sources: [ 'pregap_test.c' ],
     include_directories: [ '../src' ],
-    objects: cyanrip_exe.extract_objects([ 'pregap.c', pregap_test_src ]),
+    objects: cyanrip_exe.extract_objects([ 'pregap.c' ]),
     dependencies: unit_test_deps,
 )
 test('Pregap search', pregap_test)

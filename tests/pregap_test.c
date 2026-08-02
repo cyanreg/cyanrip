@@ -17,10 +17,20 @@
  */
 
 /* Exercises the Q sub-channel pregap search in pregap.c against a synthetic
- * drive (no real libcdio driver or hardware involved), via the ops-table
- * seam declared in pregap_internal.h. This lets us inject drive misbehaviour
- * (spurious reads, permanently bad sectors, BCD-quirk drives) that would be
- * impractical to reproduce with real hardware or a bin/cue image.
+ * drive (no real libcdio driver or hardware involved).
+ *
+ * Two separate seams make this possible:
+ *  - The 4 libcdio track-metadata queries go through the cyanrip_pregap_ops
+ *    table declared in pregap_internal.h (fake_ops below), since those are
+ *    real libcdio shared-library exports pregap.c can't otherwise redirect.
+ *  - cyanrip_read_audio_subq_sectors(), the actual Q sub-channel read, is our
+ *    own symbol (normally implemented in subq_read_mmc.c/subq_read_macos.c,
+ *    neither of which this test links). We just provide our own definition
+ *    of it below - no ops-table indirection needed for it.
+ *
+ * This lets us inject drive misbehaviour (spurious reads, permanently bad
+ * sectors, BCD-quirk drives) that would be impractical to reproduce with
+ * real hardware or a bin/cue image.
  *
  * The ops callbacks take a cyanrip_ctx*, matching production, but the fake
  * disc being ripped is described by a separate, test-only fixture (g_disc)
@@ -38,6 +48,7 @@
 #include "pregap_internal.h"
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
+#include "subq_read.h"
 
 /* pregap.c logs failures via cyanrip_log(); give it somewhere to go. */
 void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
@@ -143,8 +154,12 @@ static void true_subq_at(const fake_disc_t *d, lsn_t content_lsn,
     }
 }
 
-static driver_return_code_t fake_read_audio_subq_sectors(const CdIo_t *p_cdio, uint8_t *buf,
-                                                          lsn_t lsn, uint32_t blocks)
+/* Substitutes for the real cyanrip_read_audio_subq_sectors() (normally
+ * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
+ * test binary): generates synthetic Q sub-channel bytes for g_disc instead
+ * of talking to real hardware. */
+driver_return_code_t cyanrip_read_audio_subq_sectors(const CdIo_t *p_cdio, uint8_t *buf,
+                                                      lsn_t lsn, uint32_t blocks)
 {
     fake_disc_t *d = g_disc;
     (void)p_cdio;
@@ -247,11 +262,10 @@ static track_format_t fake_get_track_format(const CdIo_t *p_cdio, track_t track_
 }
 
 static const cyanrip_pregap_ops fake_ops = {
-    .get_track_pregap_lsn    = fake_get_track_pregap_lsn,
-    .get_first_track_num     = fake_get_first_track_num,
-    .get_track_lsn           = fake_get_track_lsn,
-    .get_track_format        = fake_get_track_format,
-    .read_audio_subq_sectors = fake_read_audio_subq_sectors,
+    .get_track_pregap_lsn = fake_get_track_pregap_lsn,
+    .get_first_track_num  = fake_get_first_track_num,
+    .get_track_lsn        = fake_get_track_lsn,
+    .get_track_format     = fake_get_track_format,
 };
 
 static lsn_t run(fake_disc_t *d)
