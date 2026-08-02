@@ -240,6 +240,11 @@ typedef struct cyanrip_ctx {
     lsn_t end_lsn;
     lsn_t duration_frames;
 
+    /* Set once this drive is found to return raw binary MSF fields instead
+     * of BCD in the Q sub-channel, so later pregap searches on the same
+     * disc apply the fixup from the start (see pregap.c). */
+    int subq_needs_bcd_fixup;
+
     /* ETA */
     CRSlidingWinCtx eta_ctx;
     lsn_t frames_read;
