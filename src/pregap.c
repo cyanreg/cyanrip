@@ -18,7 +18,6 @@
 
 #include "subq_read.h"
 #include "pregap.h"
-#include "pregap_internal.h"
 #include "cyanrip_log.h"
 
 #include <stdlib.h>
@@ -127,12 +126,6 @@ static int verify_subq_crc(cyanrip_ctx *ctx, uint8_t *subq_buf)
 
 // Reading Q subchannel using the READ CD command is an MMC-2 feature. Ancient
 // drives don't support it and will return zeroes.
-//
-// Not part of cyanrip_pregap_ops: unlike the libcdio metadata calls below,
-// cyanrip_read_audio_subq_sectors() is our own symbol (implemented per
-// platform in subq_read_mmc.c/subq_read_macos.c, not a shared library), so
-// tests can substitute it by simply not linking those files and providing
-// their own definition instead - no indirection needed here.
 static driver_return_code_t read_audio_subq_sector(
     cyanrip_ctx *ctx,
     uint8_t *audio_subq_buf,
@@ -177,32 +170,31 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
 }
 
 // TODO: Check that drive is actually returning Q subchannel data and not just zeroes.
-lsn_t cyanrip_get_track_pregap_lsn_impl(cyanrip_ctx *ctx, const cyanrip_pregap_ops *ops,
-                                         const track_t track_number) {
+lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number) {
     // Try to use libcdio. If libcdio doesn't implement pregap finding
     // for a driver, it will return CDIO_INVALID_LSN.
-    const lsn_t cdio_track_pregap_lsn = ops->get_track_pregap_lsn(ctx->cdio, track_number);
+    const lsn_t cdio_track_pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, track_number);
     if (cdio_track_pregap_lsn != CDIO_INVALID_LSN)
         return cdio_track_pregap_lsn;
 
     // First track pregap is lsn = 0, lba = CDIO_PREGAP_SECTORS.
     // TODO Under what circumstances does libcdio give a first track not equal
     // to 1? Does this ever happen for a rippable CD?
-    const track_t first_track_number = ops->get_first_track_num(ctx->cdio);
+    const track_t first_track_number = cdio_get_first_track_num(ctx->cdio);
     if (track_number == first_track_number)
         return 0;
 
-    const lsn_t track_start_lsn = ops->get_track_lsn(ctx->cdio, track_number);
+    const lsn_t track_start_lsn = cdio_get_track_lsn(ctx->cdio, track_number);
     // TODO Is (track_number - 1) always safe? e.g. non-continuous track numbers?
     const uint8_t prev_track_number = track_number - 1;
-    const lsn_t prev_track_start_lsn = ops->get_track_lsn(ctx->cdio, prev_track_number);
+    const lsn_t prev_track_start_lsn = cdio_get_track_lsn(ctx->cdio, prev_track_number);
 
     // Q sub-channel pregap searching only makes sense across an audio-audio
     // track boundary: a data track's Q sub-channel doesn't carry the same
     // index/track position semantics, and running the search anyway is both
     // meaningless and wasted work (matches XLD's guard).
-    if (ops->get_track_format(ctx->cdio, track_number) != TRACK_FORMAT_AUDIO ||
-        ops->get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
+    if (cdio_get_track_format(ctx->cdio, track_number) != TRACK_FORMAT_AUDIO ||
+        cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
         return CDIO_INVALID_LSN;
 
     // Handle single sector previous track.
@@ -407,17 +399,4 @@ fail:
                 lsn, ret, track_number);
     free(audio_subq_buf);
     return CDIO_INVALID_LSN;
-}
-
-// libcdio's real signatures already match cyanrip_pregap_ops exactly, so no
-// adapter thunks are needed here.
-static const cyanrip_pregap_ops libcdio_pregap_ops = {
-    .get_track_pregap_lsn = cdio_get_track_pregap_lsn,
-    .get_first_track_num  = cdio_get_first_track_num,
-    .get_track_lsn        = cdio_get_track_lsn,
-    .get_track_format     = cdio_get_track_format,
-};
-
-lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number) {
-    return cyanrip_get_track_pregap_lsn_impl(ctx, &libcdio_pregap_ops, track_number);
 }

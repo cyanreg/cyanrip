@@ -24,11 +24,20 @@ naming_test = executable('naming_test',
 )
 test('Naming schemes', naming_test)
 
+## pregap_test defines its own cdio_get_*()/cyanrip_read_audio_subq_sectors()
+## (see pregap_test.c) to drive pregap.c against a synthetic disc, so it must
+## not link the real libcdio/libcdio_paranoia - only their headers, for types.
+pregap_test_deps = [
+    dependency('libavutil'),
+    dependency('libavcodec'),
+    dependency('libcdio').partial_dependency(compile_args: true, includes: true),
+    dependency('libcdio_paranoia').partial_dependency(compile_args: true, includes: true),
+]
 pregap_test = executable('pregap_test',
     sources: [ 'pregap_test.c' ],
     include_directories: [ '../src' ],
     objects: cyanrip_exe.extract_objects([ 'pregap.c' ]),
-    dependencies: unit_test_deps,
+    dependencies: pregap_test_deps,
 )
 test('Pregap search', pregap_test)
 

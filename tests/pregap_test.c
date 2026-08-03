@@ -17,26 +17,25 @@
  */
 
 /* Exercises the Q sub-channel pregap search in pregap.c against a synthetic
- * drive (no real libcdio driver or hardware involved).
- *
- * Two separate seams make this possible:
- *  - The 4 libcdio track-metadata queries go through the cyanrip_pregap_ops
- *    table declared in pregap_internal.h (fake_ops below), since those are
- *    real libcdio shared-library exports pregap.c can't otherwise redirect.
- *  - cyanrip_read_audio_subq_sectors(), the actual Q sub-channel read, is our
- *    own symbol (normally implemented in subq_read_mmc.c/subq_read_macos.c,
- *    neither of which this test links). We just provide our own definition
- *    of it below - no ops-table indirection needed for it.
+ * drive - no real libcdio driver or hardware involved, and this test binary
+ * does not even link against libcdio.so: pregap.c calls cdio_get_track_lsn(),
+ * cdio_get_first_track_num(), cdio_get_track_format(),
+ * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subq_sectors() by name,
+ * and every one of them is defined right here instead, describing a synthetic
+ * disc (g_disc) instead of talking to a real drive. Since none of the real
+ * implementations are linked in (see tests/meson.build), there's no symbol
+ * clash - the linker just resolves pregap.c's calls to these definitions.
  *
  * This lets us inject drive misbehaviour (spurious reads, permanently bad
  * sectors, BCD-quirk drives) that would be impractical to reproduce with
  * real hardware or a bin/cue image.
  *
- * The ops callbacks take a cyanrip_ctx*, matching production, but the fake
- * disc being ripped is described by a separate, test-only fixture (g_disc)
- * that the callbacks read from directly: cyanrip_ctx has no room for a
- * synthetic track layout or fault injection, and shouldn't grow any just for
- * this. The ctx itself is only actually used for ctx->subq_needs_bcd_fixup.
+ * cyanrip_get_track_pregap_lsn() is still called with a real cyanrip_ctx
+ * (zeroed, like naming_test.c does): that's where ctx->subq_needs_bcd_fixup
+ * lives. cyanrip_ctx has no room for a synthetic track layout or fault
+ * injection though, and shouldn't grow any just for this test, so the
+ * overridden functions below read the disc being ripped from a separate
+ * test-only fixture (g_disc) instead of from ctx.
  */
 
 #include <stdio.h>
@@ -45,7 +44,6 @@
 #include <stddef.h>
 
 #include "pregap.h"
-#include "pregap_internal.h"
 #include "cyanrip_main.h"
 #include "cyanrip_log.h"
 #include "subq_read.h"
@@ -93,8 +91,9 @@ typedef struct {
     int reads_issued;
 } fake_disc_t;
 
-/* The disc/drive the fake ops callbacks below currently serve. Set by run()
- * before each scenario; only one scenario is ever in flight at a time. */
+/* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sectors()
+ * functions below currently serve. Set by run() before each scenario; only
+ * one scenario is ever in flight at a time. */
 static fake_disc_t *g_disc;
 
 static fake_disc_t make_disc(lsn_t prev_start, lsn_t pregap_start, lsn_t cur_start)
@@ -224,7 +223,11 @@ driver_return_code_t cyanrip_read_audio_subq_sectors(const CdIo_t *p_cdio, uint8
     return DRIVER_OP_SUCCESS;
 }
 
-static lsn_t fake_get_track_pregap_lsn(const CdIo_t *p_cdio, track_t track_number)
+/* Overrides for the real libcdio track-metadata queries: this test binary
+ * doesn't link libcdio.so at all (see tests/meson.build), so these are the
+ * only definitions the linker ever sees for these symbols. */
+
+lsn_t cdio_get_track_pregap_lsn(const CdIo_t *p_cdio, track_t track_number)
 {
     fake_disc_t *d = g_disc;
     (void)p_cdio;
@@ -233,13 +236,13 @@ static lsn_t fake_get_track_pregap_lsn(const CdIo_t *p_cdio, track_t track_numbe
     return track_number == d->cur_track_number ? d->cur_pregap_start_lsn : CDIO_INVALID_LSN;
 }
 
-static track_t fake_get_first_track_num(const CdIo_t *p_cdio)
+track_t cdio_get_first_track_num(const CdIo_t *p_cdio)
 {
     (void)p_cdio;
     return g_disc->first_track_num;
 }
 
-static lsn_t fake_get_track_lsn(const CdIo_t *p_cdio, track_t track_number)
+lsn_t cdio_get_track_lsn(const CdIo_t *p_cdio, track_t track_number)
 {
     fake_disc_t *d = g_disc;
     (void)p_cdio;
@@ -250,7 +253,7 @@ static lsn_t fake_get_track_lsn(const CdIo_t *p_cdio, track_t track_number)
     return CDIO_INVALID_LSN;
 }
 
-static track_format_t fake_get_track_format(const CdIo_t *p_cdio, track_t track_number)
+track_format_t cdio_get_track_format(const CdIo_t *p_cdio, track_t track_number)
 {
     fake_disc_t *d = g_disc;
     (void)p_cdio;
@@ -261,20 +264,13 @@ static track_format_t fake_get_track_format(const CdIo_t *p_cdio, track_t track_
     return TRACK_FORMAT_ERROR;
 }
 
-static const cyanrip_pregap_ops fake_ops = {
-    .get_track_pregap_lsn = fake_get_track_pregap_lsn,
-    .get_first_track_num  = fake_get_first_track_num,
-    .get_track_lsn        = fake_get_track_lsn,
-    .get_track_format     = fake_get_track_format,
-};
-
 static lsn_t run(fake_disc_t *d)
 {
     cyanrip_ctx ctx;
     memset(&ctx, 0, sizeof(ctx)); /* fresh ctx each time: subq_needs_bcd_fixup starts at 0 */
     g_disc = d;
     d->reads_issued = 0;
-    return cyanrip_get_track_pregap_lsn_impl(&ctx, &fake_ops, d->cur_track_number);
+    return cyanrip_get_track_pregap_lsn(&ctx, d->cur_track_number);
 }
 
 static void check_lsn(const char *what, lsn_t got, lsn_t want)
