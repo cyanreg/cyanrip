@@ -75,6 +75,7 @@ jobs:
           zip cyanrip cyanrip.exe
 
       - name: "Upload artifact"
+        if: github.ref == 'refs/heads/master' || github.event_name == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: cyanrip-${{ matrix.runs-on }}
