@@ -166,12 +166,16 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
 
         READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid", 0);
 
+        /* Prefer the track title over the recording title */
+        READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title", 0);
+
         Mb5ArtistCredit credit;
+
         if (recording) {
-            READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title", 0);
+            if (!dict_get(ctx->tracks[i].meta, "title"))
+                READ_MB(mb5_recording_get_title, recording, ctx->tracks[i].meta, "title", 0);
             credit = mb5_recording_get_artistcredit(recording);
         } else {
-            READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title", 0);
             credit = mb5_track_get_artistcredit(track);
         }
         if (credit)
