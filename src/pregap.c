@@ -272,7 +272,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     // backtrack right to the pregap boundary.
     const lsn_t backtrack = 150;
     lsn = track_start_lsn - 1;
-    for (;;) {
+    while (1) {
         lsn = lsn - backtrack >= prev_track_start_lsn ? lsn - backtrack : prev_track_start_lsn;
         if (lsn == prev_track_start_lsn) {
             break;
@@ -378,11 +378,11 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             }
         }
     }
-    if (left_bound + 1 == right_bound) {
+    if (left_bound + 1 == right_bound)
         lsn = right_bound;
-    } else {
+    else
         goto giveup;
-    }
+    
 
     free(audio_subq_buf);
     return lsn;
