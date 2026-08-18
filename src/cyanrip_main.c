@@ -34,6 +34,7 @@
 #include "checksums.h"
 #include "discid.h"
 #include "musicbrainz.h"
+#include "qrcode.h"
 #include "coverart.h"
 #include "accurip.h"
 #include "os_compat.h"
@@ -1635,8 +1636,10 @@ int main(int argc, char **argv)
     }
 
     /* Print this for easy access */
-    if (ctx->settings.print_info_only)
+    if (ctx->settings.print_info_only) {
         cyanrip_log(ctx, 0, "MusicBrainz URL:\n%s\n", ctx->mb_submission_url);
+        crip_print_qrcode(ctx->mb_submission_url);
+    }
 
     /* Copy album cover arts */
     ctx->nb_cover_arts = nb_cover_arts;

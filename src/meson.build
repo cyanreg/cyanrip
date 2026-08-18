@@ -50,6 +50,7 @@ sources = [
 
     'discid.c',
     'musicbrainz.c',
+    'qrcode.c',
     'coverart.c',
     'accurip.c',
 
@@ -60,6 +61,16 @@ sources = [
                       input: 'version.c.in', output: 'version.c',
                       fallback: 'release')
 ]
+
+# Optional, for printing MusicBrainz submission URLs as QR codes
+qrencode = dependency('libqrencode', version: '>= 4.0', required: false,
+                      static: static_build)
+if qrencode.found()
+    conf.set('HAVE_QRENCODE', 1)
+    dependencies += qrencode
+else
+    message('libqrencode not found, MusicBrainz URLs won\'t be printed as QR codes')
+endif
 
 # Check for wmain support (Windows/MinGW)
 if cc.links('int wmain() { return 0; }', args: '-municode')

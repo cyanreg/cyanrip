@@ -78,6 +78,10 @@ Complete list of dependencies:
  * libmusicbrainz5
  * libcurl
 
+Optional dependencies:
+
+ * libqrencode (to print MusicBrainz submission URLs as scannable QR codes)
+
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
 `meson build`

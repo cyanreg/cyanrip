@@ -5,6 +5,7 @@ buildCyanrip() {
     build_curl
     build_neon
     build_libmusicbrainz
+    build_libqrencode
     build_ffmpeg
     build_cyanrip
 }
@@ -95,8 +96,17 @@ build_libmusicbrainz() {
     cyan_do_cmakeinstall
 }
 
+build_libqrencode() {
+    # The MSYS2 package only ships an import library, which would leave the
+    # binary needing a DLL, so build it here. The tools pull in libpng and are
+    # of no use to us.
+    cyan_do_vcs "https://github.com/fukuchi/libqrencode.git" &&
+    cyan_do_cmakeinstall -DWITH_TOOLS=NO -DWITH_TESTS=NO -DWITHOUT_PNG=YES &&
+    pkg-config --exists libqrencode
+}
+
 build_ffmpeg() {
-    cyan_do_vcs "https://git.ffmpeg.org/ffmpeg.git"
+    cyan_do_vcs "https://github.com/FFmpeg/FFmpeg.git"
     cyan_do_separate_confmakeinstall --pkg-config-flags=--static \
         --disable-{programs,devices,filters,decoders,hwaccels,encoders,muxers} \
         --disable-{debug,protocols,demuxers,parsers,doc,swscale,network} \

@@ -17,6 +17,7 @@
  */
 
 #include "musicbrainz.h"
+#include "qrcode.h"
 #include "cyanrip_log.h"
 
 #include <musicbrainz5/mb5_c.h>
@@ -378,6 +379,7 @@ end:
         }
 
         cyanrip_log(ctx, 0, "%s\n", ctx->mb_submission_url);
+        crip_print_qrcode(ctx->mb_submission_url);
         if (ret)
             cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -N!\n");
     }

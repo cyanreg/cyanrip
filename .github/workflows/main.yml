@@ -18,7 +18,7 @@ jobs:
           sudo apt-get install -y meson ninja-build pkg-config ffmpeg \
             libavcodec-dev libavformat-dev libavfilter-dev libavutil-dev \
             libswresample-dev libcdio-dev libcdio-cdda-dev libcdio-paranoia-dev \
-            libmusicbrainz5-dev libcurl4-openssl-dev
+            libmusicbrainz5-dev libcurl4-openssl-dev libqrencode-dev
 
       - name: Build
         run: |
@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install meson ninja pkg-config nasm ffmpeg libcdio-paranoia libmusicbrainz curl
+          brew install meson ninja pkg-config nasm ffmpeg libcdio-paranoia libmusicbrainz curl qrencode
 
       - name: Build
         run: |
