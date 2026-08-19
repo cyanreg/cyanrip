@@ -152,11 +152,10 @@ static driver_return_code_t read_valid_audio_subq_sector(
     return DRIVER_OP_ERROR;
 }
 
-// Returns the driver error code (if any) via the return value, and whether
-// the sector ended up CRC-valid via *out_valid. Callers must use *out_valid
-// rather than calling verify_subq_crc() again on the same buffer: it mutates
-// the buffer in place when the BCD fixup is active, so a second call on an
-// already-fixed-up buffer would re-apply the fixup and corrupt it.
+/**
+ * Reads a Q sub-channel sector with retries, returning the first successful read or the last error.
+ * Increments total_failures for each failed read attempt.
+ */
 static driver_return_code_t read_audio_subq_sector_with_retries(
     cyanrip_ctx *ctx,
     uint8_t *audio_subq_buf,
@@ -184,7 +183,10 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
     return ret;
 }
 
-// TODO: Check that drive is actually returning Q subchannel data and not just zeroes.
+/**
+ * Finds the pregap LSN of a given track by reading Q sub-channel data and validating CRCs.
+ * Returns the pregap LSN if found, or CDIO_INVALID_LSN if not found or if the track is not audio.
+ */
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 {
     // Try to use libcdio. If libcdio doesn't implement pregap finding
@@ -201,12 +203,16 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 
     /* Detect the first track number and return 0 as the pregap lsn for the first track */
     const track_t first_track_number = cdio_get_first_track_num(ctx->cdio);
-    if (track_number == first_track_number || track_number < 1)
+    if (track_number == first_track_number || track_number <= 1)
         return 0;
 
     const lsn_t track_start_lsn = cdio_get_track_lsn(ctx->cdio, track_number);
+    if (track_start_lsn == CDIO_INVALID_LSN) {
+        cyanrip_log(ctx, 0, "Track %i start LSN is invalid, skipping pregap search\n", track_number);
+        return CDIO_INVALID_LSN;
+    }
+
     const uint8_t prev_track_number = track_number - 1;
-    const lsn_t prev_track_start_lsn = cdio_get_track_lsn(ctx->cdio, prev_track_number);
 
     // Q sub-channel pregap searching only makes sense across an audio-audio
     // track boundary: a data track's Q sub-channel doesn't carry the same
@@ -214,6 +220,12 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     // meaningless and wasted work (matches XLD's guard).
     if (cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
         return CDIO_INVALID_LSN;
+
+    const lsn_t prev_track_start_lsn = cdio_get_track_lsn(ctx->cdio, prev_track_number);
+    if (prev_track_start_lsn == CDIO_INVALID_LSN) {
+        cyanrip_log(ctx, 0, "Track %i start LSN is invalid, skipping pregap search\n", prev_track_number);
+        return CDIO_INVALID_LSN;
+    }
 
     // Handle single sector previous track.
     if (prev_track_start_lsn + 1 == track_start_lsn)
@@ -224,22 +236,22 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 
     lsn_t lsn;
     subq_t subq;
-    // UltraFuzzy: Based on brief informal testing, successful subchannel Q read
-    // retries become rare after ~5-10 attempts but I've seen a correct read
-    // first occur as late as 180 attempts. The large harder_retry_max value
-    // will only be used for bad sectors that cannot be ruled out as possibly
-    // containing the start of a pregap. This should be rare and when it does
-    // happen these sectors must be read for pregap finding to succeed.
-    int retry_max = 5;
-    const int harder_retry_max = 200;
     driver_return_code_t ret;
+
+    /*
+     * The maximum number of retries for a single sector read before giving up on that sector.
+     * Based on XLD's pregap search, which uses 5 retries per sector.
+     * 
+     * We might want to make this configurable in the future.
+     */
+    const int sector_max_retries = 5;
 
     // Overall budget on how many failed (CRC-invalid) reads we'll tolerate
     // across the whole search before giving up entirely, so that severely
     // damaged media near a track boundary can't stall ripping indefinitely
     // (XLD has an equivalent global cap).
+    const int total_failure_budget = 100;
     int total_failures = 0;
-    const int total_failure_budget = 1000;
 
     // The main idea of this algorithm is to track a left bound, representing
     // our current latest known sector that belongs to the previous track, and a
@@ -263,14 +275,14 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     // Check the sector immediately before track start, confirmed by the
     // sector before that, to see if there is no pregap at all.
     lsn = track_start_lsn - 1;
-    ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
+    ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, sector_max_retries, &total_failures);
     if (ret)
         goto fail;
 
     decode_subq(&subq, subq_buf);
     if (subq.adr == 1 && subq.track_number == prev_track_number) {
         const lsn_t confirm_lsn = lsn - 1;
-        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, sector_max_retries, &total_failures);
         if (ret)
             goto fail;
         
@@ -292,7 +304,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         if (lsn == prev_track_start_lsn) {
             break;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, sector_max_retries, &total_failures);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
@@ -311,7 +323,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
                 right_bound = lsn;
                 continue;
             }
-            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures);
+            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, sector_max_retries, &total_failures);
             if (ret)
                 goto fail;
             if (total_failures > total_failure_budget)
@@ -339,16 +351,9 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         if (lsn == right_bound) {
             // Skipping over sectors with bad CRCs failed.
             // If we've already been here, give up.
-            if (retry_max == harder_retry_max)
-                break;
-            // Getting here means we skipped over bad sectors that it turns must
-            // be read in order to decide where the pregap starts. TRY HARDER.
-            retry_max = harder_retry_max;
-            lsn = left_bound;
-            right_bound_candidate = CDIO_INVALID_LSN;
-            continue;
+            break;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, sector_max_retries, &total_failures);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
