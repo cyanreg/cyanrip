@@ -201,7 +201,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     if (prev_track_start_lsn + 1 == track_start_lsn)
         return track_start_lsn;
 
-    uint8_t *audio_subq_buf = malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
+    uint8_t *audio_subq_buf = av_malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
     uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
 
     lsn_t lsn;
@@ -259,7 +259,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             if (subq_valid) {
                 decode_subq(&subq, subq_buf);
                 if (subq.adr == 1 && subq.track_number == prev_track_number) {
-                    free(audio_subq_buf);
+                    av_free(audio_subq_buf);
                     return track_start_lsn;
                 }
             }
@@ -384,19 +384,19 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         goto giveup;
     
 
-    free(audio_subq_buf);
+    av_free(audio_subq_buf);
     return lsn;
 
 giveup:
     cyanrip_log(ctx, 0, "Warning: repeated subq CRC mismatches prevented finding the "
                 "pregap of track %i, skipping pregap detection\n", track_number);
-    free(audio_subq_buf);
+    av_free(audio_subq_buf);
     return CDIO_INVALID_LSN;
 
 fail:
     cyanrip_log(ctx, 0, "Warning: failed to read subq data at lsn %i (error %i) while "
                 "searching for the pregap of track %i, skipping pregap detection\n",
                 lsn, ret, track_number);
-    free(audio_subq_buf);
+    av_free(audio_subq_buf);
     return CDIO_INVALID_LSN;
 }
