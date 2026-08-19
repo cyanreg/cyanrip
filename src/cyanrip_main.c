@@ -616,10 +616,11 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 
 /**
  * Largest absolute sample value divided by 32768.0 (the largest absolute value of a signed 16-bit sample).
- * This is used to calculate the true peak amplitude of the audio samples in a track,
+ * This is used to calculate the sample peak relative amplitude of the audio samples in a track,
  * which is important for identifying the track.
  */
-static double sample_peak_rel_amp(const uint8_t *data, const int bytes) {
+static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
+{
     const int16_t* samples = (int16_t*)data;
     const int bytes_per_sample = 2;
     const int sample_num = bytes / bytes_per_sample;
@@ -680,6 +681,10 @@ repeat_ripping:;
     /* Checksum */
     cyanrip_checksum_ctx checksum_ctx;
     crip_init_checksum_ctx(ctx, &checksum_ctx, t);
+
+    /* Reset sample peak for this attempt - a bad sample from a discarded
+     * (non-matching) repeat ripping pass must not stick around forever. */
+    t->sample_peak_rel_amp = 0.0;
 
     /* Fill with silence to maintain track length */
     for (int i = 0; i < frames_before_disc_start; i++) {
