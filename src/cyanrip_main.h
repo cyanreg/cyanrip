@@ -240,9 +240,15 @@ typedef struct cyanrip_ctx {
     lsn_t end_lsn;
     lsn_t duration_frames;
 
-    /* Set once this drive is found to return raw binary MSF fields instead
+    /* Whether this drive returns raw binary MSF fields instead
      * of BCD in the Q sub-channel, so later pregap searches on the same
-     * disc apply the fixup from the start (see pregap.c). */
+     * disc apply the fixup from the start (see pregap.c).
+     * 
+     * XLD handles it the same way. The equivalent field is nonBCD in xld_cdread_t
+     * XLD/XLDCDDABackend.c (see: xld_cdda_read_pregap())
+     * 
+     * Values: 0 = fixup status not determined, 1 = needs fixup, 2 = does not need fixup
+     */
     int subq_needs_bcd_fixup;
 
     /* ETA */

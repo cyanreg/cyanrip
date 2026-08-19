@@ -29,6 +29,8 @@
  * into audio_subq_buf.
  * 
  * The buffer must be large enough to hold CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ bytes.
+ * 
+ * Note: The Subchannel Q data still needs to be verified for CRC validity after reading.
  */
 driver_return_code_t cyanrip_read_audio_subq_sector(
     const CdIo_t *p_cdio,

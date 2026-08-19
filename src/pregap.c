@@ -56,8 +56,8 @@ static inline uint8_t subq_bcd_to_bin(uint8_t x)
     return x >= 0xA0 ? x : bcd_to_bin(x);
 }
 
-// CRC-16/GSM with length 10
-static inline unsigned crc_subq(const uint8_t* subq_buf)
+/* CRC-16/GSM with length 10 */
+static inline unsigned int crc_subq(const uint8_t* subq_buf)
 {
     int length = 10;
     const unsigned crc_poly = 0x1021;
@@ -67,7 +67,15 @@ static inline unsigned crc_subq(const uint8_t* subq_buf)
         for (int i = 0; i < 8; i++)
             r = r & 0x8000 ? (r << 1) ^ crc_poly : r << 1;
     }
-    return ~r & 0xFFFF;
+    return ~r & 0xFFFFU;
+}
+
+/**
+ * Reads the CRC recorded in the Q sub-channel.
+ */
+static inline unsigned int subq_read_crc(const uint8_t *subq_buf)
+{
+    return (subq_buf[10] << 8) | subq_buf[11];
 }
 
 /* MMC-3 Table 38 - Formatted Q sub-channel response data */
@@ -96,35 +104,51 @@ static void fixup_subq_to_bcd(uint8_t *subq_buf)
 }
 
 /**
- * Validates a Q sub-channel sector's CRC and converts to BCD if needed.
- * Workround for drives that return raw binary values instead of BCD.
+ * Reads Q sub-channel sector and validates its CRC, converting to BCD if needed.
  * 
- * Note: This function mutates subq_buf in place when a fixup is applied
- * so this function should be called only once per buffer.
- * 
- * Returns 1 if valid, 0 otherwise.
+ * The BCD conversion is a workround for drives that return raw binary values instead of BCD.
+ *
+ * Returns DRIVER_OP_SUCCESS if the sector is valid, DRIVER_OP_ERROR otherwise.
  */
-static int verify_subq_crc(cyanrip_ctx *ctx, uint8_t *subq_buf)
+static driver_return_code_t read_valid_audio_subq_sector(
+    cyanrip_ctx *ctx,
+    uint8_t *audio_subq_buf,
+    const lsn_t lsn)
 {
-    const unsigned crc_read = (subq_buf[10] << 8) | subq_buf[11];
-    if (!crc_read)
-        return 0;
+    driver_return_code_t ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
+    if (ret) {
+        return ret;
+    }
 
-    if (ctx->subq_needs_bcd_fixup) {
+    uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
+    if (ctx->subq_needs_bcd_fixup == 1) {
         fixup_subq_to_bcd(subq_buf);
-        return crc_read == crc_subq(subq_buf);
+
+        return (subq_read_crc(subq_buf) == crc_subq(subq_buf) ? DRIVER_OP_SUCCESS : DRIVER_OP_ERROR);
     }
 
-    if (crc_read == crc_subq(subq_buf))
-        return 1;
+    if (subq_read_crc(subq_buf) == crc_subq(subq_buf)) {
+        ctx->subq_needs_bcd_fixup = 2; /* We matched a CRC without the BCD fixup. Never apply BCD fixup to avoid false positives */
+        return DRIVER_OP_SUCCESS;
+    }
 
-    fixup_subq_to_bcd(subq_buf);
-    if (crc_read == crc_subq(subq_buf)) {
+    if (ctx->subq_needs_bcd_fixup == 2) {
+        return DRIVER_OP_ERROR;
+    }
+
+    // CRC mismatch, try to fixup BCD and see if that works
+    uint8_t subq_buf_copy[16];
+    memcpy(subq_buf_copy, subq_buf, 16);
+    fixup_subq_to_bcd(subq_buf_copy);
+
+    if (subq_read_crc(subq_buf_copy) == crc_subq(subq_buf_copy)) {
         ctx->subq_needs_bcd_fixup = 1;
-        return 1;
+
+        memcpy(subq_buf, subq_buf_copy, 16);
+        return DRIVER_OP_SUCCESS;
     }
 
-    return 0;
+    return DRIVER_OP_ERROR;
 }
 
 // Returns the driver error code (if any) via the return value, and whether
@@ -137,25 +161,20 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
     uint8_t *audio_subq_buf,
     const lsn_t lsn,
     const int max_retries,
-    int *total_failures,
-    int *out_valid)
+    int *total_failures)
 {
-    driver_return_code_t ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
-    uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
+    driver_return_code_t ret; 
     int retry = 0;
-    int valid = !ret && verify_subq_crc(ctx, subq_buf);
 
-    while (retry++ < max_retries && !valid) {
-        (*total_failures)++;
-        if ((ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn))) {
-            *out_valid = 0;
-            return ret;
+    while (retry < max_retries) {
+        ret = read_valid_audio_subq_sector(ctx, audio_subq_buf, lsn);
+        if (ret == DRIVER_OP_SUCCESS) {
+            break;
         }
-        valid = verify_subq_crc(ctx, subq_buf);
-        // TODO ret error handling
+        (*total_failures)++;
+        retry++;
     }
 
-    *out_valid = valid;
     return ret;
 }
 
@@ -237,25 +256,22 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 
     // Check the sector immediately before track start, confirmed by the
     // sector before that, to see if there is no pregap at all.
-    int subq_valid;
     lsn = track_start_lsn - 1;
-    ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+    ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
     if (ret)
         goto fail;
-    if (subq_valid) {
+
+    decode_subq(&subq, subq_buf);
+    if (subq.adr == 1 && subq.track_number == prev_track_number) {
+        const lsn_t confirm_lsn = lsn - 1;
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures);
+        if (ret)
+            goto fail;
+        
         decode_subq(&subq, subq_buf);
         if (subq.adr == 1 && subq.track_number == prev_track_number) {
-            const lsn_t confirm_lsn = lsn - 1;
-            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
-            if (ret)
-                goto fail;
-            if (subq_valid) {
-                decode_subq(&subq, subq_buf);
-                if (subq.adr == 1 && subq.track_number == prev_track_number) {
-                    av_free(audio_subq_buf);
-                    return track_start_lsn;
-                }
-            }
+            av_free(audio_subq_buf);
+            return track_start_lsn;
         }
     }
 
@@ -270,14 +286,12 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         if (lsn == prev_track_start_lsn) {
             break;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
             goto giveup;
-        if (!subq_valid) {
-            continue;
-        }
+
         decode_subq(&subq, subq_buf);
         if (subq.adr != 1) {
             continue;
@@ -291,16 +305,15 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
                 right_bound = lsn;
                 continue;
             }
-            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures, &subq_valid);
+            ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, confirm_lsn, retry_max, &total_failures);
             if (ret)
                 goto fail;
             if (total_failures > total_failure_budget)
                 goto giveup;
-            if (subq_valid) {
-                decode_subq(&subq, subq_buf);
-                if (subq.adr == 1 && subq.track_number == track_number)
-                    right_bound = lsn;
-            }
+            
+            decode_subq(&subq, subq_buf);
+            if (subq.adr == 1 && subq.track_number == track_number)
+                right_bound = lsn;
         }
         else {
             assert(subq.track_number == prev_track_number);
@@ -331,15 +344,12 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             right_bound_candidate = CDIO_INVALID_LSN;
             continue;
         }
-        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures, &subq_valid);
+        ret = read_audio_subq_sector_with_retries(ctx, audio_subq_buf, lsn, retry_max, &total_failures);
         if (ret)
             goto fail;
         if (total_failures > total_failure_budget)
             goto giveup;
-        if (!subq_valid) {
-            // Attempt to skip over sectors with bad CRCs.
-            continue;
-        }
+
         decode_subq(&subq, subq_buf);
         if (subq.adr != 1) {
             // If a mode 2 or mode 3 sector immediately follows left bound,
