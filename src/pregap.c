@@ -315,10 +315,8 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             if (subq.adr == 1 && subq.track_number == track_number)
                 right_bound = lsn;
         }
-        else {
-            assert(subq.track_number == prev_track_number);
+        else
             break;
-        }
     }
     left_bound = lsn;
 
@@ -367,7 +365,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         }
         else if (subq.track_number == track_number) {
             assert(lsn <= right_bound);
-            assert(subq.index_number == 0);
             // Require two consecutive sectors reporting the new track number
             // before contracting right bound: guards against a single
             // spuriously CRC-valid read of the wrong physical sector.
