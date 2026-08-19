@@ -41,8 +41,9 @@ typedef struct subq_t {
     unsigned crc;
 } subq_t;
 
-static inline uint8_t bcd_to_bin(uint8_t x){
-    return 10*((x & 0xF0) >> 4) + (x & 0x0F);
+static inline uint8_t bcd_to_bin(uint8_t x)
+{
+    return 10 * ((x & 0xF0) >> 4) + (x & 0x0F);
 }
 
 /* MMC-3 4.1.3.2.1. Q sub-channel Mode-1: "Bytes in the Q sub-channel that
@@ -50,7 +51,8 @@ static inline uint8_t bcd_to_bin(uint8_t x){
  * with 0A0h and continue to 0FFh. No conversion of these to hex for
  * transmission to/from the initiator is performed."
  */
-static inline uint8_t subq_bcd_to_bin(uint8_t x){
+static inline uint8_t subq_bcd_to_bin(uint8_t x)
+{
     return x >= 0xA0 ? x : bcd_to_bin(x);
 }
 
@@ -68,8 +70,9 @@ static inline unsigned crc_subq(const uint8_t* subq_buf)
     return ~r & 0xFFFF;
 }
 
-// MMC-3 Table 38 - Formatted Q sub-channel response data
-static void decode_subq(subq_t *subq, const uint8_t *src) {
+/* MMC-3 Table 38 - Formatted Q sub-channel response data */
+static void decode_subq(subq_t *subq, const uint8_t *src)
+{
     subq->control       = (src[0] & 0xF0) >> 4;
     subq->adr           = (src[0] & 0x0F) >> 0;
     subq->track_number  = subq_bcd_to_bin(src[1]);
@@ -92,46 +95,36 @@ static void fixup_subq_to_bcd(uint8_t *subq_buf)
     }
 }
 
-// Validates a Q sub-channel sector's CRC, transparently applying the BCD
-// fixup above when needed. Some drives' firmware returns the min/sec/frame
-// fields as raw binary values instead of BCD; the on-disc CRC is always
-// computed over the spec-compliant BCD encoding, so such drives never
-// validate until the fields are re-encoded back to BCD (XLD works around
-// the exact same drive quirk). Detected once per ctx (i.e. per disc/drive)
-// and remembered in ctx->subq_needs_bcd_fixup for the rest of the search.
-// Mutates subq_buf in place when a fixup is applied, so callers must
-// decode_subq() only after this returns. Returns 1 if valid, 0 otherwise.
+/**
+ * Validates a Q sub-channel sector's CRC and converts to BCD if needed.
+ * Workround for drives that return raw binary values instead of BCD.
+ * 
+ * Note: This function mutates subq_buf in place when a fixup is applied
+ * so this function should be called only once per buffer.
+ * 
+ * Returns 1 if valid, 0 otherwise.
+ */
 static int verify_subq_crc(cyanrip_ctx *ctx, uint8_t *subq_buf)
 {
     const unsigned crc_read = (subq_buf[10] << 8) | subq_buf[11];
     if (!crc_read)
         return 0;
 
-    if (ctx->subq_needs_bcd_fixup)
+    if (ctx->subq_needs_bcd_fixup) {
         fixup_subq_to_bcd(subq_buf);
+        return crc_read == crc_subq(subq_buf);
+    }
 
     if (crc_read == crc_subq(subq_buf))
         return 1;
 
-    if (!ctx->subq_needs_bcd_fixup) {
-        fixup_subq_to_bcd(subq_buf);
-        if (crc_read == crc_subq(subq_buf)) {
-            ctx->subq_needs_bcd_fixup = 1;
-            return 1;
-        }
+    fixup_subq_to_bcd(subq_buf);
+    if (crc_read == crc_subq(subq_buf)) {
+        ctx->subq_needs_bcd_fixup = 1;
+        return 1;
     }
 
     return 0;
-}
-
-// Reading Q subchannel using the READ CD command is an MMC-2 feature. Ancient
-// drives don't support it and will return zeroes.
-static driver_return_code_t read_audio_subq_sector(
-    cyanrip_ctx *ctx,
-    uint8_t *audio_subq_buf,
-    const lsn_t lsn)
-{
-    return cyanrip_read_audio_subq_sectors(ctx->cdio, audio_subq_buf, lsn, 1);
 }
 
 // Returns the driver error code (if any) via the return value, and whether
@@ -143,21 +136,18 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
     cyanrip_ctx *ctx,
     uint8_t *audio_subq_buf,
     const lsn_t lsn,
-    const int retry_max,
+    const int max_retries,
     int *total_failures,
     int *out_valid)
 {
-    driver_return_code_t ret = read_audio_subq_sector(ctx, audio_subq_buf, lsn);
+    driver_return_code_t ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
     uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
     int retry = 0;
     int valid = !ret && verify_subq_crc(ctx, subq_buf);
 
-    while (retry++ < retry_max && !valid) {
+    while (retry++ < max_retries && !valid) {
         (*total_failures)++;
-        // TODO Is a cache defeat here ever necessary? Testing on macOS with an
-        // ASUS SDRW-08U7M-U, it didn't have an effect.
-        // overflow_device_read_cache(p_cdio, lsn);
-        if ((ret = read_audio_subq_sector(ctx, audio_subq_buf, lsn))) {
+        if ((ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn))) {
             *out_valid = 0;
             return ret;
         }
@@ -170,22 +160,26 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
 }
 
 // TODO: Check that drive is actually returning Q subchannel data and not just zeroes.
-lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number) {
+lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
+{
     // Try to use libcdio. If libcdio doesn't implement pregap finding
     // for a driver, it will return CDIO_INVALID_LSN.
     const lsn_t cdio_track_pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, track_number);
     if (cdio_track_pregap_lsn != CDIO_INVALID_LSN)
         return cdio_track_pregap_lsn;
 
-    // First track pregap is lsn = 0, lba = CDIO_PREGAP_SECTORS.
-    // TODO Under what circumstances does libcdio give a first track not equal
-    // to 1? Does this ever happen for a rippable CD?
+    /* If the track is not audio, skip pregap search */
+    if (cdio_get_track_format(ctx->cdio, track_number) != TRACK_FORMAT_AUDIO) {
+        cyanrip_log(ctx, 0, "Track %i is not audio, skipping pregap search\n", track_number);
+        return CDIO_INVALID_LSN;
+    }
+
+    /* Detect the first track number and return 0 as the pregap lsn for the first track */
     const track_t first_track_number = cdio_get_first_track_num(ctx->cdio);
-    if (track_number == first_track_number)
+    if (track_number == first_track_number || track_number < 1)
         return 0;
 
     const lsn_t track_start_lsn = cdio_get_track_lsn(ctx->cdio, track_number);
-    // TODO Is (track_number - 1) always safe? e.g. non-continuous track numbers?
     const uint8_t prev_track_number = track_number - 1;
     const lsn_t prev_track_start_lsn = cdio_get_track_lsn(ctx->cdio, prev_track_number);
 
@@ -193,8 +187,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     // track boundary: a data track's Q sub-channel doesn't carry the same
     // index/track position semantics, and running the search anyway is both
     // meaningless and wasted work (matches XLD's guard).
-    if (cdio_get_track_format(ctx->cdio, track_number) != TRACK_FORMAT_AUDIO ||
-        cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
+    if (cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
         return CDIO_INVALID_LSN;
 
     // Handle single sector previous track.

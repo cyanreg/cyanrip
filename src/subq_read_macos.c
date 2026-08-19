@@ -23,11 +23,10 @@
 #include <sys/errno.h>
 #include <cdio/cdio.h>
 
-driver_return_code_t cyanrip_read_audio_subq_sectors(
+driver_return_code_t cyanrip_read_audio_subq_sector(
     const CdIo_t *p_cdio,
     uint8_t *audio_subq_buf,
-    const lsn_t lsn,
-    const uint32_t blocks)
+    const lsn_t lsn)
 {
     const int fd = cdio_get_device_fd((CdIo_t *)p_cdio);
     if (fd < 0) {
@@ -39,7 +38,7 @@ driver_return_code_t cyanrip_read_audio_subq_sectors(
         .offset = block_size*lsn,
         .sectorArea = kCDSectorAreaUser | kCDSectorAreaSubChannelQ,
         .sectorType = kCDSectorTypeCDDA,
-        .bufferLength = block_size*blocks,
+        .bufferLength = block_size,
         .buffer = audio_subq_buf,
     };
     if (!ioctl(fd, DKIOCCDREAD, &cd_read))

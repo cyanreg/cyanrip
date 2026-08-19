@@ -20,7 +20,7 @@
  * drive - no real libcdio driver or hardware involved, and this test binary
  * does not even link against libcdio.so: pregap.c calls cdio_get_track_lsn(),
  * cdio_get_first_track_num(), cdio_get_track_format(),
- * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subq_sectors() by name,
+ * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subq_sector() by name,
  * and every one of them is defined right here instead, describing a synthetic
  * disc (g_disc) instead of talking to a real drive. Since none of the real
  * implementations are linked in (see tests/meson.build), there's no symbol
@@ -91,7 +91,7 @@ typedef struct {
     int reads_issued;
 } fake_disc_t;
 
-/* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sectors()
+/* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sector()
  * functions below currently serve. Set by run() before each scenario; only
  * one scenario is ever in flight at a time. */
 static fake_disc_t *g_disc;
@@ -153,16 +153,15 @@ static void true_subq_at(const fake_disc_t *d, lsn_t content_lsn,
     }
 }
 
-/* Substitutes for the real cyanrip_read_audio_subq_sectors() (normally
+/* Substitutes for the real cyanrip_read_audio_subq_sector() (normally
  * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
  * test binary): generates synthetic Q sub-channel bytes for g_disc instead
  * of talking to real hardware. */
-driver_return_code_t cyanrip_read_audio_subq_sectors(const CdIo_t *p_cdio, uint8_t *buf,
-                                                      lsn_t lsn, uint32_t blocks)
+driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *buf,
+                                                      lsn_t lsn)
 {
     fake_disc_t *d = g_disc;
     (void)p_cdio;
-    (void)blocks;
     d->reads_issued++;
 
     uint8_t *q = buf + CDIO_CD_FRAMESIZE_RAW;
