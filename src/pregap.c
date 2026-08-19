@@ -108,7 +108,8 @@ static void fixup_subq_to_bcd(uint8_t *subq_buf)
  * 
  * The BCD conversion is a workround for drives that return raw binary values instead of BCD.
  *
- * Returns DRIVER_OP_SUCCESS if the sector is valid, DRIVER_OP_ERROR otherwise.
+ * Returns DRIVER_OP_SUCCESS if the sector is valid, DRIVER_OP_ERROR for CRC mismatch,
+ * or another driver_return_code_t for other errors.
  */
 static driver_return_code_t read_valid_audio_subq_sector(
     cyanrip_ctx *ctx,
@@ -173,6 +174,11 @@ static driver_return_code_t read_audio_subq_sector_with_retries(
         }
         (*total_failures)++;
         retry++;
+
+        // Abort if the read failure is not recoverable
+        if (ret != DRIVER_OP_ERROR) {
+            break;
+        }
     }
 
     return ret;
