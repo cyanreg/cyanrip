@@ -614,29 +614,15 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 }
 
-/**
- * Largest absolute sample value divided by 32768.0 (the largest absolute value of a signed 16-bit sample).
- * This is used to calculate the sample peak relative amplitude of the audio samples in a track,
- * which is important for identifying the track.
- */
 static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
 {
     const int16_t* samples = (int16_t*)data;
-    const int bytes_per_sample = 2;
-    const int sample_num = bytes / bytes_per_sample;
+    const int sample_num = bytes / 2;
 
     /* At least 32 bits needed to accomodate abs(INT16_MIN) */
     int32_t sample_peak = 0;
     for (int i = 0; i < sample_num; ++i) {
-        /* int is usually 32-bit but technically it can be 16-bit. Make sure
-         * we're using a wide enough abs() just in case someone runs this on a
-         * toaster.
-         */
-        #if (INT_MAX >= 32768)
-            sample_peak = FFMAX(sample_peak, abs(samples[i]));
-        #else
-            sample_peak = FFMAX(sample_peak, labs(samples[i]));
-        #endif
+        sample_peak = FFMAX(sample_peak, abs(samples[i]));
     }
 
     /* The greatest sample absolute value is abs(INT16_MIN) = 32768 */

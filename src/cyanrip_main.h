@@ -196,7 +196,7 @@ typedef struct cyanrip_track {
     double ebu_lra_high;
     double ebu_sample_peak;
     double ebu_true_peak;
-    double sample_peak_rel_amp; /* Relative amplitude of the greatest sample absolute value, (0.0-1.0) */
+    double sample_peak_rel_amp; /* Relative amplitude of the largest sample absolute value, (0.0-1.0) */
 
     struct cyanrip_track *pt;
     struct cyanrip_track *nt;
