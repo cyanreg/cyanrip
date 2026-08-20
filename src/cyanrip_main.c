@@ -619,8 +619,7 @@ static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
     const int16_t* samples = (int16_t*)data;
     const int sample_num = bytes / 2;
 
-    /* At least 32 bits needed to accomodate abs(INT16_MIN) */
-    int32_t sample_peak = 0;
+    int sample_peak = 0;
     for (int i = 0; i < sample_num; ++i) {
         sample_peak = FFMAX(sample_peak, abs(samples[i]));
     }
