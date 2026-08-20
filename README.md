@@ -97,13 +97,15 @@ cyanrip can be also built and ran under Windows using MinGW
 You can build and install with flatpak.
 The first 2 steps only need to be done once.
 
-`flatpak install -y flathub org.flatpak.Builder`
+```
+flatpak install -y flathub org.flatpak.Builder
 
-`flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo`
+flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-`flatpak run --command=flathub-build org.flatpak.Builder --install com.github.cyanreg.cyanrip.yaml`
+flatpak run --command=flathub-build org.flatpak.Builder --install com.github.cyanreg.cyanrip.yaml
 
-`flatpak run com.github.cyanreg.cyanrip`
+flatpak run com.github.cyanreg.cyanrip
+```
 
 CLI
 ---
