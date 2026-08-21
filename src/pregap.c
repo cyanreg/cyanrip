@@ -196,12 +196,7 @@ static driver_return_code_t subq_read_with_retries(cyanrip_ctx *ctx, uint8_t *au
     return ret;
 }
 
-/**
- * True if a failed read still leaves the search viable: a plain CRC mismatch on
- * one sector can be worked around by looking at its neighbours, as long as we
- * still have failure budget left. Anything else (a real driver/transport error)
- * ends the search.
- */
+/* Whether we can skip a subq read failure and continue searching for the pregap. */
 static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int total_failures)
 {
     return ret == DRIVER_OP_ERROR && total_failures <= TOTAL_FAILURE_BUDGET;
