@@ -15,12 +15,17 @@
 #   225-450 (3 s)  audio B
 #   450-600 (2 s)  audio C
 #
-# mixed.bin, mixed-mode CD for mixed.cue, 450 sectors (6 s). The data track
-# must come first: cyanrip treats a *trailing* data track as a CD-Extra
-# session and assumes the standard 11400-sector session gap, which cannot fit
-# in a bundled-size fixture:
+# mixed.bin, mixed-mode CD for mixed.cue, 450 sectors (6 s), data track first:
 #   0-150   (2 s)  MODE1/2352 data sectors
 #   150-450 (4 s)  audio A + first second of audio B
+#
+# trailing.bin, mixed-mode CD for trailing.cue, 525 sectors (7 s), with the
+# data track last and a pregap in front of it. A trailing data track with no
+# pregap to go by is taken for a CD-Extra second session instead, and the
+# 11400-sector session gap that implies will not fit in a bundled fixture:
+#   0-300   (4 s)  audio A + first second of audio B
+#   300-375 (1 s)  MODE1/2352 pregap sectors, no payload
+#   375-525 (2 s)  MODE1/2352 data sectors
 #
 # The NRG reuses the first 6 s of cdda.bin audio as a 2-track DAO image with
 # a 1 s pregap on track 2.
@@ -73,6 +78,14 @@ def gen_bins(audio):
         data += mode1_sector(i, payload)
     data += audio[:300 * SECTOR]
     (FIXTURES / "mixed.bin").write_bytes(data)
+
+    data = bytearray(audio[:300 * SECTOR])
+    for i in range(300, 375):
+        data += mode1_sector(i, b"")
+    for i in range(375, 525):
+        payload = (f"CYANRIP TEST DATA sector {i:03d} " * 64).encode()
+        data += mode1_sector(i, payload)
+    (FIXTURES / "trailing.bin").write_bytes(data)
 
 
 def cuex_entry(track, index, lsn):

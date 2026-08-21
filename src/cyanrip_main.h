@@ -249,6 +249,7 @@ typedef struct cyanrip_ctx {
     lsn_t start_lsn;
     lsn_t end_lsn;
     lsn_t duration_frames;
+    lsn_t id_leadout_lsn; /* Lead-out the disc IDs are derived from */
 
     /* ETA */
     CRSlidingWinCtx eta_ctx;

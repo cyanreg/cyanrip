@@ -69,7 +69,11 @@ def expect(name, *specs):
 
         if dur and FFPROBE:
             d = probe(path, "-show_entries", "format=duration")
-            if abs(float(d) - float(dur)) > 0.1:
+            try:
+                ok = abs(float(d) - float(dur)) <= 0.1
+            except ValueError:
+                ok = False
+            if not ok:
                 fail(f"{name}: {f} duration {d} != {dur}")
 
 
@@ -125,6 +129,19 @@ def sc_mixed():
     # -X leaves data tracks alone, and produces no stray file
     rip("nodata", "mixed.cue", "-X")
     expect("nodata", "2.flac:2", "3.flac:2", "log.log", "sheet.cue")
+
+
+def sc_trailing():
+    # A trailing data track with a pregap: the pregap is dropped rather than
+    # taken for a CD-Extra session gap, so no audio is lost to it
+    rip("trailing", "trailing.cue")
+    expect("trailing", "1.flac:2", "2.flac:2", "3.bin", "log.log", "sheet.cue")
+    data_track("trailing", "trailing.bin", 3, 375, 150)
+
+    # Merging the pregap prepends it to the data track instead
+    rip("merge", "trailing.cue", "-p", "3=merge")
+    expect("merge", "1.flac:2", "2.flac:2", "3.bin", "log.log", "sheet.cue")
+    data_track("merge", "trailing.bin", 3, 300, 225)
 
 
 def sc_nrg():
@@ -239,7 +256,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     shutil.copy(FIX / "cdda.nrg", WORK)
     for name in ("basic", "pregap", "preemph"):
         shutil.copy(FIX / "cdda.bin", WORK / f"{name}.bin")
-    shutil.copy(FIX / "mixed.bin", WORK / "mixed.bin")
+    for name in ("mixed", "trailing"):
+        shutil.copy(FIX / f"{name}.bin", WORK / f"{name}.bin")
 
     globals()[f"sc_{SCENARIO}"]()
 

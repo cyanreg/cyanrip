@@ -11,6 +11,7 @@
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
  - Data tracks are ripped to raw MODE1/2352 binaries and referenced from the CUE sheet
  - Data tracks no longer leave stray files
+ - Mixed mode CDs no longer lose 152 seconds of the last audio track
  - Fixed a crash on overlong filenames
  - FFmpeg 8.0+ compatibility
 

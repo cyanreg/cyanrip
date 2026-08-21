@@ -279,6 +279,12 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     int first_track_nb = cdio_get_first_track_num(ctx->cdio);
 
+    /* Drives report where the last session starts, disc images usually don't */
+    lsn_t last_session_lsn;
+    int single_session =
+        cdio_get_last_session(ctx->cdio, &last_session_lsn) == DRIVER_OP_SUCCESS &&
+        last_session_lsn <= cdio_get_track_lsn(ctx->cdio, first_track_nb);
+
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
@@ -306,12 +312,30 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
                 ctx->settings.pregap_action[t->number - 1] = CYANRIP_PREGAP_DROP;
             if (ctx->settings.pregap_action[t->number - 0] == CYANRIP_PREGAP_DEFAULT)
                 ctx->settings.pregap_action[t->number - 0] = CYANRIP_PREGAP_DROP;
-            if (i == (ctx->nb_cd_tracks - 1)) {
+
+            /* On an Enhanced CD the trailing data track sits in a second
+             * session, and the last audio track's TOC end swallows session
+             * 1's lead-out, session 2's lead-in and the pregap - 11400
+             * frames in total. Only guess at that if the drive gave no
+             * pregap to go by, and didn't say the disc is single session,
+             * which a mixed mode CD is. */
+            if ((i == (ctx->nb_cd_tracks - 1)) && (i > 0) &&
+                (t->pregap_lsn == CDIO_INVALID_LSN) && !single_session) {
                 ctx->tracks[i - 1].end_lsn -= 11400;
                 t->pregap_lsn = ctx->tracks[i - 1].end_lsn + 1;
             }
         }
     }
+
+    /* MusicBrainz, CDDB and AccurateRip all identify a disc by its audio
+     * tracks alone. libdiscid puts the lead-out one session gap before a
+     * trailing data track no matter whether the disc really has a second
+     * session, so do the same or none of the IDs will match. */
+    cyanrip_track *last_track = &ctx->tracks[ctx->nb_cd_tracks - 1];
+    if (last_track->track_is_data && (ctx->nb_cd_tracks > 1))
+        ctx->id_leadout_lsn = last_track->start_lsn - 11400;
+    else
+        ctx->id_leadout_lsn = ctx->end_lsn + 1;
 
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];

@@ -45,7 +45,7 @@ int crip_fill_discid(cyanrip_ctx *ctx)
     snprintf(temp, sizeof(temp), "%02X", ctx->tracks[last_audio_track_idx].number);
     av_sha_update(sha_ctx, temp, strlen(temp));
 
-    lsn_t last = ctx->tracks[last_audio_track_idx].end_lsn + 151;
+    lsn_t last = ctx->id_leadout_lsn + 150;
     snprintf(temp, sizeof(temp), "%08X", last);
     av_sha_update(sha_ctx, temp, strlen(temp));
 

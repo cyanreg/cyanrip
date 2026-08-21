@@ -41,7 +41,7 @@ static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_t
         audio_tracks++;
     }
 
-    lsn_t last = ctx->tracks[audio_tracks - 1].end_lsn + 1;
+    lsn_t last = ctx->id_leadout_lsn;
     idt1 += last;
     idt2 += last * (audio_tracks + 1);
 

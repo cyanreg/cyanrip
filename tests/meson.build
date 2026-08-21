@@ -35,6 +35,7 @@ rip_scenarios = [
     'basic',
     'pregap',
     'mixed',
+    'trailing',
     'nrg',
     'filters',
     'art',
