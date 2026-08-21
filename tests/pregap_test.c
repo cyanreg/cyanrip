@@ -369,14 +369,47 @@ int main(void)
         check_lsn("single spurious read is not trusted", got, 1300);
     }
 
-    /* A sector that's permanently unreadable but not at the exact boundary:
-     * skipped over, search still converges on the true boundary. */
+    /* A spurious read reporting the *previous* track (the mirror image of the
+     * case above) must not be trusted either: taken at face value during
+     * backtracking it would anchor the left bound inside the pregap and the
+     * search would silently converge on a wrong, too-late boundary. */
     {
-        fake_disc_t d = make_disc(1000, 1150, 1300);
-        d.faults[0] = (lsn_fault_t){ .lsn = 1200, .remaining = -1 };
+        fake_disc_t d = make_disc(1000, 1100, 2000);
+        d.jitter[0] = (lsn_jitter_t){ .lsn = 1249, .reports_as = 1050 };
+        d.num_jitter = 1;
+        lsn_t got = run(&d);
+        check_lsn("single spurious prev-track read is not trusted", got, 1100);
+    }
+
+    /* A sector that's permanently unreadable but not at the exact boundary:
+     * skipped over, search still converges on the true boundary. This one sits
+     * both on a backtrack landing spot and inside the range the shrinking loop
+     * scans, so both have to tolerate it. */
+    {
+        fake_disc_t d = make_disc(1000, 1200, 1300);
+        d.faults[0] = (lsn_fault_t){ .lsn = 1149, .remaining = -1 };
         d.num_faults = 1;
         lsn_t got = run(&d);
-        check_lsn("bad sector away from boundary is skipped", got, 1150);
+        check_lsn("bad sector away from boundary is skipped", got, 1200);
+    }
+
+    /* A pregap exactly one sector long: the sector that would normally confirm
+     * the boundary is the track start itself, which is already known to belong
+     * to the new track and must count as the confirmation. */
+    {
+        fake_disc_t d = make_disc(1000, 1299, 1300);
+        lsn_t got = run(&d);
+        check_lsn("one sector pregap", got, 1299);
+    }
+
+    /* A dead sector in the middle of a long scanned range: the shrinking loop
+     * has to step over it and rule it out by moving the left bound past it. */
+    {
+        fake_disc_t d = make_disc(1000, 1500, 2000);
+        d.faults[0] = (lsn_fault_t){ .lsn = 1450, .remaining = -1 };
+        d.num_faults = 1;
+        lsn_t got = run(&d);
+        check_lsn("bad sector inside the scanned range is skipped", got, 1500);
     }
 
     /* A flaky sector right at the boundary that fails a few times before
