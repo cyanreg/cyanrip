@@ -211,48 +211,9 @@ static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int t
  * Finds the pregap LSN of the track by reading Q sub-channel data and validating CRCs.
  * Returns the pregap LSN if found, or CDIO_INVALID_LSN if not found or if the track is not audio.
  *
- * The pregap is the run of sectors before a track's start that already carry
- * the new track's number (index 0). The TOC doesn't say where it begins, so we
- * find that first sector by reading the Q sub-channel of individual sectors
- * between the previous track's start and this one's.
- *
- * The search keeps two bounds inside that region:
- *
+ * The LSN is found by a search that narrows two bounds between the previous track's start and this one's:
  *     left_bound  - highest sector known to still be in the previous track
  *     right_bound - lowest sector known to already be in the new track
- *
- * The pregap starts at right_bound once the two bounds are adjacent. Getting
- * them there takes three steps:
- *
- *  1. Read the sector just below the track start. If it, and the one below it,
- *     still report the previous track, there is no pregap - done.
- *
- *  2. Backtrack from the track start in 2 second (150 sector) steps until a
- *     sector reports the previous track, and make that left_bound. Steps that
- *     land inside the pregap pull right_bound down on the way. Pregaps are
- *     commonly exactly 2 seconds, so the first step usually lands one sector
- *     below the answer.
- *
- *  3. Walk upwards from left_bound, moving whichever bound each sector's track
- *     number allows, restarting the walk from left_bound whenever right_bound
- *     moves, until the bounds meet.
- *
- * Two kinds of drive misbehaviour shape the rest of the code:
- *
- *  - Sectors whose Q sub-channel never passes its CRC. Rather than abandoning
- *    the search, the walk steps over them and lets a later good read rule them
- *    out by moving a bound past them; an overall failure budget keeps badly
- *    damaged media from stalling the rip. A bad sector left as the only gap
- *    between the bounds makes the pregap genuinely ambiguous, and the search
- *    gives up.
- *
- *  - Seek jitter, where a CRC-valid read describes a different sector than the
- *    one asked for. Acting on one would move a bound to a sector it doesn't
- *    belong on and produce a plausible but wrong pregap, so a bound only moves
- *    once an adjacent sector agrees with the read (this mirrors XLD's
- *    two-consecutive-reads debounce). During the upward walk that neighbour is
- *    just the previously read sector, and right_bound itself counts as an
- *    agreeing new-track sector for the sector directly below it.
  */
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 {
