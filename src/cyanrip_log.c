@@ -96,6 +96,21 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
                     t->frames*CDIO_CD_FRAMESIZE_RAW / (1024.0 * 1024.0));
         cyanrip_log(ctx, 0, "    Frames:      %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
         print_offsets(ctx, t);
+
+        if (t->computed_crcs)
+            cyanrip_log(ctx, 0, "\n  CRC32:         %08X\n", t->eac_crc);
+
+        if (!ctx->settings.disable_data_tracks) {
+            cyanrip_log(ctx, 0, "\n  File(s):\n");
+            for (int f = 0; f < ctx->settings.outputs_num; f++) {
+                char *path = crip_get_path(ctx, CRIP_PATH_DATA, 0,
+                                           &crip_fmt_info[ctx->settings.outputs[f]],
+                                           t);
+                cyanrip_log(ctx, 0, "    %s\n", path);
+                av_free(path);
+            }
+        }
+
         cyanrip_log(ctx, 0, "\n");
         return;
     }

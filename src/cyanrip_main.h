@@ -61,6 +61,12 @@ enum cyanrip_pregap_action {
     CYANRIP_PREGAP_TRACK,
 };
 
+enum CRIPDataReadMethod {
+    CRIP_DATA_READ_UNKNOWN = 0,
+    CRIP_DATA_READ_MMC,  /* Raw reads via MMC READ CD */
+    CRIP_DATA_READ_CDIO, /* libcdio's raw reads, used by the image drivers */
+};
+
 enum CRIPAccuDBStatus {
     CYANRIP_ACCUDB_DISABLED = 0,
     CYANRIP_ACCUDB_NOT_FOUND,
@@ -121,6 +127,7 @@ typedef struct cyanrip_settings {
     enum coverart_lookup_sizes coverart_lookup_size;
     int enable_replaygain;
     int generate_cue_only;
+    int disable_data_tracks;
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -223,6 +230,9 @@ typedef struct cyanrip_ctx {
     /* Non-track bound cover art */
     CRIPArt cover_arts[32];
     int nb_cover_arts;
+
+    /* How data track sectors are read, latched on the first success */
+    enum CRIPDataReadMethod data_read_method;
 
     /* Drive caps */
     cdio_drive_read_cap_t  rcap;

@@ -9,6 +9,7 @@
  - Automatic deemphasis of preemphasized discs now actually happens
  - CUE sheets reference their files relative to the sheet
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
+ - Data tracks are ripped to raw MODE1/2352 binaries and referenced from the CUE sheet
  - Data tracks no longer leave stray files
  - Fixed a crash on overlong filenames
  - FFmpeg 8.0+ compatibility

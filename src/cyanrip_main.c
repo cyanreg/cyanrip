@@ -23,8 +23,13 @@
 #include <locale.h>
 #endif
 
+#include <cdio/mmc.h>
+#include <cdio/mmc_ll_cmds.h>
+#include <cdio/read.h>
+
 #include <libavutil/bprint.h>
 #include <libavutil/avstring.h>
+#include <libavutil/crc.h>
 #include <libavutil/time.h>
 
 #include "cyanrip_main.h"
@@ -273,6 +278,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     }
 
     int first_track_nb = cdio_get_first_track_num(ctx->cdio);
+
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
@@ -712,13 +718,176 @@ static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
     return (double)sample_peak/32768.0;
 }
 
+/* Reads one raw 2352 byte sector. Data tracks can't go through paranoia,
+ * which only knows how to read audio, so go to the device directly. */
+static int crip_read_raw_frame(cyanrip_ctx *ctx, uint8_t *data, lsn_t lsn)
+{
+    /* MMC READ CD asking for every field but the subchannel. Sync (12),
+     * header (4), subheader (8, mode 2 only), user data and EDC/ECC add up
+     * to a full frame no matter which mode the sector turns out to be in. */
+    if (ctx->data_read_method != CRIP_DATA_READ_CDIO &&
+        mmc_read_cd(ctx->cdio, data, lsn, CDIO_MMC_READ_TYPE_ANY, false, true,
+                    0x3, true, true, 0, 0, CDIO_CD_FRAMESIZE_RAW,
+                    1) == DRIVER_OP_SUCCESS) {
+        ctx->data_read_method = CRIP_DATA_READ_MMC;
+        return 0;
+    }
+
+    /* Disc images and anything else without raw MMC reads. Despite the name
+     * the image drivers hand back whole unprocessed sectors here. */
+    if (ctx->data_read_method != CRIP_DATA_READ_MMC &&
+        cdio_read_audio_sectors(ctx->cdio, data, lsn, 1) == DRIVER_OP_SUCCESS) {
+        ctx->data_read_method = CRIP_DATA_READ_CDIO;
+        return 0;
+    }
+
+    return AVERROR_EXTERNAL;
+}
+
+/* Copies a data track out sector by sector, as a raw MODE1/2352 binary,
+ * which is what the CUE sheet the rip generates references. */
+static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
+{
+    int ret = 0;
+    int nb_files = 0;
+    char *paths[CYANRIP_FORMATS_NB] = { NULL };
+    FILE *files[CYANRIP_FORMATS_NB] = { NULL };
+    uint8_t *data = NULL;
+
+    /* One file per output format, but nothing stops the naming scheme from
+     * pointing several formats at the same file, so write each path once */
+    for (int i = 0; i < ctx->settings.outputs_num; i++) {
+        char *path = crip_get_path(ctx, CRIP_PATH_DATA, 1,
+                                   &crip_fmt_info[ctx->settings.outputs[i]], t);
+        if (!path) {
+            ret = AVERROR(ENOMEM);
+            goto end;
+        }
+
+        int duplicate = 0;
+        for (int j = 0; j < nb_files; j++)
+            duplicate |= !strcmp(paths[j], path);
+
+        if (duplicate) {
+            av_free(path);
+            continue;
+        }
+
+        files[nb_files] = fopen(path, "wb");
+        if (!files[nb_files]) {
+            ret = AVERROR(errno);
+            cyanrip_log(ctx, 0, "Couldn't open path \"%s\" for writing: %s!\n"
+                        "Invalid folder name? Try -D <folder>.\n",
+                        path, av_err2str(ret));
+            av_free(path);
+            goto end;
+        }
+
+        paths[nb_files++] = path;
+    }
+
+    data = av_malloc(CDIO_CD_FRAMESIZE_RAW);
+    if (!data) {
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
+
+    track_set_creation_time(ctx, t);
+
+    const AVCRC *crc_table = av_crc_get_table(AV_CRC_32_IEEE_LE);
+    uint32_t crc = UINT32_MAX;
+
+    const int start_err = ctx->total_error_count;
+
+    CRIPRipProgress prog;
+    crip_progress_init(&prog);
+
+    for (int i = 0; i < t->frames; i++) {
+        /* Detect disc removals */
+        if (get_media_changed(ctx->cdio)) {
+            cyanrip_log(ctx, 0, "\nDrive media changed, stopping!\n");
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+
+        int err = crip_read_raw_frame(ctx, data, t->start_lsn + i);
+        for (int j = 0; err && (j < ctx->settings.max_retries); j++)
+            err = crip_read_raw_frame(ctx, data, t->start_lsn + i);
+
+        if (err) {
+            cyanrip_log(ctx, 0, "\nFrame read failed at LSN %i!\n", t->start_lsn + i);
+            memset(data, 0, CDIO_CD_FRAMESIZE_RAW);
+            ctx->total_error_count++;
+        }
+
+        /* Stop now if requested */
+        if (quit_now) {
+            cyanrip_log(ctx, 0, "\nStopping, ripping incomplete!\n");
+            ctx->total_error_count++;
+            goto end;
+        }
+
+        crc = av_crc(crc_table, crc, data, CDIO_CD_FRAMESIZE_RAW);
+
+        for (int j = 0; j < nb_files; j++) {
+            if (fwrite(data, CDIO_CD_FRAMESIZE_RAW, 1, files[j]) != 1) {
+                ret = AVERROR(errno);
+                cyanrip_log(ctx, 0, "\nError writing to \"%s\": %s!\n",
+                            paths[j], av_err2str(ret));
+                goto end;
+            }
+        }
+
+        ctx->frames_read++;
+
+        /* Report progress */
+        crip_progress_report(ctx, &prog, "Ripping", t->number, i + 1, t->frames,
+                             ctx->total_error_count - start_err);
+    }
+
+    t->eac_crc = crc ^ UINT32_MAX;
+    t->computed_crcs = 1;
+
+    cyanrip_log(NULL, 0, "\n");
+
+    if (ctx->total_error_count - start_err)
+        cyanrip_log(ctx, 0, "Track %i ripped with errors.\n", t->number);
+    else
+        cyanrip_log(ctx, 0, "Track %i ripped successfully!\n", t->number);
+
+end:
+    for (int i = 0; i < nb_files; i++) {
+        if (fclose(files[i]) && !ret) {
+            ret = AVERROR(errno);
+            cyanrip_log(ctx, 0, "Error writing to \"%s\": %s!\n",
+                        paths[i], av_err2str(ret));
+        }
+        av_free(paths[i]);
+    }
+
+    av_free(data);
+
+    if (ret)
+        ctx->total_error_count++;
+
+    return ret;
+}
+
 static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
     CRIPRipProgress prog;
 
     if (t->track_is_data) {
-        cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
+        if (ctx->settings.disable_data_tracks) {
+            cyanrip_log(ctx, 0, "Track %i is data, skipping:\n", t->number);
+        } else {
+            cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
+            ret = cyanrip_rip_data_track(ctx, t);
+            if (ret < 0 || quit_now)
+                return ret;
+        }
+
         cyanrip_log_track_end(ctx, t);
         cyanrip_cue_track(ctx, t);
         return 0;
@@ -1194,6 +1363,7 @@ int main(int argc, char **argv)
     settings.outputs_num = 1;
     settings.disable_coverart_embedding = 0;
     settings.enable_replaygain = 1;
+    settings.disable_data_tracks = 0;
     settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, 198*sizeof(*settings.pregap_action));
@@ -1246,6 +1416,8 @@ int main(int argc, char **argv)
                 "Disable automatic CD deemphasis");
     GEN_OPT_ONE(opts_list, bool,    no_replaygain, "K", 0, 0, 0, 0, 0,
                 "Disable ReplayGain tagging");
+    GEN_OPT_ONE(opts_list, bool,    no_data_tracks, "X", 0, 0, 0, 0, 0,
+                "Skip data tracks instead of ripping them to raw binaries");
 
     GEN_OPT_SEC(opts_list, "Output options");
     GEN_OPT_ARR(opts_list, char *,  outputs, "o", ',', 0, 32, 0, 0,
@@ -1359,6 +1531,7 @@ int main(int argc, char **argv)
     settings.force_deemphasis           = force_deemphasis;
     settings.deemphasis                 = !no_deemphasis;
     settings.enable_replaygain          = !no_replaygain;
+    settings.disable_data_tracks        = no_data_tracks;
     settings.disable_mb                 = no_musicbrainz;
     settings.disable_accurip            = no_accurip;
     settings.disable_coverart_db        = no_coverart_db;
@@ -1896,8 +2069,10 @@ int main(int argc, char **argv)
             if (!paths)
                 break;
             for (int i = 0; i < ctx->nb_tracks; i++)
-                paths[i] = crip_get_path(ctx, CRIP_PATH_TRACK, 0, cfmt,
-                                         &ctx->tracks[i]);
+                paths[i] = crip_get_path(ctx,
+                                         ctx->tracks[i].track_is_data ?
+                                         CRIP_PATH_DATA : CRIP_PATH_TRACK,
+                                         0, cfmt, &ctx->tracks[i]);
             for (int i = 0; i < ctx->nb_tracks; i++)
                 for (int j = i + 1; j < ctx->nb_tracks; j++)
                     if (paths[i] && paths[j] && !strcmp(paths[i], paths[j]))
@@ -1915,6 +2090,11 @@ int main(int argc, char **argv)
     cyanrip_log(ctx, 0, "Tracks:\n");
     if (ctx->settings.rip_indices_count == -1) {
         ctx->frames_to_read = ctx->duration_frames;
+
+        if (ctx->settings.disable_data_tracks)
+            for (int i = 0; i < ctx->nb_tracks; i++)
+                if (ctx->tracks[i].track_is_data)
+                    ctx->frames_to_read -= ctx->tracks[i].frames;
 
         if (!ctx->settings.print_info_only)
             cyanrip_initialize_ebur128(ctx);
@@ -2009,7 +2189,8 @@ int main(int argc, char **argv)
                 goto end;
             }
 
-            ctx->frames_to_read += ctx->tracks[j].frames;
+            if (!ctx->tracks[j].track_is_data || !ctx->settings.disable_data_tracks)
+                ctx->frames_to_read += ctx->tracks[j].frames;
         }
 
         /**

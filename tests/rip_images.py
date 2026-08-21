@@ -101,14 +101,30 @@ def sc_pregap():
     expect("drop", "1.flac:2", "2.flac:2", "3.flac:1", "log.log", "sheet.cue")
 
 
+def data_track(name, img, track, lsn, frames):
+    """The ripped data track must be the image's sectors, byte for byte"""
+    want = (WORK / img).read_bytes()[lsn * 2352:(lsn + frames) * 2352]
+    if (WORK / f"out_{name}" / f"{track}.bin").read_bytes() != want:
+        fail(f"{name}: {track}.bin does not match sectors {lsn}-{lsn + frames}")
+
+
 def sc_mixed():
-    # Data track must be skipped, and produce no stray file
+    # The data track rips to a raw MODE1/2352 binary
     rip("mixed", "mixed.cue")
-    expect("mixed", "2.flac:2", "3.flac:2", "log.log", "sheet.cue")
+    expect("mixed", "1.bin", "2.flac:2", "3.flac:2", "log.log", "sheet.cue")
+    data_track("mixed", "mixed.bin", 1, 0, 150)
+
+    sheet = (WORK / "out_mixed" / "sheet.cue").read_text()
+    if 'FILE "1.bin" BINARY' not in sheet or "TRACK 01 MODE1/2352" not in sheet:
+        fail("mixed: the CUE sheet does not reference the data track")
 
     # Data track selected via rip indices
     rip("idx", "mixed.cue", "-l", "1,2")
-    expect("idx", "2.flac:2", "log.log", "sheet.cue")
+    expect("idx", "1.bin", "2.flac:2", "log.log", "sheet.cue")
+
+    # -X leaves data tracks alone, and produces no stray file
+    rip("nodata", "mixed.cue", "-X")
+    expect("nodata", "2.flac:2", "3.flac:2", "log.log", "sheet.cue")
 
 
 def sc_nrg():

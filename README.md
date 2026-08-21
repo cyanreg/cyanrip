@@ -8,6 +8,7 @@ Features
  * Encoded and muxed via FFmpeg (currently supports flac, opus, mp3, tta, wavpack, alac, vorbis and aac)
  * Drive offset compensation and error recovery via cd-paranoia
  * [Full pregap handling](#pregap-handling)
+ * [Data track ripping](#data-tracks) for mixed mode and Enhanced CDs
  * [HDCD detection and decoding](#hdcd-decoding)
  * [CD Deemphasis (TOC + subcode)](#deemphasis)
  * [Multi-disc album ripping](#multi-disc-albums)
@@ -126,6 +127,7 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -E                   | Force CD deemphasis, for CDs mastered with preemphasis without actually signalling it       |
 | -W                   | Disable automatic CD deemphasis. Read [below](#deemphasis) for details.                     |
 | -K                   | Disable ReplayGain tag generation. Read [replaygain](#replaygain) for details.              |
+| -X                   | Skip data tracks rather than ripping them, read [below](#data-tracks) for details           |
 |                      | **Output options**                                                                          |
 | -o `list`            | Comma separated list of output formats (encodings). Use "help" to list all. Default is flac |
 | -b `int`             | Bitrate in kbps for lossy formats, 256 by default                                           |
@@ -217,6 +219,17 @@ You can override what's done with each pregap on a per-track basis using the `-p
 If the pregap offset isn't available for a given track, this argument will do nothing.
 
 cyanrip guarantees that there will be no discontinuities between tracks, unless the drop action is used to delete a pregap.
+
+
+Data tracks
+-----------
+Mixed mode CDs and Enhanced CDs (CD-Extra) carry one or more data tracks alongside the audio. cyanrip rips those too, as raw `MODE1/2352` sectors written to a `.bin` file next to the audio tracks, and references them from the generated CUE sheet. Sectors are read whole, with their sync pattern, header and EDC/ECC intact, so the result is what a disc image would contain rather than just the 2048 bytes of user data per sector.
+
+Data tracks are read directly rather than through cd-paranoia, which only knows how to read audio. There is no drive offset correction: a data sector is addressed by its own header, so unlike audio it is never off by a fraction of a sector. Damaged sectors are retried as many times as `-r` allows, and a sector that never reads is written out as zeroes and counted as an error.
+
+A data track's own pregap is dropped by default, as it holds no user data. Pass `-p track_number=merge` to prepend it to the `.bin` instead, which the CUE sheet will reflect. The [pregap handling](#pregap-handling) section covers the rest.
+
+Pass `-X` to skip data tracks entirely. The CUE sheet will still describe them, so it will reference a `.bin` that was never written.
 
 
 Cover art embedding
@@ -357,6 +370,8 @@ In case you're on an operating system with more liberal allowance on filenames, 
 CUE sheet
 ---------
 cyanrip will generate a CUE sheet from which a byte-exact duplicate of the disc can be made. By default, pregaps are kept in the CUE sheet as being appended to the previous track (except for the first track, where the pregap is dropped and signalled as silence). This is reffered to as "noncompliant" by [hydrogenaudio](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_.28Noncompliant.29).
+
+Data tracks are referenced as `BINARY` files holding `MODE1/2352` sectors, unless skipped with `-X`, in which case the CUE sheet still names a file that isn't there.
 
 Custom changes in the way pregaps are handled will be reflected in the CUE file. For example, dropping a pregap will signal [silence](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_left_out) in the CUE sheet. Appending a pregap to the track will accordingly mark the track as [having two audio indices](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_corrected_gaps).
 
