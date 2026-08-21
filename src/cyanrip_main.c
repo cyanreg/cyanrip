@@ -614,6 +614,90 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 }
 
+/* Terminal progress line state, shared by the audio and data track rippers */
+typedef struct CRIPRipProgress {
+    char line[4096];
+    int line_len;
+    int max_line_len;
+    int64_t frame_last_read;
+} CRIPRipProgress;
+
+static void crip_progress_init(CRIPRipProgress *p)
+{
+    memset(p, 0, sizeof(*p));
+    p->frame_last_read = av_gettime_relative();
+}
+
+/* Reprints the progress line for a track that has just read frame "done" out
+ * of "total". ctx->frames_read must already account for the frame. */
+static void crip_progress_report(cyanrip_ctx *ctx, CRIPRipProgress *p,
+                                 const char *action, int track_number,
+                                 int done, int total, int errors)
+{
+    if (p->line_len > 0) {
+        cyanrip_log(NULL, 0, "\r");
+        p->line_len = 0;
+    }
+
+    p->line_len += snprintf(p->line, sizeof(p->line),
+                            "%s track %i, progress - %0.2f%%",
+                            action, track_number, ((double)done/total)*100.0f);
+
+    int64_t cur_time   = av_gettime_relative();
+    int64_t frame_diff = cur_time - p->frame_last_read;
+    p->frame_last_read = cur_time;
+
+    int64_t diff = cr_sliding_win(&ctx->eta_ctx, frame_diff, cur_time,
+                                  av_make_q(1, 1000000),
+                                  1000000LL * 1200LL, 1);
+
+    int64_t seconds = (ctx->frames_to_read - ctx->frames_read) * diff;
+
+    int hours = 0;
+    while (seconds >= (3600LL * 1000000LL)) {
+        seconds -= (3600LL * 1000000LL);
+        hours++;
+    }
+
+    int minutes = 0;
+    while (seconds >= (60LL * 1000000LL)) {
+        seconds -= (60LL * 1000000LL);
+        minutes++;
+    }
+
+    seconds = av_rescale(seconds, 1, 1000000);
+
+    if (seconds == 60) {
+        minutes++;
+        seconds = 0;
+    }
+
+    if (minutes == 60) {
+        hours++;
+        minutes = 0;
+    }
+
+    if (hours)
+        p->line_len += snprintf(p->line + p->line_len, sizeof(p->line) - p->line_len,
+                                ", ETA - %ih %im", hours, minutes);
+    else if (minutes)
+        p->line_len += snprintf(p->line + p->line_len, sizeof(p->line) - p->line_len,
+                                ", ETA - %im", minutes);
+    else
+        p->line_len += snprintf(p->line + p->line_len, sizeof(p->line) - p->line_len,
+                                ", ETA - %" PRId64 "s", seconds);
+
+    if (errors)
+        p->line_len += snprintf(p->line + p->line_len, sizeof(p->line) - p->line_len,
+                                ", errors - %i", errors);
+
+    p->max_line_len = FFMAX(p->line_len, p->max_line_len);
+    for (int c = p->line_len; c < p->max_line_len; c++)
+        p->line_len += snprintf(p->line + p->line_len, sizeof(p->line) - p->line_len, " ");
+
+    cyanrip_log(NULL, 0, "%s", p->line);
+}
+
 static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
 {
     const int16_t* samples = (int16_t*)data;
@@ -631,9 +715,7 @@ static double sample_peak_rel_amp(const uint8_t *data, const int bytes)
 static int cyanrip_rip_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     int ret = 0;
-    int line_len = 0;
-    int max_line_len = 0;
-    char line[4096];
+    CRIPRipProgress prog;
 
     if (t->track_is_data) {
         cyanrip_log(ctx, 0, "Track %i is data:\n", t->number);
@@ -693,7 +775,7 @@ repeat_ripping:;
         }
     }
 
-    int64_t frame_last_read = av_gettime_relative();
+    crip_progress_init(&prog);
 
     /* Read the actual CD data */
     for (int i = 0; i < frames; i++) {
@@ -750,74 +832,14 @@ repeat_ripping:;
             }
         }
 
-        if (line_len > 0) {
-            cyanrip_log(NULL, 0, "\r", line);
-            line_len = 0;
-        }
-
-        /* Report progress */
-        line_len += snprintf(line, sizeof(line),
-                             "Ripping%strack %i, progress - %0.2f%%",
-                             (!ctx->settings.ripping_retries || repeat_mode_encode) ? " and encoding " : " ",
-                             t->number, ((double)(i + 1)/frames)*100.0f);
-
         ctx->frames_read++;
 
-        int64_t cur_time   = av_gettime_relative();
-        int64_t frame_diff = cur_time - frame_last_read;
-        frame_last_read = cur_time;
-
-        int64_t diff = cr_sliding_win(&ctx->eta_ctx, frame_diff, cur_time,
-                                      av_make_q(1, 1000000),
-                                      1000000LL * 1200LL, 1);
-
-        int64_t seconds = (ctx->frames_to_read - ctx->frames_read) * diff;
-
-        int hours = 0;
-        while (seconds >= (3600LL * 1000000LL)) {
-            seconds -= (3600LL * 1000000LL);
-            hours++;
-        }
-
-        int minutes = 0;
-        while (seconds >= (60LL * 1000000LL)) {
-            seconds -= (60LL * 1000000LL);
-            minutes++;
-        }
-
-        seconds = av_rescale(seconds, 1, 1000000);
-
-        if (seconds == 60) {
-            minutes++;
-            seconds = 0;
-        }
-
-        if (minutes == 60) {
-            hours++;
-            minutes = 0;
-        }
-
-        if (hours)
-            line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %ih %im", hours, minutes);
-        else if (minutes)
-            line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %im", minutes);
-        else
-            line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", ETA - %" PRId64 "s", seconds);
-
-        if (ctx->total_error_count - start_err)
-            line_len += snprintf(line + line_len, sizeof(line) - line_len,
-                                 ", errors - %i", ctx->total_error_count - start_err);
-
-        max_line_len = FFMAX(line_len, max_line_len);
-        if (line_len < max_line_len) {
-            for (int c = line_len; c < max_line_len; c++)
-                line_len += snprintf(line + line_len, sizeof(line) - line_len, " ");
-        }
-
-        cyanrip_log(NULL, 0, "%s", line);
+        /* Report progress */
+        crip_progress_report(ctx, &prog,
+                             (!ctx->settings.ripping_retries || repeat_mode_encode) ?
+                             "Ripping and encoding" : "Ripping",
+                             t->number, i + 1, frames,
+                             ctx->total_error_count - start_err);
     }
 
     /* Fill with silence to maintain track length */
