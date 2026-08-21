@@ -21,8 +21,10 @@
 #include <stdint.h>
 #include <cdio/cdio.h>
 
+#define SUBQ_SIZE 16
+
 /* Size of reads of audio + subchannel Q data. 2352 bytes for audio + 16 bytes for subchannel Q */
-#define CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ (CDIO_CD_FRAMESIZE_RAW + 16)
+#define CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ (CDIO_CD_FRAMESIZE_RAW + SUBQ_SIZE)
 
 /**
  * Reads audio + subchannel Q data from a CD device
