@@ -41,13 +41,20 @@ driver_return_code_t cyanrip_read_audio_subq_sector(
         .bufferLength = block_size,
         .buffer = audio_subq_buf,
     };
-    if (!ioctl(fd, DKIOCCDREAD, &cd_read))
+    if (ioctl(fd, DKIOCCDREAD, &cd_read) >= 0)
         return DRIVER_OP_SUCCESS;
 
-    // TODO More detailed error handling? errno will be one of:
-    // EBADF
-    // EINVAL
-    // ENOTTY
-    // printf("ioctl() errno: %d\n", ioctl_errno);
-    return DRIVER_OP_ERROR;
+    /* Map the ioctl() failure to the closest driver_return_code_t, so that
+     * callers can retry on errors that are actually transient, i.e. DRIVER_OP_ERROR.
+     */
+    switch (errno) {
+        case EBADF:  /* fd is invalid, e.g. the device was already closed */
+            return DRIVER_OP_UNINIT;
+        case EINVAL: /* Invalid argument, e.g. bad offset/buffer length */
+            return DRIVER_OP_BAD_PARAMETER;
+        case ENOTTY: /* DKIOCCDREAD is not supported on this fd/device */
+            return DRIVER_OP_UNSUPPORTED;
+        default:     /* Most likely a transient read error (e.g. EIO), retryable */
+            return DRIVER_OP_ERROR;
+    }
 }
