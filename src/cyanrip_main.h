@@ -91,6 +91,18 @@ enum coverart_lookup_sizes {
     COVERART_LOOKUP_SIZE_1200
 };
 
+/* How to handle drives that return raw binary MSF fields instead
+ * of BCD in the Q sub-channel.
+ * 
+ * XLD handles it the same way. The equivalent field is nonBCD in xld_cdread_t
+ * XLD/XLDCDDABackend.c (see: xld_cdda_read_pregap())
+*/
+enum cyanrip_bcd_fixup_status {
+    CYANRIP_BCD_FIXUP_UNDETERMINED = 0,
+    CYANRIP_BCD_FIXUP_REQUIRED = 1,
+    CYANRIP_BCD_FIXUP_NOT_REQUIRED = 2,
+};
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *folder_name_scheme;
@@ -240,16 +252,7 @@ typedef struct cyanrip_ctx {
     lsn_t end_lsn;
     lsn_t duration_frames;
 
-    /* Whether this drive returns raw binary MSF fields instead
-     * of BCD in the Q sub-channel, so later pregap searches on the same
-     * disc apply the fixup from the start (see pregap.c).
-     * 
-     * XLD handles it the same way. The equivalent field is nonBCD in xld_cdread_t
-     * XLD/XLDCDDABackend.c (see: xld_cdda_read_pregap())
-     * 
-     * Values: 0 = fixup status not determined, 1 = needs fixup, 2 = does not need fixup
-     */
-    int subq_needs_bcd_fixup;
+    enum cyanrip_bcd_fixup_status subq_bcd_fixup_status;
 
     /* ETA */
     CRSlidingWinCtx eta_ctx;

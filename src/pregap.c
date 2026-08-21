@@ -128,10 +128,7 @@ static void subq_bcd_fixup(uint8_t *subq_buf)
  * Returns DRIVER_OP_SUCCESS if the sector is valid, DRIVER_OP_ERROR for CRC mismatch,
  * or another driver_return_code_t for other errors.
  */
-static driver_return_code_t subq_read_valid_audio_sector(
-    cyanrip_ctx *ctx,
-    uint8_t *audio_subq_buf,
-    const lsn_t lsn)
+static driver_return_code_t subq_read_valid_audio_sector(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, const lsn_t lsn)
 {
     driver_return_code_t ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
     if (ret) {
@@ -139,18 +136,18 @@ static driver_return_code_t subq_read_valid_audio_sector(
     }
 
     uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
-    if (ctx->subq_needs_bcd_fixup == 1) {
+    if (ctx->subq_bcd_fixup_status == CYANRIP_BCD_FIXUP_REQUIRED) {
         subq_bcd_fixup(subq_buf);
 
         return (subq_read_crc(subq_buf) == subq_crc(subq_buf) ? DRIVER_OP_SUCCESS : DRIVER_OP_ERROR);
     }
 
     if (subq_read_crc(subq_buf) == subq_crc(subq_buf)) {
-        ctx->subq_needs_bcd_fixup = 2; /* We matched a CRC without the BCD fixup. Never apply BCD fixup to avoid false positives */
+        ctx->subq_bcd_fixup_status = CYANRIP_BCD_FIXUP_NOT_REQUIRED; /* We matched a CRC without the BCD fixup. Never apply BCD fixup to avoid false positives */
         return DRIVER_OP_SUCCESS;
     }
 
-    if (ctx->subq_needs_bcd_fixup == 2) {
+    if (ctx->subq_bcd_fixup_status == CYANRIP_BCD_FIXUP_NOT_REQUIRED) {
         return DRIVER_OP_ERROR;
     }
 
@@ -160,7 +157,7 @@ static driver_return_code_t subq_read_valid_audio_sector(
     subq_bcd_fixup(subq_buf_copy);
 
     if (subq_read_crc(subq_buf_copy) == subq_crc(subq_buf_copy)) {
-        ctx->subq_needs_bcd_fixup = 1;
+        ctx->subq_bcd_fixup_status = CYANRIP_BCD_FIXUP_REQUIRED;
 
         memcpy(subq_buf, subq_buf_copy, SUBQ_SIZE);
         return DRIVER_OP_SUCCESS;
@@ -175,12 +172,8 @@ static driver_return_code_t subq_read_valid_audio_sector(
  * 
  * audio_subq_buf must be at least CDIO_CD_FRAMESIZE_RAW + SUBQ_SIZE bytes.
  */
-static driver_return_code_t subq_read_with_retries(
-    cyanrip_ctx *ctx,
-    uint8_t *audio_subq_buf,
-    subq_t *subq,
-    const lsn_t lsn,
-    int *total_failures)
+static driver_return_code_t subq_read_with_retries(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
+    subq_t *subq, const lsn_t lsn, int *total_failures)
 {
     driver_return_code_t ret; 
     int retry = 0;
