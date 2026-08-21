@@ -309,8 +309,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn, sector_max_retries, &total_failures);
         if (ret)
             goto fail;
-        if (total_failures > total_failure_budget)
-            goto giveup;
 
         if (subq.adr != 1) {
             continue;
@@ -327,8 +325,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, confirm_lsn, sector_max_retries, &total_failures);
             if (ret)
                 goto fail;
-            if (total_failures > total_failure_budget)
-                goto giveup;
             
             if (subq.adr == 1 && subq.track_number == track_number)
                 right_bound = lsn;
@@ -356,8 +352,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn, sector_max_retries, &total_failures);
         if (ret)
             goto fail;
-        if (total_failures > total_failure_budget)
-            goto giveup;
 
         if (subq.adr != 1) {
             // If a mode 2 or mode 3 sector immediately follows left bound,
@@ -391,22 +385,20 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     if (left_bound + 1 == right_bound)
         lsn = right_bound;
     else
-        goto giveup;
-    
+        goto fail;
 
     av_free(audio_subq_buf);
     return lsn;
 
-giveup:
-    cyanrip_log(ctx, 0, "Warning: repeated subq CRC mismatches prevented finding the "
-                "pregap of track %i, skipping pregap detection\n", track_number);
-    av_free(audio_subq_buf);
-    return CDIO_INVALID_LSN;
-
 fail:
-    cyanrip_log(ctx, 0, "Warning: failed to read subq data at lsn %i (error %i) while "
-                "searching for the pregap of track %i, skipping pregap detection\n",
-                lsn, ret, track_number);
+    if (total_failures > total_failure_budget)
+        cyanrip_log(ctx, 0, "Warning: repeated subq CRC mismatches prevented finding the "
+                "pregap of track %i, skipping pregap detection\n", track_number);
+    else
+        cyanrip_log(ctx, 0, "Warning: failed to read subq data at lsn %i (error %i) while "
+                    "searching for the pregap of track %i, skipping pregap detection\n",
+                    lsn, ret, track_number);
+
     av_free(audio_subq_buf);
     return CDIO_INVALID_LSN;
 }
