@@ -1,10 +1,17 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
-    branches: [ master, workflow ]
+    branches:
+      - master
+      - workflow
   release:
-    types: [ released ]
+    types: 
+      - released
+  workflow_dispatch:
 
 jobs:
   linux:
@@ -68,6 +75,7 @@ jobs:
           zip cyanrip cyanrip.exe
 
       - name: "Upload artifact"
+        if: github.ref == 'refs/heads/master' || github.event_name == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: cyanrip-${{ matrix.runs-on }}
@@ -75,6 +83,7 @@ jobs:
 
       - name: Get Release
         id: get_release
+        if: github.ref == 'refs/heads/master' || github.event_name == 'release'
         shell: bash
         run: |
           echo "::set-output name=upload_url_release::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/$(cut -d/ -f3 <<< ${{ github.ref }}) | jq -r ."upload_url")"
@@ -82,7 +91,7 @@ jobs:
           echo "::set-output name=nightly_id::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly | jq -r ."id")"
 
       - name: Upload a Release Asset
-        if: steps.get_release.outputs.upload_url_release != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release != 'null'
         uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,7 +102,7 @@ jobs:
           asset_content_type: application/vnd.microsoft.portable-executable
 
       - name: Upload versioned Nightly asset
-        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
         uses: WebFreak001/deploy-nightly@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +116,7 @@ jobs:
 
       - name: Delete existing nightly latest
         id: del_nightly_release
-        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
         uses: mknejp/delete-release-assets@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

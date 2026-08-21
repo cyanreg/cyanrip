@@ -56,11 +56,19 @@ sources = [
 
     'cue_writer.c',
 
+    'pregap.c',
+
     # Version
     vcs_tag(command: ['git', 'rev-parse', '--short', 'HEAD'],
                       input: 'version.c.in', output: 'version.c',
                       fallback: 'release')
 ]
+
+if host_machine.system() == 'darwin'
+    sources += 'subq_read_macos.c'
+else
+    sources += 'subq_read_mmc.c'
+endif
 
 # Optional, for printing MusicBrainz submission URLs as QR codes
 qrencode = dependency('libqrencode', version: '>= 4.0', required: false,
