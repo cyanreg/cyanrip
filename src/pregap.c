@@ -154,7 +154,7 @@ static driver_return_code_t subq_read_valid_audio_sector(
         return DRIVER_OP_ERROR;
     }
 
-    // CRC mismatch, try to fixup BCD and see if that works
+    /* CRC mismatch, try to fixup BCD and see if that works */
     uint8_t subq_buf_copy[SUBQ_SIZE];
     memcpy(subq_buf_copy, subq_buf, SUBQ_SIZE);
     subq_bcd_fixup(subq_buf_copy);
@@ -194,7 +194,7 @@ static driver_return_code_t subq_read_with_retries(
         (*total_failures)++;
         retry++;
 
-        // Abort if the read failure is not recoverable
+        /* Abort if the read failure is not recoverable */
         if (ret != DRIVER_OP_ERROR || *total_failures > TOTAL_FAILURE_BUDGET) {
             break;
         }
@@ -215,7 +215,7 @@ static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int t
 }
 
 /**
- * Finds the pregap LSN of a given track by reading Q sub-channel data and validating CRCs.
+ * Finds the pregap LSN of the track by reading Q sub-channel data and validating CRCs.
  * Returns the pregap LSN if found, or CDIO_INVALID_LSN if not found or if the track is not audio.
  *
  * The pregap is the run of sectors before a track's start that already carry
@@ -263,8 +263,8 @@ static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int t
  */
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 {
-    // Try to use libcdio. If libcdio doesn't implement pregap finding
-    // for a driver, it will return CDIO_INVALID_LSN.
+    /* Try to use libcdio. If libcdio doesn't implement pregap finding
+       for a driver, it will return CDIO_INVALID_LSN. */
     const lsn_t cdio_track_pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, track_number);
     if (cdio_track_pregap_lsn != CDIO_INVALID_LSN)
         return cdio_track_pregap_lsn;
@@ -275,23 +275,20 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         return CDIO_INVALID_LSN;
     }
 
-    /* Detect the first track number and return 0 as the pregap lsn for the first track */
-    const track_t first_track_number = cdio_get_first_track_num(ctx->cdio);
-    if (track_number == first_track_number || track_number <= 1)
-        return 0;
-
     const lsn_t track_start_lsn = cdio_get_track_lsn(ctx->cdio, track_number);
     if (track_start_lsn == CDIO_INVALID_LSN) {
         cyanrip_log(ctx, 0, "Track %i start LSN is invalid, skipping pregap search\n", track_number);
         return CDIO_INVALID_LSN;
     }
 
+    /* First track has no pregap */
+    const track_t first_track_number = cdio_get_first_track_num(ctx->cdio);
+    if (track_number == first_track_number || track_number <= 1)
+        return CDIO_INVALID_LSN;
+
     const uint8_t prev_track_number = track_number - 1;
 
-    // Q sub-channel pregap searching only makes sense across an audio-audio
-    // track boundary: a data track's Q sub-channel doesn't carry the same
-    // index/track position semantics, and running the search anyway is both
-    // meaningless and wasted work (matches XLD's guard).
+    /* Previous track is not audio */
     if (cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
         return CDIO_INVALID_LSN;
 
@@ -303,7 +300,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 
     /* Previous track is a single sector. No pregap */
     if (prev_track_start_lsn + 1 == track_start_lsn)
-        return track_start_lsn;
+        return CDIO_INVALID_LSN;
 
     uint8_t *audio_subq_buf = av_malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
 
@@ -312,14 +309,14 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     driver_return_code_t ret;
     int total_failures = 0;
 
-    // Both bounds start on sectors the TOC already vouches for: the previous
-    // track's start is in the previous track, this track's start is in this
-    // track. See the algorithm description in the doc comment above.
+    /* Both bounds start on sectors the TOC already vouches for: the previous
+     * track's start is in the previous track, this track's start is in this
+     * track. See the algorithm description in the doc comment above. */
     lsn_t left_bound = prev_track_start_lsn;
     lsn_t right_bound = track_start_lsn;
 
-    // Step 1: is there a pregap at all? The sector below the track start,
-    // confirmed by the sector below that, answers it.
+    /* Step 1: is there a pregap at all? The sector below the track start,
+     * confirmed by the sector below that, answers it. */
     lsn = track_start_lsn - 1;
     ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn, &total_failures);
     if (ret && !subq_read_failure_is_skippable(ret, total_failures))
@@ -332,14 +329,14 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             goto fail;
         if (!ret && subq.adr == 1 && subq.track_number == prev_track_number) {
             av_free(audio_subq_buf);
-            return track_start_lsn;
+            return CDIO_INVALID_LSN;
         }
     }
 
-    // Step 2: there is a pregap, or the reads were ambiguous. Backtrack in 2
-    // second increments until a sector can be confirmed to sit below any
-    // pregap; that is where the upward walk starts from. A 2 second pregap is
-    // common, so this often lands right below the boundary.
+    /* Step 2: there is a pregap, or the reads were ambiguous. Backtrack in 2
+     * second increments until a sector can be confirmed to sit below any
+     * pregap; that is where the upward walk starts from. A 2 second pregap is
+     * common, so this often lands right below the boundary. */
     const lsn_t backtrack = 150;
     lsn = track_start_lsn - 1;
     while (1) {
@@ -349,7 +346,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         }
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn, &total_failures);
         if (ret) {
-            // An unreadable landing spot tells us nothing; jump further back.
+            /* An unreadable landing spot tells us nothing; jump further back. */
             if (subq_read_failure_is_skippable(ret, total_failures))
                 continue;
             goto fail;
@@ -359,11 +356,11 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             continue;
 
         if (subq.track_number == prev_track_number) {
-            // Confirm with the sector below before trusting this as the left
-            // bound. A single spuriously CRC-valid read of the wrong sector
-            // here would put the left bound inside the pregap, and the search
-            // would then happily converge on a wrong answer. lsn is always
-            // above prev_track_start_lsn here, so lsn - 1 is in range.
+            /* Confirm with the sector below before trusting this as the left
+             * bound. A single spuriously CRC-valid read of the wrong sector
+             * here would put the left bound inside the pregap, and the search
+             * would then happily converge on a wrong answer. lsn is always
+             * above prev_track_start_lsn here, so lsn - 1 is in range. */
             ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn - 1, &total_failures);
             if (ret && !subq_read_failure_is_skippable(ret, total_failures))
                 goto fail;
@@ -372,17 +369,17 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             continue;
         }
 
-        // Anything other than the two tracks we're between is a read we can't
-        // make sense of - keep backtracking rather than trusting it as a bound.
+        /* Anything other than the two tracks we're between is a read we can't
+         * make sense of - keep backtracking rather than trusting it as a bound. */
         if (subq.track_number != track_number)
             continue;
 
-        // Confirm with the very next sector before trusting this jump
-        // landed inside the pregap rather than on a spuriously
-        // CRC-valid read of the wrong sector.
+        /* Confirm with the very next sector before trusting this jump
+         * landed inside the pregap rather than on a spuriously
+         * CRC-valid read of the wrong sector. */
         const lsn_t confirm_lsn = lsn + 1;
         if (confirm_lsn >= track_start_lsn) {
-            // track_start_lsn is known to belong to the new track already.
+            /* track_start_lsn is known to belong to the new track already. */
             right_bound = lsn;
             continue;
         }
@@ -394,10 +391,10 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     }
     left_bound = lsn;
 
-    // Step 3: walk upwards from left_bound, moving the bounds closer together
-    // on each sector that identifies itself, until they are adjacent. Sectors
-    // that won't read are stepped over, in the hope that a good sector further
-    // along moves a bound past them and rules them out as the pregap start.
+    /* Step 3: walk upwards from left_bound, moving the bounds closer together
+     * on each sector that identifies itself, until they are adjacent. Sectors
+     * that won't read are stepped over, in the hope that a good sector further
+     * along moves a bound past them and rules them out as the pregap start. */
     assert(left_bound >= prev_track_start_lsn);
     assert(right_bound <= track_start_lsn);
     assert(lsn == left_bound);
@@ -405,27 +402,27 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     while ((left_bound + 1) != right_bound) {
         lsn += 1;
         if (lsn == right_bound) {
-            // Walked all the way up to right_bound without the bounds meeting,
-            // so unreadable sectors are all that is left between them and
-            // there is no way to tell which one starts the pregap. Give up.
+            /* Walked all the way up to right_bound without the bounds meeting,
+             * so unreadable sectors are all that is left between them and
+             * there is no way to tell which one starts the pregap. Give up. */
             break;
         }
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn, &total_failures);
         if (ret) {
-            // Leave both bounds where they are and step over this sector: a
-            // later good read can still rule it out by moving a bound past it.
+            /* Leave both bounds where they are and step over this sector: a
+             * later good read can still rule it out by moving a bound past it. */
             if (subq_read_failure_is_skippable(ret, total_failures))
                 continue;
             goto fail;
         }
 
         if (subq.adr != 1) {
-            // Mode 2 and mode 3 Q frames carry the catalogue number or ISRC
-            // instead of a position, so they can't say which track they are
-            // in. One sitting directly above left_bound is taken as part of
-            // the previous track, on the assumption that a pregap doesn't
-            // begin on one; anywhere else it is stepped over like a sector
-            // that wouldn't read.
+            /* Mode 2 and mode 3 Q frames carry the catalogue number or ISRC
+             * instead of a position, so they can't say which track they are
+             * in. One sitting directly above left_bound is taken as part of
+             * the previous track, on the assumption that a pregap doesn't
+             * begin on one; anywhere else it is stepped over like a sector
+             * that wouldn't read. */
             if (lsn - 1 == left_bound) {
                 assert(lsn >= left_bound);
                 left_bound = lsn;
@@ -439,22 +436,22 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         }
         else if (subq.track_number == track_number) {
             assert(lsn <= right_bound);
-            // Require two consecutive sectors reporting the new track number
-            // before contracting right bound: guards against a single
-            // spuriously CRC-valid read of the wrong physical sector.
+            /* Require two consecutive sectors reporting the new track number
+             * before contracting right bound: guards against a single
+             * spuriously CRC-valid read of the wrong physical sector. */
             if (right_bound_candidate == lsn - 1)
                 right_bound = lsn - 1;
             else if (lsn + 1 == right_bound)
-                // right_bound is itself an established new-track sector, so it
-                // serves as the second of the two consecutive reads. Without
-                // this, a pregap one sector long could never be confirmed.
+                /* right_bound is itself an established new-track sector, so it
+                 * serves as the second of the two consecutive reads. Without
+                 * this, a pregap one sector long could never be confirmed. */
                 right_bound = lsn;
             else {
                 right_bound_candidate = lsn;
                 continue;
             }
             right_bound_candidate = CDIO_INVALID_LSN;
-            // Rescan the narrowed range from the left bound.
+            /* Rescan the narrowed range from the left bound. */
             lsn = left_bound;
         }
     }

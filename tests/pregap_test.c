@@ -290,12 +290,14 @@ static void check_true(const char *what, int cond)
 
 int main(void)
 {
-    /* First track: pregap is always lsn 0, no subq work at all. */
+    /* First track: nothing precedes it to hold a pregap, so there is no
+     * boundary to search and no subq work to do. Anything before its start is
+     * lead-in/hidden-track territory, which the caller handles itself. */
     {
         fake_disc_t d = make_disc(1000, 1150, 1300);
         d.cur_track_number = d.first_track_num;
         lsn_t got = run(&d);
-        check_lsn("first track", got, 0);
+        check_lsn("first track", got, CDIO_INVALID_LSN);
         check_true("first track: no subq reads", d.reads_issued == 0);
     }
 
@@ -309,11 +311,13 @@ int main(void)
         check_true("libcdio-reported pregap: no subq reads", d.reads_issued == 0);
     }
 
-    /* No pregap at all: fast path should confirm with just two reads. */
+    /* No pregap at all: fast path should confirm with just two reads, and
+     * report the absence as CDIO_INVALID_LSN rather than as a zero length
+     * pregap sitting on the track start. */
     {
         fake_disc_t d = make_disc(1000, 1300, 1300);
         lsn_t got = run(&d);
-        check_lsn("no pregap", got, 1300);
+        check_lsn("no pregap", got, CDIO_INVALID_LSN);
         check_true("no pregap: fast path used only 2 reads", d.reads_issued == 2);
     }
 
