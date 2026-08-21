@@ -22,6 +22,12 @@
 
 #include <musicbrainz5/mb5_c.h>
 #include <libavutil/crc.h>
+#include <libavutil/time.h>
+
+/* MusicBrainz will occasionally refuse to serve a request, in particular when
+ * queried again right after a cancelled rip. Wait it out and retry. */
+#define MB_RETRY_DELAY_MS 15000
+#define MB_MAX_RETRIES 3
 
 #define READ_MB(FUNC, MBCTX, DICT, KEY, APPEND)                                     \
     do {                                                                            \
@@ -188,6 +194,18 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
     return 0;
 }
 
+/* Returns 1 if the wait was cut short by the user quitting */
+static int mb_wait(int64_t delay_ms)
+{
+    while ((delay_ms > 0) && !quit_now) {
+        int64_t chunk = delay_ms > 100 ? 100 : delay_ms;
+        av_usleep(chunk * 1000);
+        delay_ms -= chunk;
+    }
+
+    return quit_now;
+}
+
 static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, char *release_str, int discnumber)
 {
     int ret = 0, notfound = 0, possible_stub = 0;
@@ -200,39 +218,55 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
 
     char *names[] = { "inc" };
     char *values[] = { "recordings artist-credits labels" };
+    Mb5Metadata metadata = NULL;
+    tQueryResult res = eQuery_Success;
+
     const char *discid = dict_get(ctx->meta, "musicbrainz_discid");
     if (!discid) {
         cyanrip_log(ctx, 0, "Missing DiscID!\n");
-        return 0;
+        goto end;
     }
 
-    Mb5Metadata metadata = mb5_query_query(query, "discid", discid, 0, 1, names, values);
-    if (!metadata) {
-        tQueryResult res = mb5_query_get_lastresult(query);
-        if (res != eQuery_ResourceNotFound) {
-            int chars = mb5_query_get_lasterrormessage(query, NULL, 0) + 1;
-            char *msg = av_mallocz(chars*sizeof(*msg));
-            mb5_query_get_lasterrormessage(query, msg, chars);
-            cyanrip_log(ctx, 0, "MusicBrainz query failed: %s\n", msg);
-            av_freep(&msg);
-        }
+    for (int i = 0; i <= MB_MAX_RETRIES; i++) {
+        metadata = mb5_query_query(query, "discid", discid, 0, 1, names, values);
+        if (metadata)
+            break;
 
-        switch(res) {
-        case eQuery_Timeout:
-        case eQuery_ConnectionError:
-            cyanrip_log(ctx, 0, "Connection failed, try again? Or disable via -N\n");
+        /* The DiscID not being in the database is a definitive answer */
+        res = mb5_query_get_lastresult(query);
+        if (res == eQuery_ResourceNotFound)
             break;
-        case eQuery_AuthenticationError:
-        case eQuery_FetchError:
-        case eQuery_RequestError:
-            cyanrip_log(ctx, 0, "Error fetching/requesting/auth, this shouldn't happen.\n");
+
+        int chars = mb5_query_get_lasterrormessage(query, NULL, 0) + 1;
+        char *msg = av_mallocz(chars*sizeof(*msg));
+        mb5_query_get_lasterrormessage(query, msg, chars);
+        cyanrip_log(ctx, 0, "MusicBrainz query failed: %s\n", msg);
+        av_freep(&msg);
+
+        /* Only errors on the server's side are worth waiting out. If it was
+         * never reached at all (no code), or it took issue with the request
+         * itself, retrying will fail in exactly the same way. Overloaded
+         * servers reply with a 503, and 401s have been reported for queries
+         * repeated too quickly. */
+        int code = mb5_query_get_lasthttpcode(query);
+        int busy = (code == 401) || (code == 429) || (code >= 500);
+
+        if (!busy || (i == MB_MAX_RETRIES))
             break;
-        case eQuery_ResourceNotFound:
+
+        cyanrip_log(ctx, 0, "Retrying in %i seconds (attempt %i out of %i)...\n",
+                    MB_RETRY_DELAY_MS / 1000, i + 2, MB_MAX_RETRIES + 1);
+
+        if (mb_wait(MB_RETRY_DELAY_MS))
+            break;
+    }
+
+    if (!metadata) {
+        if (res == eQuery_ResourceNotFound)
             notfound = 1;
-            break;
-        default:
-            break;
-        }
+        else if (!quit_now)
+            cyanrip_log(ctx, 0, "MusicBrainz lookup failed, try again later, "
+                        "or disable it via -N\n");
 
         ret = 1;
         goto end;

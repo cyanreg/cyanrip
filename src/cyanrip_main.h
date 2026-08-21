@@ -279,3 +279,6 @@ int crip_is_integer(const char *src);
 
 extern uint64_t paranoia_status[PARANOIA_CB_FINISHED + 1];
 extern const int crip_max_paranoia_level;
+
+/* Set once the user has asked cyanrip to quit */
+extern int quit_now;
