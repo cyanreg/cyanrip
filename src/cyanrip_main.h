@@ -36,6 +36,11 @@
 #include <libavutil/intreadwrite.h>
 #include <libavcodec/avcodec.h>
 
+/* Session 1's lead-out, session 2's lead-in and the pregap, the gap that
+ * separates a trailing data track from the audio. libdiscid calls this
+ * XA_INTERVAL and applies it to the lead-out used for the disc IDs. */
+#define CRIP_XA_INTERVAL ((60 + 90 + 2) * 75)
+
 enum cyanrip_output_formats {
     CYANRIP_FORMAT_FLAC = 0,
     CYANRIP_FORMAT_TTA,

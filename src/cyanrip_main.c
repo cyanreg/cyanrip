@@ -315,13 +315,12 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
             /* On an Enhanced CD the trailing data track sits in a second
              * session, and the last audio track's TOC end swallows session
-             * 1's lead-out, session 2's lead-in and the pregap - 11400
-             * frames in total. Only guess at that if the drive gave no
-             * pregap to go by, and didn't say the disc is single session,
-             * which a mixed mode CD is. */
+             * 1's lead-out, session 2's lead-in and the pregap. Only guess
+             * at that if the drive gave no pregap to go by, and didn't say
+             * the disc is single session, which a mixed mode CD is. */
             if ((i == (ctx->nb_cd_tracks - 1)) && (i > 0) &&
                 (t->pregap_lsn == CDIO_INVALID_LSN) && !single_session) {
-                ctx->tracks[i - 1].end_lsn -= 11400;
+                ctx->tracks[i - 1].end_lsn -= CRIP_XA_INTERVAL;
                 t->pregap_lsn = ctx->tracks[i - 1].end_lsn + 1;
             }
         }
@@ -333,7 +332,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
      * session, so do the same or none of the IDs will match. */
     cyanrip_track *last_track = &ctx->tracks[ctx->nb_cd_tracks - 1];
     if (last_track->track_is_data && (ctx->nb_cd_tracks > 1))
-        ctx->id_leadout_lsn = last_track->start_lsn - 11400;
+        ctx->id_leadout_lsn = last_track->start_lsn - CRIP_XA_INTERVAL;
     else
         ctx->id_leadout_lsn = ctx->end_lsn + 1;
 
