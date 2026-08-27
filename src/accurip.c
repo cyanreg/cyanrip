@@ -25,23 +25,27 @@
 
 #define ACCURIP_DB_BASE_URL "http://www.accuraterip.com/accuraterip"
 
-static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_type_2)
+int crip_get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_type_2,
+                         uint32_t *cddb_id)
 {
     int audio_tracks = 0;
     uint64_t idt1 = 0x0;
     uint64_t idt2 = 0x0;
 
+    /* AccurateRip drops data tracks from the TOC and renumbers the audio
+     * tracks to be consecutive, but keeps the disc's real lead-out, with
+     * any trailing data track still in front of it. */
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
         if (t->track_is_data)
             continue;
 
-        idt1 += t->start_lsn;
-        idt2 += (t->start_lsn ? t->start_lsn : 1) * t->number;
         audio_tracks++;
+        idt1 += t->start_lsn;
+        idt2 += (t->start_lsn ? t->start_lsn : 1) * audio_tracks;
     }
 
-    lsn_t last = ctx->id_leadout_lsn;
+    lsn_t last = ctx->end_lsn + 1;
     idt1 += last;
     idt2 += last * (audio_tracks + 1);
 
@@ -50,6 +54,21 @@ static int get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_t
 
     *id_type_1 = idt1;
     *id_type_2 = idt2;
+
+    /* The database URL carries a FreeDB ID computed over the full TOC,
+     * data tracks and the real lead-out included, unlike the printed one,
+     * which follows libdiscid in leaving trailing data tracks out. */
+    uint32_t sum = 0;
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
+        uint32_t m = (ctx->tracks[i].start_lsn + 150) / 75;
+        while (m > 0) {
+            sum += m % 10;
+            m /= 10;
+        }
+    }
+
+    uint32_t len = (last + 150) / 75 - (ctx->tracks[0].start_lsn + 150) / 75;
+    *cddb_id = ((sum % 0xff) << 24) | (len << 8) | ctx->nb_cd_tracks;
 
     return audio_tracks;
 }
@@ -87,19 +106,15 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
 
     CURL *curl_ctx = curl_easy_init();
 
-    /* Get both accurip disc IDs */
-    uint32_t id_type_1, id_type_2;
-    int audio_tracks = get_accurip_ids(ctx, &id_type_1, &id_type_2);
-
-    /* Get CDDB ID */
-    const char *cddb_id_str = dict_get(ctx->meta, "cddb");
-    if (!cddb_id_str) {
-        cyanrip_log(ctx, 0, "Unable to get AccuRIP DB data: missing CDDB ID!\n");
+    /* Get both accurip disc IDs and the FreeDB ID the URL wants */
+    uint32_t id_type_1, id_type_2, cddb_id;
+    int audio_tracks = crip_get_accurip_ids(ctx, &id_type_1, &id_type_2, &cddb_id);
+    if (!audio_tracks) {
+        cyanrip_log(ctx, 0, "Disc has no audio tracks, skipping AccuRIP DB!\n");
         goto end;
     }
 
     /* Format all the data in the needed way */
-    uint32_t cddb_id = strtoul(cddb_id_str, NULL, 16);
     char id_type_1_s[9] = { 0 };
     snprintf(id_type_1_s, sizeof(id_type_1_s), "%08x", id_type_1);
 
@@ -193,15 +208,15 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
 
         ctx->ar_db_status = CYANRIP_ACCUDB_FOUND;
 
-        for (int j = 0; j < audio_tracks; j++) {
+        /* One entry per audio track, data tracks have none */
+        for (int j = 0; j < ctx->nb_cd_tracks; j++) {
             cyanrip_track *t = &ctx->tracks[j];
+            if (t->track_is_data)
+                continue;
 
             int confidence = bytestream2_get_byte(&gbc);
             uint32_t checksum = bytestream2_get_le32(&gbc);
             uint32_t checksum_450 = bytestream2_get_le32(&gbc);
-
-            if (t->track_is_data)
-                continue;
 
             t->ar_db_entries = av_realloc(t->ar_db_entries,
                                           sizeof(CRIPAccuDBEntry) * (t->ar_db_nb_entries + 1));
@@ -216,7 +231,7 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
         }
     }
 
-    for (int i = 0; i < audio_tracks; i++) {
+    for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
         if (t->ar_db_nb_entries)
             qsort(t->ar_db_entries, t->ar_db_nb_entries, sizeof(CRIPAccuDBEntry), cmp_conf);

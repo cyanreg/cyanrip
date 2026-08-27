@@ -20,5 +20,7 @@
 
 #include <cyanrip_main.h>
 
+int crip_get_accurip_ids(cyanrip_ctx *ctx, uint32_t *id_type_1, uint32_t *id_type_2,
+                         uint32_t *cddb_id);
 int crip_fill_accurip(cyanrip_ctx *ctx);
 int crip_find_ar(cyanrip_track *t, uint32_t checksum, int is_450);

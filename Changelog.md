@@ -14,6 +14,8 @@
  - Mixed mode CDs no longer lose 152 seconds of the last audio track
  - DiscID, CDDB ID and the MusicBrainz submission URL now match libdiscid on
    discs with data tracks and on discs not starting at track 1
+ - AccurateRip lookups now find discs with data tracks, and each track is
+   checked against its own database entry; the AccurateRip ID is logged
  - Fixed a crash on overlong filenames
  - FFmpeg 8.0+ compatibility
 
