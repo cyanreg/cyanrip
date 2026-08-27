@@ -327,14 +327,18 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
     }
 
     /* MusicBrainz, CDDB and AccurateRip all identify a disc by its audio
-     * tracks alone. libdiscid puts the lead-out one session gap before a
-     * trailing data track no matter whether the disc really has a second
-     * session, so do the same or none of the IDs will match. */
-    cyanrip_track *last_track = &ctx->tracks[ctx->nb_cd_tracks - 1];
-    if (last_track->track_is_data && (ctx->nb_cd_tracks > 1))
-        ctx->id_leadout_lsn = last_track->start_lsn - CRIP_XA_INTERVAL;
-    else
-        ctx->id_leadout_lsn = ctx->end_lsn + 1;
+     * tracks alone. libdiscid's mb_disc_load_toc() stands the first track
+     * following the last audio one in for the lead-out, one session gap
+     * earlier, no matter whether the disc really has a second session.
+     * Do the same, or none of the IDs will match. */
+    ctx->id_leadout_lsn = ctx->end_lsn + 1;
+    for (int i = ctx->nb_cd_tracks - 1; i >= 0; i--) {
+        if (ctx->tracks[i].track_is_data)
+            continue;
+        if (i < (ctx->nb_cd_tracks - 1))
+            ctx->id_leadout_lsn = ctx->tracks[i + 1].start_lsn - CRIP_XA_INTERVAL;
+        break;
+    }
 
     for (int i = 0; i < ctx->nb_cd_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
