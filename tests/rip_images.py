@@ -157,7 +157,7 @@ def write_toc(name, sectors, tracks):
     (WORK / f"{name}.cue").write_text("\n".join(lines) + "\n")
 
 
-def check_ids(img, discid, cddb, toc):
+def check_ids(img, discid, cddb, toc, arid):
     ec, log = crip("-d", WORK / img, "-I", "-N", "-A", "-U", "-P", "0")
     if ec != 0:
         fail(f"discid {img}: cyanrip exited with {ec}")
@@ -170,40 +170,48 @@ def check_ids(img, discid, cddb, toc):
             have["discid"] = line.split()[-1]
         elif line.startswith("CDDB ID:"):
             have["cddb"] = line.split()[-1]
+        elif line.startswith("AccurateRip ID:"):
+            have["arid"] = line.split()[-1]
         elif "attach?toc=" in line:
             have["toc"] = line.split("attach?toc=")[1].split("&")[0]
 
-    for key, want in (("discid", discid), ("cddb", cddb), ("toc", toc)):
+    for key, want in (("discid", discid), ("cddb", cddb), ("toc", toc),
+                      ("arid", arid)):
         if have.get(key) != want:
             fail(f"discid {img}: {key} {have.get(key)} != {want}")
 
 
 def sc_discid():
-    # Every expected value here is what libdiscid's mb_disc_load_toc() and
-    # create_disc_id() produce for the same TOC
+    # The DiscID, CDDB ID and TOC are what libdiscid's mb_disc_load_toc() and
+    # create_disc_id() produce for the same TOC. The AccurateRip ID weights
+    # audio tracks by list position, uses the real lead-out, and carries a
+    # FreeDB ID computed over the full TOC, data tracks included; the whole
+    # combination was verified against live AccurateRip database entries.
 
     # A data track at the front is still a part of the hashed TOC
     check_ids("mixed.cue", "IWFVjcDW_sHbcouxZ99EXu2rOyw-", "0C000603",
-              "1+3+600+150+300+450")
+              "1+3+600+150+300+450", "00000384-00000834-0c000603")
 
-    # A trailing data track stands in for the lead-out, one session gap early
+    # A trailing data track stands in for the lead-out, one session gap
+    # early, in the MusicBrainz IDs alone - AccurateRip keeps the real one
     write_toc("extra", 14400, [(1, "AUDIO", 0), (2, "AUDIO", 1000),
                                (3, "MODE1/2352", 13400)])
     check_ids("extra.cue", "1R2GmWmzvVJpk3OOqrZc8TEHcmQ-", "08001A02",
-              "1+2+2150+150+1150")
+              "1+2+2150+150+1150", "00003c28-0000b091-1100c003")
 
-    # Only the first of several trailing data tracks decides the lead-out
+    # Only the first of several trailing data tracks decides the lead-out;
+    # the extra data track still counts towards AccurateRip's FreeDB ID
     write_toc("extra2", 14400, [(1, "AUDIO", 0), (2, "AUDIO", 1000),
                                 (3, "MODE1/2352", 13400),
                                 (4, "MODE1/2352", 14000)])
     check_ids("extra2.cue", "1R2GmWmzvVJpk3OOqrZc8TEHcmQ-", "08001A02",
-              "1+2+2150+150+1150")
+              "1+2+2150+150+1150", "00003c28-0000b091-2200c004")
 
     # Offsets are hashed by track number rather than by position
     write_toc("first3", 3000, [(3, "AUDIO", 0), (4, "AUDIO", 1000),
                                (5, "AUDIO", 2000)])
     check_ids("first3.cue", "Hq2wagZiFOC__Il_nRSlGDfLpzc-", "12002A05",
-              "3+5+3150+150+1150+2150")
+              "3+5+3150+150+1150+2150", "00001770-00004e21-12002803")
 
 
 def sc_nrg():

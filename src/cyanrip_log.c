@@ -307,6 +307,10 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     CLOG("Album:          %s\n", ctx->meta, "album")
     CLOG("Album artist:   %s\n", ctx->meta, "album_artist")
 
+    uint32_t ar_id1, ar_id2, ar_cddb;
+    if (crip_get_accurip_ids(ctx, &ar_id1, &ar_id2, &ar_cddb))
+        cyanrip_log(ctx, 0, "AccurateRip ID: %08x-%08x-%08x\n", ar_id1, ar_id2, ar_cddb);
+
     cyanrip_log(ctx, 0, "AccurateRip:    %s\n", ctx->ar_db_status == CYANRIP_ACCUDB_ERROR ? "error" :
                                                 ctx->ar_db_status == CYANRIP_ACCUDB_NOT_FOUND ? "not found" :
                                                 ctx->ar_db_status == CYANRIP_ACCUDB_FOUND ? "found" :
