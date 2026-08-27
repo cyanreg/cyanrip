@@ -410,13 +410,15 @@ end:
             ret = 0;
         }
 
-        if (!possible_stub) {
+        if (!possible_stub && ctx->mb_submission_url) {
             cyanrip_log(ctx, 0, "Please help improve the MusicBrainz DB by "
                         "submitting the disc info via the following URL:\n");
         }
 
-        cyanrip_log(ctx, 0, "%s\n", ctx->mb_submission_url);
-        crip_print_qrcode(ctx->mb_submission_url);
+        if (ctx->mb_submission_url) {
+            cyanrip_log(ctx, 0, "%s\n", ctx->mb_submission_url);
+            crip_print_qrcode(ctx->mb_submission_url);
+        }
         if (ret)
             cyanrip_log(ctx, 0, "To continue add metadata via -a or -t, or ignore via -N!\n");
     }

@@ -144,6 +144,68 @@ def sc_trailing():
     data_track("merge", "trailing.bin", 3, 300, 225)
 
 
+def write_toc(name, sectors, tracks):
+    """A CUE sheet and a matching (sparse) BIN, tracks are number/type/LSN"""
+    with open(WORK / f"{name}.bin", "wb") as f:
+        f.truncate(sectors * 2352)
+
+    lines = [f'FILE "{name}.bin" BINARY']
+    for number, kind, lsn in tracks:
+        lines.append(f"  TRACK {number:02d} {kind}")
+        lines.append("    INDEX 01 %02d:%02d:%02d"
+                     % (lsn // (75 * 60), lsn // 75 % 60, lsn % 75))
+    (WORK / f"{name}.cue").write_text("\n".join(lines) + "\n")
+
+
+def check_ids(img, discid, cddb, toc):
+    ec, log = crip("-d", WORK / img, "-I", "-N", "-A", "-U", "-P", "0")
+    if ec != 0:
+        fail(f"discid {img}: cyanrip exited with {ec}")
+        return
+
+    have = {}
+    for line in log.splitlines():
+        line = line.strip()
+        if line.startswith("DiscID:"):
+            have["discid"] = line.split()[-1]
+        elif line.startswith("CDDB ID:"):
+            have["cddb"] = line.split()[-1]
+        elif "attach?toc=" in line:
+            have["toc"] = line.split("attach?toc=")[1].split("&")[0]
+
+    for key, want in (("discid", discid), ("cddb", cddb), ("toc", toc)):
+        if have.get(key) != want:
+            fail(f"discid {img}: {key} {have.get(key)} != {want}")
+
+
+def sc_discid():
+    # Every expected value here is what libdiscid's mb_disc_load_toc() and
+    # create_disc_id() produce for the same TOC
+
+    # A data track at the front is still a part of the hashed TOC
+    check_ids("mixed.cue", "IWFVjcDW_sHbcouxZ99EXu2rOyw-", "0C000603",
+              "1+3+600+150+300+450")
+
+    # A trailing data track stands in for the lead-out, one session gap early
+    write_toc("extra", 14400, [(1, "AUDIO", 0), (2, "AUDIO", 1000),
+                               (3, "MODE1/2352", 13400)])
+    check_ids("extra.cue", "1R2GmWmzvVJpk3OOqrZc8TEHcmQ-", "08001A02",
+              "1+2+2150+150+1150")
+
+    # Only the first of several trailing data tracks decides the lead-out
+    write_toc("extra2", 14400, [(1, "AUDIO", 0), (2, "AUDIO", 1000),
+                                (3, "MODE1/2352", 13400),
+                                (4, "MODE1/2352", 14000)])
+    check_ids("extra2.cue", "1R2GmWmzvVJpk3OOqrZc8TEHcmQ-", "08001A02",
+              "1+2+2150+150+1150")
+
+    # Offsets are hashed by track number rather than by position
+    write_toc("first3", 3000, [(3, "AUDIO", 0), (4, "AUDIO", 1000),
+                               (5, "AUDIO", 2000)])
+    check_ids("first3.cue", "Hq2wagZiFOC__Il_nRSlGDfLpzc-", "12002A05",
+              "3+5+3150+150+1150+2150")
+
+
 def sc_nrg():
     # NRG with a DAOX pregap on track 2
     rip("nrg", "cdda.nrg")

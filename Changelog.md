@@ -12,6 +12,8 @@
  - Data tracks are ripped to raw MODE1/2352 binaries and referenced from the CUE sheet
  - Data tracks no longer leave stray files
  - Mixed mode CDs no longer lose 152 seconds of the last audio track
+ - DiscID, CDDB ID and the MusicBrainz submission URL now match libdiscid on
+   discs with data tracks and on discs not starting at track 1
  - Fixed a crash on overlong filenames
  - FFmpeg 8.0+ compatibility
 
