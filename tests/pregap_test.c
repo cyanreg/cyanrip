@@ -83,6 +83,7 @@ typedef struct {
     track_format_t cur_track_format;
     int simulate_libcdio_pregap_support;
     int nonbcd;
+    int nocrc; /* drive hands back the formatted Q without its CRC */
     int q_offset; /* Q sub-channel runs this many sectors ahead of the TOC */
     lsn_t ctx_start_lsn; /* fed to cyanrip_ctx.start_lsn in run(); only matters for the first track */
 
@@ -224,12 +225,16 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
         q[11] = crc & 0xFF;
         for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
             q[fields[i]] = bcd_to_bin(q[fields[i]]);
+        if (disc.nocrc)
+            q[10] = q[11] = 0;
         return DRIVER_OP_SUCCESS;
     }
 
     unsigned crc = test_crc_subq(q);
     q[10] = (crc >> 8) & 0xFF;
     q[11] = crc & 0xFF;
+    if (disc.nocrc)
+        q[10] = q[11] = 0;
     return DRIVER_OP_SUCCESS;
 }
 
@@ -389,6 +394,48 @@ int main(void)
         disc.nonbcd = 1;
         lsn_t got = run();
         check_lsn("non-BCD drive quirk", got, 1150);
+    }
+
+    /* A drive that doesn't supply the CRC with the formatted Q: frames are
+     * vetted by their absolute time instead, in whichever encoding fits. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.nocrc = 1;
+        lsn_t got = run();
+        check_lsn("drive without Q CRC", got, 1150);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.nocrc = 1;
+        disc.nonbcd = 1;
+        lsn_t got = run();
+        check_lsn("non-BCD drive without Q CRC", got, 1150);
+    }
+    {
+        make_disc(1000, 1300, 1300);
+        disc.nocrc = 1;
+        lsn_t got = run();
+        check_lsn("drive without Q CRC, no pregap", got, CDIO_INVALID_LSN);
+    }
+
+    /* On such a drive a read of the wrong sector gives itself away by its
+     * absolute time and never becomes a candidate at all. */
+    {
+        make_disc(1000, 1300, 1500);
+        disc.nocrc = 1;
+        disc.jitter[0] = (lsn_jitter_t){ .lsn = 1250, .reports_as = 1305 };
+        disc.num_jitter = 1;
+        lsn_t got = run();
+        check_lsn("drive without Q CRC: wrong sector read is rejected", got, 1300);
+    }
+
+    /* The two together: no CRC, and Q handed back 2 sectors early. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.nocrc = 1;
+        disc.q_offset = 2;
+        lsn_t got = run();
+        check_lsn("drive without Q CRC, Q ahead of the TOC", got, 1150);
     }
 
     /* A single spuriously CRC-valid read for the wrong physical sector (seek

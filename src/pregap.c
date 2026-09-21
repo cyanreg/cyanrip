@@ -43,6 +43,11 @@
  */
 #define TOTAL_FAILURE_BUDGET 100
 
+/* How far the absolute time in a Q frame may be from the sector that was asked
+ * for when it has to stand in for the CRC. Drives return Q a few sectors early
+ * or late; cdrdao uses the same margin. */
+#define SUBQ_POSITION_TOLERANCE 20
+
 typedef struct subq_t {
     uint8_t  control;
     uint8_t  adr;
@@ -118,13 +123,86 @@ static inline lsn_t subq_abs_lsn(const subq_t *subq)
     return (subq->amin * 60 + subq->asec) * 75 + subq->aframe - CDIO_PREGAP_SECTORS;
 }
 
+/* Offsets of the BCD fields of a mode 1 Q frame */
+static const int subq_bcd_fields[] = { 1, 2, 3, 4, 5, 7, 8, 9 };
+#define SUBQ_NB_BCD_FIELDS (sizeof(subq_bcd_fields) / sizeof(subq_bcd_fields[0]))
+
 static void subq_bcd_fixup(uint8_t *subq_buf)
 {
-    static const int fields[] = { 1, 2, 3, 4, 5, 7, 8, 9 };
-    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
-        uint8_t x = subq_buf[fields[i]];
-        subq_buf[fields[i]] = (uint8_t)(((x / 10) << 4) | (x % 10));
+    for (size_t i = 0; i < SUBQ_NB_BCD_FIELDS; i++) {
+        uint8_t x = subq_buf[subq_bcd_fields[i]];
+        subq_buf[subq_bcd_fields[i]] = (uint8_t)(((x / 10) << 4) | (x % 10));
     }
+}
+
+/**
+ * How many sectors the absolute time of a BCD encoded mode 1 Q frame is away
+ * from lsn, or -1 if the frame doesn't hold together as one.
+ */
+static int subq_position_error(const uint8_t *subq_buf, const lsn_t lsn)
+{
+    for (size_t i = 0; i < SUBQ_NB_BCD_FIELDS; i++) {
+        const uint8_t x = subq_buf[subq_bcd_fields[i]];
+        if ((x >> 4) > 9 || (x & 0x0F) > 9)
+            return -1;
+    }
+
+    subq_t subq;
+    subq_decode(&subq, subq_buf);
+    if (subq.track_number < 1 || subq.sec > 59 || subq.frame > 74 ||
+        subq.asec > 59 || subq.aframe > 74)
+        return -1;
+
+    return abs(subq_abs_lsn(&subq) - lsn);
+}
+
+/**
+ * Stands in for the CRC on drives that don't hand one back with the formatted
+ * Q sub-channel: a mode 1 frame is taken as good if its absolute time lands on
+ * the sector that was asked for, in either encoding. subq_buf_fixed is
+ * subq_buf put through subq_bcd_fixup(); it is copied over subq_buf if that
+ * is the encoding that fits.
+ */
+static driver_return_code_t subq_validate_by_position(uint8_t *subq_buf, const uint8_t *subq_buf_fixed,
+                                                      const lsn_t lsn)
+{
+    const uint8_t adr = subq_buf[0] & 0x0F;
+
+    /* Mode 2 and 3 frames carry no position to check. The search only steps
+     * over them, so there is little to lose in letting them through. */
+    if (adr == 2 || adr == 3)
+        return DRIVER_OP_SUCCESS;
+    if (adr != 1)
+        return DRIVER_OP_ERROR;
+
+    /* subq_bcd_fixup() wraps around on anything that isn't two decimal digits */
+    int is_binary = 1;
+    for (size_t i = 0; i < SUBQ_NB_BCD_FIELDS; i++)
+        is_binary &= subq_buf[subq_bcd_fields[i]] < 100;
+
+    const int err_bcd = subq_position_error(subq_buf, lsn);
+    const int err_bin = is_binary ? subq_position_error(subq_buf_fixed, lsn) : -1;
+    const int bcd_fits = err_bcd >= 0 && err_bcd <= SUBQ_POSITION_TOLERANCE;
+    const int bin_fits = err_bin >= 0 && err_bin <= SUBQ_POSITION_TOLERANCE;
+
+    if (!bcd_fits && !bin_fits)
+        return DRIVER_OP_ERROR;
+
+    int use_binary = bin_fits;
+    if (bcd_fits && bin_fits) {
+        /* The frame count reads 6 sectors apart per ten in the two encodings,
+         * so both can land inside the margin. The closer one is right. When
+         * they are as close, the frame has to read the same either way (every
+         * field below 10), or there is no telling what it says. */
+        if (err_bcd == err_bin && memcmp(subq_buf, subq_buf_fixed, SUBQ_SIZE))
+            return DRIVER_OP_ERROR;
+        use_binary = err_bin < err_bcd;
+    }
+
+    if (use_binary)
+        memcpy(subq_buf, subq_buf_fixed, SUBQ_SIZE);
+
+    return DRIVER_OP_SUCCESS;
 }
 
 /**
@@ -170,7 +248,11 @@ static driver_return_code_t subq_read_valid_audio_sector(cyanrip_ctx *ctx, uint8
         return DRIVER_OP_SUCCESS;
     }
 
-    return DRIVER_OP_ERROR;
+    /* The CRC matches in neither encoding and no frame from this drive has
+     * matched one yet: it may well not supply the CRC at all, which MMC
+     * allows. Go by the position instead. This leaves the encoding undecided,
+     * so the first frame with a good CRC still settles it and ends this. */
+    return subq_validate_by_position(subq_buf, subq_buf_copy, lsn);
 }
 
 /**
