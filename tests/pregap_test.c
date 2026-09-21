@@ -208,9 +208,11 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
     q[4] = bin_to_bcd(12); /* relative seconds: >=10 so BCD vs binary actually differ */
     q[5] = bin_to_bcd(0);
     q[6] = 0;
-    q[7] = bin_to_bcd(0);
-    q[8] = bin_to_bcd(0);
-    q[9] = bin_to_bcd(0);
+    /* absolute time: the sector the Q frame really belongs to, 2s lead-in included */
+    const lsn_t abs_frames = content_lsn + CDIO_PREGAP_SECTORS;
+    q[7] = bin_to_bcd((uint8_t)(abs_frames / (60 * 75)));
+    q[8] = bin_to_bcd((uint8_t)(abs_frames / 75 % 60));
+    q[9] = bin_to_bcd((uint8_t)(abs_frames % 75));
 
     if (disc.nonbcd) {
         /* Simulate a drive whose firmware hands back raw binary values
@@ -444,13 +446,32 @@ int main(void)
         check_lsn("no pregap, Q ahead of the TOC", got, CDIO_INVALID_LSN);
     }
 
-    /* Same drive/disc skew with a real pregap: the index 0 sectors are still
-     * found, where the Q sub-channel reports them. */
+    /* Same skew with a real pregap: the index 0 sectors turn up 2 sectors
+     * early, but their absolute time says where they really are. */
     {
         make_disc(1000, 1150, 1300);
         disc.q_offset = 2;
         lsn_t got = run();
-        check_lsn("pregap, Q ahead of the TOC", got, 1148);
+        check_lsn("pregap, Q ahead of the TOC", got, 1150);
+    }
+
+    /* And with the Q sub-channel running behind instead. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.q_offset = -2;
+        lsn_t got = run();
+        check_lsn("pregap, Q behind the TOC", got, 1150);
+    }
+
+    /* The frames on the two bounds don't claim to be neighbours, so the drive
+     * wasn't off by the same amount for both: the absolute time can't be
+     * trusted to place the boundary and the sector asked for is kept. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.jitter[0] = (lsn_jitter_t){ .lsn = 1150, .reports_as = 1153 };
+        disc.num_jitter = 1;
+        lsn_t got = run();
+        check_lsn("unsteady Q skew at the boundary", got, 1150);
     }
 
     /* A mode 2 Q frame (catalogue number) on the second sector of the pregap:

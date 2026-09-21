@@ -112,6 +112,12 @@ static void subq_decode(subq_t *subq, const uint8_t *src)
     subq->crc           = (src[10] << 8) | src[11];
 }
 
+/* The sector a mode 1 Q frame says it belongs to, going by its absolute time */
+static inline lsn_t subq_abs_lsn(const subq_t *subq)
+{
+    return (subq->amin * 60 + subq->asec) * 75 + subq->aframe - CDIO_PREGAP_SECTORS;
+}
+
 static void subq_bcd_fixup(uint8_t *subq_buf)
 {
     static const int fields[] = { 1, 2, 3, 4, 5, 7, 8, 9 };
@@ -215,6 +221,11 @@ static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int t
  * often runs a few sectors ahead of the TOC, so sectors just below the track
  * start may already report index 1: those belong to the track itself and are
  * never reported as a pregap.
+ *
+ * Drives hand back the Q of a sector a few sectors away from the one asked
+ * for. The search works in terms of the sectors it asks for, which puts the
+ * boundary off by as much. Each Q frame carries its own absolute time though,
+ * so once the boundary is found, the frame on it says where it really is.
  */
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 {
@@ -274,6 +285,11 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
      * than the track itself. The track start is not. */
     int right_bound_is_pregap = 0;
 
+    /* The sectors the Q frames read at the bounds say they are from, or
+     * CDIO_INVALID_LSN when a bound doesn't rest on a mode 1 Q frame. */
+    lsn_t left_bound_abs_lsn = CDIO_INVALID_LSN;
+    lsn_t right_bound_abs_lsn = CDIO_INVALID_LSN;
+
     /* Step 1: is there a pregap at all? The sector below the track start,
      * confirmed by the sector below that, answers it. */
     lsn = track_start_lsn - 1;
@@ -315,6 +331,8 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
             continue;
 
         if (subq.track_number == prev_track_number) {
+            left_bound_abs_lsn = subq_abs_lsn(&subq);
+
             /* Confirm with the sector below before trusting this as the left
              * bound. A single spuriously CRC-valid read of the wrong sector
              * here would put the left bound inside the pregap, and the search
@@ -337,11 +355,13 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
          * landed inside the new track rather than on a spuriously
          * CRC-valid read of the wrong sector. */
         const int is_pregap = subq.index_number == 0;
+        const lsn_t abs_lsn = subq_abs_lsn(&subq);
         const lsn_t confirm_lsn = lsn + 1;
         if (confirm_lsn >= track_start_lsn) {
             /* track_start_lsn is known to belong to the new track already. */
             right_bound = lsn;
             right_bound_is_pregap = is_pregap;
+            right_bound_abs_lsn = abs_lsn;
             continue;
         }
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, confirm_lsn, &total_failures);
@@ -350,9 +370,12 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         if (!ret && subq.adr == 1 && subq.track_number == track_number) {
             right_bound = lsn;
             right_bound_is_pregap = is_pregap;
+            right_bound_abs_lsn = abs_lsn;
         }
     }
     left_bound = lsn;
+    if (left_bound == prev_track_start_lsn)
+        left_bound_abs_lsn = CDIO_INVALID_LSN; /* rests on the TOC, not on a Q frame */
 
     /* Step 3: walk upwards from left_bound, moving the bounds closer together
      * on each sector that identifies itself, until they are adjacent. Sectors
@@ -370,6 +393,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     assert(lsn == left_bound);
     lsn_t right_bound_candidate = CDIO_INVALID_LSN;
     int right_bound_candidate_is_pregap = 0;
+    lsn_t right_bound_candidate_abs_lsn = CDIO_INVALID_LSN;
     while ((left_bound + 1) != right_bound) {
         int confirmed = 0;
 
@@ -406,11 +430,13 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
                 if (lsn - 1 == left_bound) {
                     assert(right_bound_candidate == CDIO_INVALID_LSN);
                     left_bound = lsn;
+                    left_bound_abs_lsn = CDIO_INVALID_LSN;
                 }
             }
             else if (subq.track_number == prev_track_number) {
                 assert(lsn >= left_bound);
                 left_bound = lsn;
+                left_bound_abs_lsn = subq_abs_lsn(&subq);
                 right_bound_candidate = CDIO_INVALID_LSN;
             }
             else if (subq.track_number == track_number) {
@@ -418,6 +444,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
                 if (right_bound_candidate == CDIO_INVALID_LSN) {
                     right_bound_candidate = lsn;
                     right_bound_candidate_is_pregap = subq.index_number == 0;
+                    right_bound_candidate_abs_lsn = subq_abs_lsn(&subq);
                 } else {
                     confirmed = 1;
                 }
@@ -427,6 +454,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         if (confirmed) {
             right_bound = right_bound_candidate;
             right_bound_is_pregap = right_bound_candidate_is_pregap;
+            right_bound_abs_lsn = right_bound_candidate_abs_lsn;
             right_bound_candidate = CDIO_INVALID_LSN;
             /* Rescan the narrowed range from the left bound. */
             lsn = left_bound;
@@ -444,6 +472,24 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     /* The new track begins at right_bound, but unless that sector has index 0
      * it is the track itself showing up ahead of the TOC, not a pregap. */
     lsn = right_bound_is_pregap ? right_bound : CDIO_INVALID_LSN;
+
+    /* right_bound is the sector that was asked for; the Q frame that came back
+     * says which sector it is really from. Go by that, as long as the frames
+     * on both bounds agree they are neighbours, which shows the drive was off
+     * by the same amount for both, and the result still makes for a pregap. */
+    if (lsn != CDIO_INVALID_LSN &&
+        left_bound_abs_lsn != CDIO_INVALID_LSN &&
+        left_bound_abs_lsn + 1 == right_bound_abs_lsn &&
+        right_bound_abs_lsn > prev_track_start_lsn &&
+        right_bound_abs_lsn < track_start_lsn) {
+        if (right_bound_abs_lsn != right_bound)
+            cyanrip_log(ctx, 0, "Pregap of track %i found at lsn %i, but its Q sub-channel places "
+                        "it at lsn %i (drive returns Q %i sector(s) %s), using that\n",
+                        track_number, right_bound, right_bound_abs_lsn,
+                        abs(right_bound_abs_lsn - right_bound),
+                        right_bound_abs_lsn > right_bound ? "early" : "late");
+        lsn = right_bound_abs_lsn;
+    }
 
     av_free(audio_subq_buf);
     return lsn;
