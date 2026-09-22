@@ -18,13 +18,13 @@
 
 /* Exercises the Q sub-channel pregap search in pregap.c against a synthetic
  * drive - no real libcdio driver or hardware involved, and this test binary
- * does not even link against libcdio.so: pregap.c calls cdio_get_track_lsn(),
+ * does not even link against libcdio.so: pregap.c and subq_read.c call cdio_get_track_lsn(),
  * cdio_get_first_track_num(), cdio_get_track_format(),
  * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subq_sector() by name,
  * and every one of them is defined right here instead, describing a synthetic
  * disc (`disc`) instead of talking to a real drive. Since none of the real
  * implementations are linked in (see tests/meson.build), there's no symbol
- * clash - the linker just resolves pregap.c's calls to these definitions.
+ * clash - the linker just resolves their calls to these definitions.
  *
  * This lets us inject drive misbehaviour (spurious reads, permanently bad
  * sectors, BCD-quirk drives) that would be impractical to reproduce with
@@ -48,7 +48,7 @@
 #include "cyanrip_log.h"
 #include "subq_read.h"
 
-/* pregap.c logs failures via cyanrip_log(); give it somewhere to go. */
+/* pregap.c and subq_read.c log failures via cyanrip_log(); give it somewhere to go. */
 void cyanrip_log(cyanrip_ctx *ctx, int verbose, const char *format, ...)
 {
     (void)ctx;
@@ -124,7 +124,7 @@ static void make_disc(lsn_t prev_start, lsn_t pregap_start, lsn_t cur_start)
     disc.cur_track_format = TRACK_FORMAT_AUDIO;
 }
 
-/* ---- Q sub-channel fixture generation: duplicates pregap.c's CRC-16 and BCD
+/* ---- Q sub-channel fixture generation: duplicates subq_read.c's CRC-16 and BCD
  * encoding just enough to build self-consistent synthetic sectors. ---- */
 
 static unsigned test_crc_subq(const uint8_t *q)
@@ -205,7 +205,7 @@ static int fake_subq_frame(lsn_t lsn, uint8_t *q)
     for (int i = 0; i < disc.num_mode2; i++) {
         if (disc.mode2[i] == lsn) {
             /* adr=2: the fields below stand in for the catalogue number
-             * digits, all pregap.c may look at is the adr and the CRC. */
+             * digits, all subq_read.c may look at is the adr and the CRC. */
             q[0] = (0x1 << 4) | 0x2;
             break;
         }
