@@ -23,15 +23,16 @@
 #include <sys/errno.h>
 #include <cdio/cdio.h>
 
-/**
- * Reads a sector's audio plus the sub-channel area given by sector_area
- * (kCDSectorAreaSubChannelQ for the formatted 16 byte Q, kCDSectorAreaSubChannel
- * for the 96 raw P-W symbols) into buf, which must hold block_size bytes.
- */
-static driver_return_code_t read_audio_sector_with_subchannel(const CdIo_t *p_cdio, uint8_t *buf,
-                                                              const lsn_t lsn, const uint8_t sector_area,
-                                                              const unsigned block_size)
+driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, uint8_t *buf, const lsn_t lsn,
+                                                          enum cyanrip_subchannel subchannel, size_t block_size)
 {
+    uint8_t sector_area;
+    switch (subchannel) {
+    case CYANRIP_SUBCHANNEL_Q:      sector_area = kCDSectorAreaSubChannelQ; break;
+    case CYANRIP_SUBCHANNEL_PW_RAW: sector_area = kCDSectorAreaSubChannel;  break;
+    default:                        return DRIVER_OP_BAD_PARAMETER;
+    }
+
     const int fd = cdio_get_device_fd((CdIo_t *)p_cdio);
     if (fd < 0) {
         return DRIVER_OP_ERROR;
@@ -60,16 +61,4 @@ static driver_return_code_t read_audio_sector_with_subchannel(const CdIo_t *p_cd
         default:     /* Most likely a transient read error (e.g. EIO), retryable */
             return DRIVER_OP_ERROR;
     }
-}
-
-driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *audio_subq_buf, const lsn_t lsn)
-{
-    return read_audio_sector_with_subchannel(p_cdio, audio_subq_buf, lsn, kCDSectorAreaSubChannelQ,
-                                             CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
-}
-
-driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *audio_subpw_buf, const lsn_t lsn)
-{
-    return read_audio_sector_with_subchannel(p_cdio, audio_subpw_buf, lsn, kCDSectorAreaSubChannel,
-                                             CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW);
 }

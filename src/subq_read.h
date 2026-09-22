@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 #include <cdio/cdio.h>
 #include "cyanrip_main.h"
@@ -30,29 +31,31 @@
 /* Size of reads of audio + raw P-W subchannel data. 2352 bytes for audio + 96 bytes of P-W */
 #define CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW (CDIO_CD_FRAMESIZE_RAW + CDIO_CD_FRAMESIZE_SUB)
 
-/**
- * Reads audio + subchannel Q data from a CD device
- * into audio_subq_buf.
- * 
- * The buffer must be large enough to hold CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ bytes.
- * 
- * Note: The Subchannel Q data still needs to be verified for CRC validity after reading.
- */
-driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *audio_subq_buf, const lsn_t lsn);
+/* Which sub-channel data a read returns after the audio */
+enum cyanrip_subchannel {
+    /* The formatted Q sub-channel: 16 bytes, the 12 byte Q frame zero padded.
+     * The drive has decoded it, and may hand back its last good frame for a
+     * sector it couldn't decode. Some drives leave the CRC out. */
+    CYANRIP_SUBCHANNEL_Q = 0,
+    /* The raw P-W sub-channel: the 96 subcode symbols as read off the disc,
+     * bit 7 of each being the P channel, bit 6 the Q channel and so on down
+     * to bit 0 for W. The drive neither checks the Q CRC nor substitutes
+     * anything, so what comes back is what the sector holds. */
+    CYANRIP_SUBCHANNEL_PW_RAW = 1,
+};
 
 /**
- * Reads audio + raw P-W subchannel data from a CD device into audio_subpw_buf.
+ * Reads a sector's audio followed by the given sub-channel data from a CD
+ * device into buf. block_size is the number of bytes that makes, i.e.
+ * CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ or CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW,
+ * and buf must hold that many.
  *
- * The buffer must be large enough to hold CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW bytes.
+ * Note: the Q frame still needs to be verified for CRC validity after reading.
  *
- * Unlike the formatted Q sub-channel above, the 96 bytes are the subcode
- * symbols as read off the disc: bit 7 of each is the P channel, bit 6 the Q
- * channel and so on down to bit 0 for W. The drive neither checks the Q CRC
- * nor substitutes anything, so what comes back is what the sector holds.
- *
- * Returns DRIVER_OP_UNSUPPORTED where the backend can't read raw P-W.
+ * Returns DRIVER_OP_UNSUPPORTED where the backend can't read that sub-channel.
  */
-driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *audio_subpw_buf, const lsn_t lsn);
+driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, uint8_t *buf, const lsn_t lsn,
+                                                          enum cyanrip_subchannel subchannel, size_t block_size);
 
 /* ---- Reading and making sense of Q frames, on top of the backends above ---- */
 
