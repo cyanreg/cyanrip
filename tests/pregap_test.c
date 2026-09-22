@@ -88,6 +88,8 @@ typedef struct {
     int raw_pw_garbage; /* drive accepts raw P-W reads but returns zeros */
     lsn_t stale; /* the drive can't decode this sector's Q: the formatted read hands
                   * back the frame before it, raw P-W the damaged frame itself */
+    int stale_damage; /* what the damage hit: 0 the spare byte only, 1 one bit of
+                       * the absolute time, 2 both, i.e. beyond a single bit repair */
     int q_offset; /* Q sub-channel runs this many sectors ahead of the TOC */
     lsn_t ctx_start_lsn; /* fed to cyanrip_ctx.start_lsn in run(); only matters for the first track */
 
@@ -279,8 +281,12 @@ driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8
 
     uint8_t q[16];
     fake_subq_frame(lsn, q);
-    if (lsn == disc.stale)
-        q[6] ^= 0x10; /* a bit error: the frame is intact but for its CRC */
+    if (lsn == disc.stale) {
+        if (disc.stale_damage != 1)
+            q[6] ^= 0x10; /* a bit error the payload survives */
+        if (disc.stale_damage != 0)
+            q[9] ^= 0x20; /* a bit error in the absolute time: 20 frames off */
+    }
 
     for (int i = 0; i < CDIO_CD_FRAMESIZE_SUB; i++)
         pw[i] = 0x80 | (((q[i >> 3] >> (7 - (i & 7))) & 1) << 6);
@@ -465,8 +471,8 @@ int main(void)
     /* A sector the drive can't decode the Q of, right at the boundary. The
      * formatted Q hands back the previous sector's frame with a valid CRC,
      * which nothing can tell from a real read: the pregap comes out one
-     * sector short. Raw P-W exposes the failed CRC instead; the search then
-     * can't place the boundary and says so rather than guessing. */
+     * sector short. Raw P-W exposes the failed CRC instead, and the frame's
+     * surviving payload still places the boundary. */
     {
         make_disc(1000, 1150, 1300);
         disc.stale = 1150;
@@ -478,8 +484,39 @@ int main(void)
         make_disc(1000, 1150, 1300);
         disc.stale = 1150;
         lsn_t got = run();
-        check_lsn("stale frame at the boundary, seen through raw P-W", got, CDIO_INVALID_LSN);
+        check_lsn("stale frame at the boundary, seen through raw P-W", got, 1150);
     }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1149; /* the last sector of the previous track instead */
+        lsn_t got = run();
+        check_lsn("damaged frame just below the boundary", got, 1150);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1150;
+        disc.q_offset = 2;
+        lsn_t got = run();
+        check_lsn("damaged frame at the boundary, Q ahead of the TOC", got, 1150);
+    }
+
+    /* A single bit error in the payload is pinned down by the CRC and
+     * repaired; two bit errors are beyond that and leave nothing to go by. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1150;
+        disc.stale_damage = 1;
+        lsn_t got = run();
+        check_lsn("damaged frame with a single bit error is repaired", got, 1150);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1150;
+        disc.stale_damage = 2;
+        lsn_t got = run();
+        check_lsn("damaged frame with two bit errors gives up", got, CDIO_INVALID_LSN);
+    }
+
     /* The same stale sector away from the boundary is harmless either way. */
     {
         make_disc(1000, 1150, 1300);
