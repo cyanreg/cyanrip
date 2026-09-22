@@ -102,6 +102,7 @@ typedef struct {
 
     int reads_issued;
     enum cyanrip_subq_read_mode mode_chosen;
+    cyanrip_pregap_info info;
 } fake_disc_t;
 
 /* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sector()
@@ -337,7 +338,7 @@ static lsn_t run(void)
     memset(&ctx, 0, sizeof(ctx)); /* fresh ctx each time: subq_needs_bcd_fixup starts at 0 */
     ctx.start_lsn = disc.ctx_start_lsn;
     disc.reads_issued = 0;
-    lsn_t got = cyanrip_get_track_pregap_lsn(&ctx, disc.cur_track_number);
+    lsn_t got = cyanrip_get_track_pregap_lsn(&ctx, disc.cur_track_number, &disc.info);
     disc.mode_chosen = ctx.subq_read_mode;
     return got;
 }
@@ -508,6 +509,8 @@ int main(void)
         disc.stale_damage = 1;
         lsn_t got = run();
         check_lsn("damaged frame with a single bit error is repaired", got, 1150);
+        check_true("damaged frame with a single bit error is repaired: reported",
+                   disc.info.result == CYANRIP_PREGAP_SEARCH_DONE && disc.info.damaged_frames == 1 && disc.info.repaired_frames == 1);
     }
     {
         make_disc(1000, 1150, 1300);
@@ -515,6 +518,8 @@ int main(void)
         disc.stale_damage = 2;
         lsn_t got = run();
         check_lsn("damaged frame with two bit errors gives up", got, CDIO_INVALID_LSN);
+        check_true("damaged frame with two bit errors gives up: reported",
+                   disc.info.result == CYANRIP_PREGAP_SEARCH_UNREADABLE);
     }
 
     /* The same stale sector away from the boundary is harmless either way. */
@@ -644,6 +649,7 @@ int main(void)
         disc.q_offset = 2;
         lsn_t got = run();
         check_lsn("pregap, Q ahead of the TOC", got, 1150);
+        check_true("pregap, Q ahead of the TOC: skew reported", disc.info.q_skew == 2);
     }
 
     /* And with the Q sub-channel running behind instead. */

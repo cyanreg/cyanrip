@@ -304,7 +304,7 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
             t->data_mode = (format == TRACK_FORMAT_XA || format == TRACK_FORMAT_CDI ||
                             format == TRACK_FORMAT_PSX) ? 2 : 1;
         }
-        t->pregap_lsn = cyanrip_get_track_pregap_lsn(ctx, t->number);
+        t->pregap_lsn = cyanrip_get_track_pregap_lsn(ctx, t->number, &t->pregap_info);
         t->dropped_pregap_start = CDIO_INVALID_LSN;
         t->merged_pregap_end = CDIO_INVALID_LSN;
         t->start_lsn = cdio_get_track_lsn(ctx->cdio, t->number);
@@ -1323,12 +1323,46 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
         cyanrip_track *ct = &ctx->tracks[i - 0];
         cyanrip_track *lt = i ? &ctx->tracks[i - 1] : NULL;
 
-        if (ct->pregap_lsn == CDIO_INVALID_LSN)
+        if (ct->pregap_lsn == CDIO_INVALID_LSN) {
+            switch (ct->pregap_info.result) {
+            case CYANRIP_PREGAP_SEARCH_UNREADABLE:
+                cyanrip_log(ctx, 0, "    pregap of track %i unknown: unreadable sectors at the track boundary\n",
+                            ct->number);
+                break;
+            case CYANRIP_PREGAP_SEARCH_CRC_BUDGET:
+                cyanrip_log(ctx, 0, "    pregap of track %i unknown: too many Q sub-channel CRC errors\n",
+                            ct->number);
+                break;
+            case CYANRIP_PREGAP_SEARCH_READ_ERROR:
+                cyanrip_log(ctx, 0, "    pregap of track %i unknown: read error %i at LSN %i\n",
+                            ct->number, ct->pregap_info.failed_error, ct->pregap_info.failed_lsn);
+                break;
+            default:
+                break;
+            }
             continue;
+        }
 
         cyanrip_log(ctx, 0, "    %i frame pregap in track %i, ",
                     ct->start_lsn - ct->pregap_lsn, ct->number);
         gaps++;
+
+        /* How the search got there, when it wasn't straightforward */
+        const cyanrip_pregap_info *pi = &ct->pregap_info;
+        if (pi->damaged_frames || pi->q_skew) {
+            cyanrip_log(ctx, 0, "found");
+            if (pi->damaged_frames)
+                cyanrip_log(ctx, 0, " using %i damaged Q frame%s (%i repaired)",
+                            pi->damaged_frames, pi->damaged_frames == 1 ? "" : "s",
+                            pi->repaired_frames);
+            if (pi->damaged_frames && pi->q_skew)
+                cyanrip_log(ctx, 0, ",");
+            if (pi->q_skew)
+                cyanrip_log(ctx, 0, " placed by absolute time (Q sub-channel %i frame%s %s)",
+                            abs(pi->q_skew), abs(pi->q_skew) == 1 ? "" : "s",
+                            pi->q_skew > 0 ? "early" : "late");
+            cyanrip_log(ctx, 0, ", ");
+        }
 
         switch (ctx->settings.pregap_action[ct->number - 1]) {
         case CYANRIP_PREGAP_DEFAULT:

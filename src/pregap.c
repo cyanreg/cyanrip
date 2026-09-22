@@ -262,18 +262,13 @@ static void subq_probe_read_mode(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
         nb_valid += subq_read_crc(subq_buf) == subq_crc(subq_buf);
     }
 
-    if (ret == DRIVER_OP_UNSUPPORTED) {
-        ctx->subq_read_mode = CYANRIP_SUBQ_READ_FORMATTED_Q;
-        cyanrip_log(ctx, 0, "Q sub-channel: reading formatted Q (raw P-W not supported)\n");
-    } else if (nb_read > 0 && nb_valid * 2 >= nb_read) {
+    ctx->subq_probe_frames = nb_read;
+    ctx->subq_probe_valid_frames = nb_valid;
+    if (ret != DRIVER_OP_UNSUPPORTED && nb_read > 0 && nb_valid * 2 >= nb_read) {
         ctx->subq_read_mode = CYANRIP_SUBQ_READ_RAW_PW;
         ctx->subq_bcd_fixup_status = CYANRIP_BCD_FIXUP_NOT_REQUIRED;
-        cyanrip_log(ctx, 0, "Q sub-channel: reading raw P-W (%i of %i probed frames valid)\n",
-                    nb_valid, nb_read);
     } else {
         ctx->subq_read_mode = CYANRIP_SUBQ_READ_FORMATTED_Q;
-        cyanrip_log(ctx, 0, "Q sub-channel: reading formatted Q (%i of %i raw P-W frames valid)\n",
-                    nb_valid, nb_read);
     }
 }
 
@@ -436,8 +431,14 @@ static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int t
  * boundary off by as much. Each Q frame carries its own absolute time though,
  * so once the boundary is found, the frame on it says where it really is.
  */
-lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
+lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number, cyanrip_pregap_info *info)
 {
+    cyanrip_pregap_info unused_info;
+    if (!info)
+        info = &unused_info;
+    memset(info, 0, sizeof(*info));
+    info->failed_lsn = CDIO_INVALID_LSN;
+
     /* Try to use libcdio. If libcdio doesn't implement pregap finding
        for a driver, it will return CDIO_INVALID_LSN. */
     const lsn_t cdio_track_pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, track_number);
@@ -712,14 +713,14 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         cyanrip_log(ctx, 0, "Warning: could not narrow down the pregap of track %i to a single "
                     "sector (unreadable sectors near the track boundary), skipping pregap detection\n",
                     track_number);
+        info->result = CYANRIP_PREGAP_SEARCH_UNREADABLE;
         av_free(audio_subq_buf);
         return CDIO_INVALID_LSN;
     }
 
-    if (nb_damaged_used)
-        cyanrip_log(ctx, 0, "Pregap of track %i placed using %i damaged Q frame(s): %i repaired "
-                    "(single bit error), %i with position and track number intact\n",
-                    track_number, nb_damaged_used, nb_repaired, nb_damaged_used - nb_repaired);
+    info->result = CYANRIP_PREGAP_SEARCH_DONE;
+    info->damaged_frames = nb_damaged_used;
+    info->repaired_frames = nb_repaired;
 
     /* The new track begins at right_bound, but unless that sector has index 0
      * it is the track itself showing up ahead of the TOC, not a pregap. */
@@ -734,12 +735,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         left_bound_abs_lsn + 1 == right_bound_abs_lsn &&
         right_bound_abs_lsn > prev_track_start_lsn &&
         right_bound_abs_lsn < track_start_lsn) {
-        if (right_bound_abs_lsn != right_bound)
-            cyanrip_log(ctx, 0, "Pregap of track %i found at lsn %i, but its Q sub-channel places "
-                        "it at lsn %i (drive returns Q %i sector(s) %s), using that\n",
-                        track_number, right_bound, right_bound_abs_lsn,
-                        abs(right_bound_abs_lsn - right_bound),
-                        right_bound_abs_lsn > right_bound ? "early" : "late");
+        info->q_skew = right_bound_abs_lsn - right_bound;
         lsn = right_bound_abs_lsn;
     }
 
@@ -748,13 +744,18 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
 
 fail:
     assert(ret != DRIVER_OP_SUCCESS);
-    if (total_failures > TOTAL_FAILURE_BUDGET)
+    if (total_failures > TOTAL_FAILURE_BUDGET) {
         cyanrip_log(ctx, 0, "Warning: repeated subq CRC mismatches prevented finding the "
                 "pregap of track %i, skipping pregap detection\n", track_number);
-    else
+        info->result = CYANRIP_PREGAP_SEARCH_CRC_BUDGET;
+    } else {
         cyanrip_log(ctx, 0, "Warning: failed to read subq data at lsn %i (error %i) while "
                     "searching for the pregap of track %i, skipping pregap detection\n",
                     lsn, ret, track_number);
+        info->result = CYANRIP_PREGAP_SEARCH_READ_ERROR;
+        info->failed_lsn = lsn;
+        info->failed_error = ret;
+    }
 
     av_free(audio_subq_buf);
     return CDIO_INVALID_LSN;

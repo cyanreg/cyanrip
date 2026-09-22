@@ -125,6 +125,28 @@ enum cyanrip_subq_read_mode {
     CYANRIP_SUBQ_READ_FORMATTED_Q = 2,
 };
 
+/* How the pregap search of a track went, for the report. The search runs
+ * before the log file exists, so what it has to say is kept here and
+ * written out with the gaps. */
+enum cyanrip_pregap_search_result {
+    CYANRIP_PREGAP_SEARCH_NOT_RUN = 0,  /* nothing to search: first or data track, or the TOC knew */
+    CYANRIP_PREGAP_SEARCH_DONE,         /* a result was reached, pregap or none */
+    CYANRIP_PREGAP_SEARCH_UNREADABLE,   /* unreadable sectors at the boundary, no way to place it */
+    CYANRIP_PREGAP_SEARCH_CRC_BUDGET,   /* too many Q frames failed the CRC */
+    CYANRIP_PREGAP_SEARCH_READ_ERROR,   /* a read failed outright */
+};
+
+typedef struct cyanrip_pregap_info {
+    enum cyanrip_pregap_search_result result;
+    int damaged_frames;  /* damaged Q frames the boundary had to be placed with */
+    int repaired_frames; /* of which repaired outright (single bit error) */
+    int q_skew;          /* sectors the Q sub-channel ran ahead (+) or behind (-)
+                          * of the TOC at the boundary; the pregap was placed
+                          * by the frame's absolute time to make up for it */
+    lsn_t failed_lsn;    /* CYANRIP_PREGAP_SEARCH_READ_ERROR: where and with what */
+    int failed_error;
+} cyanrip_pregap_info;
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *folder_name_scheme;
@@ -201,6 +223,7 @@ typedef struct cyanrip_track {
     int frames_after_disc_end;
 
     lsn_t pregap_lsn;
+    cyanrip_pregap_info pregap_info;
     lsn_t start_lsn;
     lsn_t start_lsn_sig;
     lsn_t end_lsn;
@@ -293,6 +316,8 @@ typedef struct cyanrip_ctx {
 
     enum cyanrip_bcd_fixup_status subq_bcd_fixup_status;
     enum cyanrip_subq_read_mode subq_read_mode;
+    int subq_probe_frames; /* raw P-W frames the probe read, and how many had a valid CRC */
+    int subq_probe_valid_frames;
 
     /* ETA */
     CRSlidingWinCtx eta_ctx;
