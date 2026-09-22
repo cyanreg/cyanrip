@@ -357,6 +357,61 @@ static driver_return_code_t subq_read_with_retries(cyanrip_ctx *ctx, uint8_t *au
     return ret;
 }
 
+/* How many sectors between the bounds the damaged-frame pass will look at. */
+#define SUBQ_DAMAGED_MAX_GAP 8
+
+/**
+ * Tries to repair a Q frame with a single bit error, which the 16 bit CRC
+ * pins down over a frame this short: exactly one of the 96 bit flips brings
+ * the CRC back into agreement. Returns 1 if the frame was repaired in place.
+ */
+static int subq_repair_single_bit(uint8_t *subq_buf)
+{
+    for (int bit = 0; bit < 12 * 8; bit++) {
+        subq_buf[bit >> 3] ^= 0x80 >> (bit & 7);
+        if (subq_read_crc(subq_buf) == subq_crc(subq_buf))
+            return 1;
+        subq_buf[bit >> 3] ^= 0x80 >> (bit & 7);
+    }
+    return 0;
+}
+
+/**
+ * Reads a sector raw once more and, if the Q frame is damaged, tries to make
+ * sense of it anyway: a single bit error is repaired outright, and beyond
+ * that the frame is used if its payload is intact, i.e. a mode 1 frame whose
+ * absolute time is exactly the sector asked for, reporting one of the two
+ * tracks the search is between. Damage to the Q channel is typically a bit
+ * or two, so this is usually the case, and the frame then says what it would
+ * have said with its CRC. Only available in raw P-W mode: the formatted Q of
+ * a sector the drive can't decode is a substitute, not a damaged frame.
+ *
+ * Returns 1 and fills subq if the frame is usable that way; *repaired says
+ * whether the CRC agrees after a single bit repair.
+ */
+static int subq_read_damaged(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, subq_t *subq,
+                             const lsn_t lsn, const track_t prev_track_number,
+                             const track_t track_number, int *repaired)
+{
+    *repaired = 0;
+    if (ctx->subq_read_mode != CYANRIP_SUBQ_READ_RAW_PW)
+        return 0;
+    if (subq_read_sector(ctx, audio_subq_buf, lsn))
+        return 0;
+
+    uint8_t *subq_buf = audio_subq_buf + CDIO_CD_FRAMESIZE_RAW;
+    if (subq_read_crc(subq_buf) != subq_crc(subq_buf))
+        *repaired = subq_repair_single_bit(subq_buf);
+
+    if ((subq_buf[0] & 0x0F) != 1)
+        return 0;
+    if (subq_position_error(subq_buf, lsn) != 0)
+        return 0;
+
+    subq_decode(subq, subq_buf);
+    return subq->track_number == prev_track_number || subq->track_number == track_number;
+}
+
 /* Whether we can skip a subq read failure and continue searching for the pregap. */
 static inline int subq_read_failure_is_skippable(driver_return_code_t ret, int total_failures)
 {
@@ -619,6 +674,40 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         }
     }
 
+    /* Step 4: only sectors that wouldn't read are left between the bounds.
+     * Their Q frames failed the CRC, but if their payload survived they can
+     * still close the gap: a sector reporting the previous track directly
+     * above left_bound extends it, a sector reporting the new track directly
+     * below right_bound extends that. Neither may leapfrog the other. */
+    int nb_damaged_used = 0, nb_repaired = 0, repaired;
+    if (left_bound + 1 != right_bound && right_bound - left_bound - 1 <= SUBQ_DAMAGED_MAX_GAP) {
+        while (left_bound + 1 != right_bound) {
+            lsn = left_bound + 1;
+            if (!subq_read_damaged(ctx, audio_subq_buf, &subq, lsn, prev_track_number, track_number, &repaired))
+                break;
+            if (subq.track_number != prev_track_number)
+                break;
+            left_bound = lsn;
+            left_bound_abs_lsn = lsn;
+            nb_damaged_used++;
+            nb_repaired += repaired;
+        }
+        while (left_bound + 1 != right_bound) {
+            lsn = right_bound - 1;
+            if (!subq_read_damaged(ctx, audio_subq_buf, &subq, lsn, prev_track_number, track_number, &repaired))
+                break;
+            const int is_pregap = subq.index_number == 0;
+            /* The index can't drop back to 0 once the track proper has begun */
+            if (subq.track_number != track_number || (right_bound_is_pregap && !is_pregap))
+                break;
+            right_bound = lsn;
+            right_bound_is_pregap = is_pregap;
+            right_bound_abs_lsn = lsn;
+            nb_damaged_used++;
+            nb_repaired += repaired;
+        }
+    }
+
     if (left_bound + 1 != right_bound) {
         cyanrip_log(ctx, 0, "Warning: could not narrow down the pregap of track %i to a single "
                     "sector (unreadable sectors near the track boundary), skipping pregap detection\n",
@@ -626,6 +715,11 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
         av_free(audio_subq_buf);
         return CDIO_INVALID_LSN;
     }
+
+    if (nb_damaged_used)
+        cyanrip_log(ctx, 0, "Pregap of track %i placed using %i damaged Q frame(s): %i repaired "
+                    "(single bit error), %i with position and track number intact\n",
+                    track_number, nb_damaged_used, nb_repaired, nb_damaged_used - nb_repaired);
 
     /* The new track begins at right_bound, but unless that sector has index 0
      * it is the track itself showing up ahead of the TOC, not a pregap. */
