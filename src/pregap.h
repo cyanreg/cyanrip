@@ -21,4 +21,7 @@
 #include <cdio/cdio.h>
 #include "cyanrip_main.h"
 
+/* Sectors read to find out whether the drive's raw P-W sub-channel is usable */
+#define SUBQ_PROBE_SECTORS 10
+
 lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, track_t track_number);

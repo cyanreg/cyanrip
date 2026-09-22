@@ -114,6 +114,17 @@ enum cyanrip_bcd_fixup_status {
     CYANRIP_BCD_FIXUP_NOT_REQUIRED = 2,
 };
 
+/* How the Q sub-channel is read for the pregap search. Raw P-W is preferred
+ * where the drive supports it, since the Q CRC then comes off the disc rather
+ * than from the drive, which may substitute its last good frame for a sector
+ * it can't read. Settled by a probe on first use.
+ */
+enum cyanrip_subq_read_mode {
+    CYANRIP_SUBQ_READ_UNDETERMINED = 0,
+    CYANRIP_SUBQ_READ_RAW_PW = 1,
+    CYANRIP_SUBQ_READ_FORMATTED_Q = 2,
+};
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *folder_name_scheme;
@@ -282,6 +293,7 @@ typedef struct cyanrip_ctx {
     lsn_t id_leadout_lsn; /* Lead-out the MusicBrainz and CDDB IDs derive from */
 
     enum cyanrip_bcd_fixup_status subq_bcd_fixup_status;
+    enum cyanrip_subq_read_mode subq_read_mode;
 
     /* ETA */
     CRSlidingWinCtx eta_ctx;
