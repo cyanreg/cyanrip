@@ -57,6 +57,7 @@ sources = [
     'json.c',
 
     'cue_writer.c',
+    'subq_read.c',
 
     'pregap.c',
 

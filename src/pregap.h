@@ -21,9 +21,6 @@
 #include <cdio/cdio.h>
 #include "cyanrip_main.h"
 
-/* Sectors read to find out whether the drive's raw P-W sub-channel is usable */
-#define SUBQ_PROBE_SECTORS 10
-
 /**
  * Finds the sector the pregap of track_number starts at, or CDIO_INVALID_LSN
  * if it has none or it couldn't be found. info, if given, says how the search

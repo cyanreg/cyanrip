@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <cdio/cdio.h>
+#include "cyanrip_main.h"
 
 #define SUBQ_SIZE 16
 
@@ -52,3 +53,74 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
  * Returns DRIVER_OP_UNSUPPORTED where the backend can't read raw P-W.
  */
 driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *audio_subpw_buf, const lsn_t lsn);
+
+/* ---- Reading and making sense of Q frames, on top of the backends above ---- */
+
+/* Sectors read to find out whether the drive's raw P-W sub-channel is usable */
+#define SUBQ_PROBE_SECTORS 10
+
+/*
+ * The maximum number of retries for a single sector read before giving up on that sector.
+ * Based on XLD's pregap search, which uses 5 retries per sector.
+ *
+ * We might want to make this configurable in the future.
+*/
+#define SECTOR_MAX_RETRIES 5
+
+/* Overall budget on how many failed (CRC-invalid) reads we'll tolerate
+ * across the whole search before giving up entirely, so that severely
+ * damaged media near a track boundary can't stall ripping indefinitely.
+ * XLD's cap of 100 only counts failures before its first valid read; this
+ * one covers the whole search.
+ */
+#define TOTAL_FAILURE_BUDGET 100
+
+typedef struct subq_t {
+    uint8_t  control;
+    uint8_t  adr;
+    uint8_t  track_number;
+    uint8_t  index_number;
+    uint8_t  min;
+    uint8_t  sec;
+    uint8_t  frame;
+    uint8_t  amin;
+    uint8_t  asec;
+    uint8_t  aframe;
+    unsigned crc;
+} subq_t;
+
+/* The sector a mode 1 Q frame says it belongs to, going by its absolute time */
+static inline lsn_t subq_abs_lsn(const subq_t *subq)
+{
+    return (subq->amin * 60 + subq->asec) * 75 + subq->aframe - CDIO_PREGAP_SECTORS;
+}
+
+/**
+ * Settles how the Q sub-channel is read for this drive (ctx->subq_read_mode),
+ * by reading up to SUBQ_PROBE_SECTORS audio sectors raw from first_lsn, not
+ * reaching end_lsn. Does nothing once settled. audio_subq_buf must hold
+ * CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW bytes, as for the reads below.
+ */
+void subq_probe_read_mode(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
+                          const lsn_t first_lsn, const lsn_t end_lsn);
+
+/**
+ * Reads and decodes the Q frame of a sector, retrying a CRC failure up to
+ * SECTOR_MAX_RETRIES times and counting each failed attempt in
+ * total_failures, which the caller checks against TOTAL_FAILURE_BUDGET.
+ * Returns DRIVER_OP_SUCCESS with subq filled in, DRIVER_OP_ERROR for a frame
+ * that never passed the CRC, or the backend's error.
+ */
+driver_return_code_t subq_read_with_retries(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
+                                            subq_t *subq, const lsn_t lsn, int *total_failures);
+
+/**
+ * Last resort for a sector whose frame fails the CRC: repairs a single bit
+ * error, or takes the frame as is if its absolute time is exactly lsn, and
+ * returns 1 with subq filled in if the frame then reports one of the two
+ * given tracks. *repaired says whether the CRC agrees after the repair.
+ * Raw P-W mode only.
+ */
+int subq_read_damaged(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, subq_t *subq,
+                      const lsn_t lsn, const track_t prev_track_number,
+                      const track_t track_number, int *repaired);
