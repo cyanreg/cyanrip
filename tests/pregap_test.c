@@ -20,7 +20,7 @@
  * drive - no real libcdio driver or hardware involved, and this test binary
  * does not even link against libcdio.so: pregap.c and subq_read.c call cdio_get_track_lsn(),
  * cdio_get_first_track_num(), cdio_get_track_format(),
- * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subq_sector() by name,
+ * cdio_get_track_pregap_lsn(), and cyanrip_read_audio_subchannel_sector() by name,
  * and every one of them is defined right here instead, describing a synthetic
  * disc (`disc`) instead of talking to a real drive. Since none of the real
  * implementations are linked in (see tests/meson.build), there's no symbol
@@ -105,7 +105,7 @@ typedef struct {
     cyanrip_pregap_info info;
 } fake_disc_t;
 
-/* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sector()
+/* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subchannel_sector()
  * functions below serve. Reset by make_disc() at the start of each scenario;
  * only one scenario is ever in flight at a time. */
 static fake_disc_t disc;
@@ -165,7 +165,7 @@ static void true_subq_at(lsn_t content_lsn, track_t *out_track, uint8_t *out_ind
     }
 }
 
-/* Substitutes for the real cyanrip_read_audio_subq_sector() (normally
+/* Substitutes for the real cyanrip_read_audio_subchannel_sector() (normally
  * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
  * test binary): generates synthetic Q sub-channel bytes for `disc` instead
  * of talking to real hardware. */
@@ -228,15 +228,10 @@ static int fake_subq_frame(lsn_t lsn, uint8_t *q)
     return 1;
 }
 
-/* Substitutes for the real cyanrip_read_audio_subq_sector() (normally
- * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
- * test binary): generates synthetic formatted Q sub-channel bytes for `disc`
- * instead of talking to real hardware, with the drive quirks the disc asks
- * for layered on top. */
-driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *buf,
-                                                      lsn_t lsn)
+/* The formatted Q sub-channel: generates synthetic Q bytes for `disc`, with
+ * the drive quirks the disc asks for layered on top. */
+static driver_return_code_t fake_read_subq(uint8_t *buf, lsn_t lsn)
 {
-    (void)p_cdio;
     disc.reads_issued++;
 
     uint8_t *q = buf + CDIO_CD_FRAMESIZE_RAW;
@@ -265,11 +260,8 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
 /* Raw P-W: the same frames, spread one bit per subcode symbol into bit 6,
  * with P (bit 7) set throughout. No drive quirks apply, since the drive
  * passes these bits through untouched; only what is on the disc matters. */
-driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *buf,
-                                                       lsn_t lsn)
+static driver_return_code_t fake_read_subpw(uint8_t *buf, lsn_t lsn)
 {
-    (void)p_cdio;
-
     if (disc.no_raw_pw)
         return DRIVER_OP_UNSUPPORTED;
 
@@ -292,6 +284,27 @@ driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8
     for (int i = 0; i < CDIO_CD_FRAMESIZE_SUB; i++)
         pw[i] = 0x80 | (((q[i >> 3] >> (7 - (i & 7))) & 1) << 6);
     return DRIVER_OP_SUCCESS;
+}
+
+/* Substitutes for the real cyanrip_read_audio_subchannel_sector() (normally
+ * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
+ * test binary): serves `disc` instead of talking to real hardware. */
+driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, uint8_t *buf, lsn_t lsn,
+                                                          enum cyanrip_subchannel subchannel, size_t block_size)
+{
+    (void)p_cdio;
+    switch (subchannel) {
+    case CYANRIP_SUBCHANNEL_Q:
+        if (block_size != CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ)
+            return DRIVER_OP_BAD_PARAMETER;
+        return fake_read_subq(buf, lsn);
+    case CYANRIP_SUBCHANNEL_PW_RAW:
+        if (block_size != CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW)
+            return DRIVER_OP_BAD_PARAMETER;
+        return fake_read_subpw(buf, lsn);
+    default:
+        return DRIVER_OP_BAD_PARAMETER;
+    }
 }
 
 /* Overrides for the real libcdio track-metadata queries: this test binary

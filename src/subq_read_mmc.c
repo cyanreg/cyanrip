@@ -20,7 +20,8 @@
 
 #include <cdio/mmc_ll_cmds.h>
 
-driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *audio_subq_buf, const lsn_t lsn)
+driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, uint8_t *buf, const lsn_t lsn,
+                                                          enum cyanrip_subchannel subchannel, size_t block_size)
 {
     const int expected_sector_type = 1; /* CD-DA sectors */
     const bool b_digital_audio_play = false;
@@ -29,27 +30,16 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
     const bool b_user_data = true;
     const bool b_edc_ecc = false;
     const uint8_t c2_error_information = 0;
-    const uint8_t subchannel_selection = 2; /* Q sub-channel */
-    const uint16_t i_blocksize = CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ;
 
-    return mmc_read_cd(p_cdio, audio_subq_buf, lsn, expected_sector_type,
+    /* MMC READ CD sub-channel selection bits */
+    uint8_t subchannel_selection;
+    switch (subchannel) {
+    case CYANRIP_SUBCHANNEL_Q:      subchannel_selection = 2; break;
+    case CYANRIP_SUBCHANNEL_PW_RAW: subchannel_selection = 1; break;
+    default:                        return DRIVER_OP_BAD_PARAMETER;
+    }
+
+    return mmc_read_cd(p_cdio, buf, lsn, expected_sector_type,
         b_digital_audio_play, b_sync, header_codes, b_user_data, b_edc_ecc,
-        c2_error_information, subchannel_selection, i_blocksize, 1);
-}
-
-driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *audio_subpw_buf, const lsn_t lsn)
-{
-    const int expected_sector_type = 1; /* CD-DA sectors */
-    const bool b_digital_audio_play = false;
-    const bool b_sync = false;
-    const uint8_t header_codes = 0; /* no header information */
-    const bool b_user_data = true;
-    const bool b_edc_ecc = false;
-    const uint8_t c2_error_information = 0;
-    const uint8_t subchannel_selection = 1; /* raw P-W sub-channel */
-    const uint16_t i_blocksize = CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW;
-
-    return mmc_read_cd(p_cdio, audio_subpw_buf, lsn, expected_sector_type,
-        b_digital_audio_play, b_sync, header_codes, b_user_data, b_edc_ecc,
-        c2_error_information, subchannel_selection, i_blocksize, 1);
+        c2_error_information, subchannel_selection, block_size, 1);
 }

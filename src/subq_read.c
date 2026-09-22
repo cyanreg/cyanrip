@@ -183,9 +183,12 @@ static void subpw_extract_q(const uint8_t *pw_buf, uint8_t *subq_buf)
 static driver_return_code_t subq_read_sector(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, const lsn_t lsn)
 {
     if (ctx->subq_read_mode != CYANRIP_SUBQ_READ_RAW_PW)
-        return cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
+        return cyanrip_read_audio_subchannel_sector(ctx->cdio, audio_subq_buf, lsn, CYANRIP_SUBCHANNEL_Q,
+                                                    CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
 
-    driver_return_code_t ret = cyanrip_read_audio_subpw_sector(ctx->cdio, audio_subq_buf, lsn);
+    driver_return_code_t ret = cyanrip_read_audio_subchannel_sector(ctx->cdio, audio_subq_buf, lsn,
+                                                                    CYANRIP_SUBCHANNEL_PW_RAW,
+                                                                    CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW);
     if (ret)
         return ret;
     subpw_extract_q(audio_subq_buf + CDIO_CD_FRAMESIZE_RAW, audio_subq_buf + CDIO_CD_FRAMESIZE_RAW);
@@ -211,7 +214,8 @@ void subq_probe_read_mode(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
     int nb_read = 0, nb_valid = 0;
     driver_return_code_t ret = DRIVER_OP_SUCCESS;
     for (lsn_t lsn = first_lsn; lsn < end_lsn && nb_read < SUBQ_PROBE_SECTORS; lsn++) {
-        ret = cyanrip_read_audio_subpw_sector(ctx->cdio, audio_subq_buf, lsn);
+        ret = cyanrip_read_audio_subchannel_sector(ctx->cdio, audio_subq_buf, lsn, CYANRIP_SUBCHANNEL_PW_RAW,
+                                                   CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW);
         if (ret == DRIVER_OP_UNSUPPORTED)
             break;
         nb_read++;
