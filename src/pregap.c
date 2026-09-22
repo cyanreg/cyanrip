@@ -205,6 +205,78 @@ static driver_return_code_t subq_validate_by_position(uint8_t *subq_buf, const u
     return DRIVER_OP_SUCCESS;
 }
 
+/* Picks the Q channel out of the 96 raw P-W subcode symbols: bit 6 of each. */
+static void subpw_extract_q(const uint8_t *pw_buf, uint8_t *subq_buf)
+{
+    uint8_t q[12] = { 0 };
+    for (int i = 0; i < CDIO_CD_FRAMESIZE_SUB; i++)
+        q[i >> 3] |= ((pw_buf[i] >> 6) & 1) << (7 - (i & 7));
+    memset(subq_buf, 0, SUBQ_SIZE);
+    memcpy(subq_buf, q, sizeof(q));
+}
+
+/**
+ * Reads a sector's audio and Q sub-channel in the mode the probe settled on,
+ * leaving the 16 byte Q frame at audio_subq_buf + CDIO_CD_FRAMESIZE_RAW either
+ * way. audio_subq_buf must hold CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW bytes.
+ */
+static driver_return_code_t subq_read_sector(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, const lsn_t lsn)
+{
+    if (ctx->subq_read_mode != CYANRIP_SUBQ_READ_RAW_PW)
+        return cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
+
+    driver_return_code_t ret = cyanrip_read_audio_subpw_sector(ctx->cdio, audio_subq_buf, lsn);
+    if (ret)
+        return ret;
+    subpw_extract_q(audio_subq_buf + CDIO_CD_FRAMESIZE_RAW, audio_subq_buf + CDIO_CD_FRAMESIZE_RAW);
+    return DRIVER_OP_SUCCESS;
+}
+
+/**
+ * Settles how the Q sub-channel is read, by reading a few audio sectors raw:
+ * raw P-W is used if the drive can read it and most of the Q frames in it
+ * carry a valid CRC, the formatted Q otherwise.
+ *
+ * In raw mode the frames come straight off the disc, so the drive can't have
+ * converted them out of BCD, and a CRC failure means the sector is damaged:
+ * the fixup and the position fallback that stands in for a missing CRC are
+ * both switched off by settling the BCD status.
+ */
+static void subq_probe_read_mode(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
+                                 const lsn_t first_lsn, const lsn_t end_lsn)
+{
+    if (ctx->subq_read_mode != CYANRIP_SUBQ_READ_UNDETERMINED)
+        return;
+
+    int nb_read = 0, nb_valid = 0;
+    driver_return_code_t ret = DRIVER_OP_SUCCESS;
+    for (lsn_t lsn = first_lsn; lsn < end_lsn && nb_read < SUBQ_PROBE_SECTORS; lsn++) {
+        ret = cyanrip_read_audio_subpw_sector(ctx->cdio, audio_subq_buf, lsn);
+        if (ret == DRIVER_OP_UNSUPPORTED)
+            break;
+        nb_read++;
+        if (ret)
+            continue;
+        uint8_t subq_buf[SUBQ_SIZE];
+        subpw_extract_q(audio_subq_buf + CDIO_CD_FRAMESIZE_RAW, subq_buf);
+        nb_valid += subq_read_crc(subq_buf) == subq_crc(subq_buf);
+    }
+
+    if (ret == DRIVER_OP_UNSUPPORTED) {
+        ctx->subq_read_mode = CYANRIP_SUBQ_READ_FORMATTED_Q;
+        cyanrip_log(ctx, 0, "Q sub-channel: reading formatted Q (raw P-W not supported)\n");
+    } else if (nb_read > 0 && nb_valid * 2 >= nb_read) {
+        ctx->subq_read_mode = CYANRIP_SUBQ_READ_RAW_PW;
+        ctx->subq_bcd_fixup_status = CYANRIP_BCD_FIXUP_NOT_REQUIRED;
+        cyanrip_log(ctx, 0, "Q sub-channel: reading raw P-W (%i of %i probed frames valid)\n",
+                    nb_valid, nb_read);
+    } else {
+        ctx->subq_read_mode = CYANRIP_SUBQ_READ_FORMATTED_Q;
+        cyanrip_log(ctx, 0, "Q sub-channel: reading formatted Q (%i of %i raw P-W frames valid)\n",
+                    nb_valid, nb_read);
+    }
+}
+
 /**
  * Reads Q sub-channel sector and validates its CRC, converting to BCD if needed.
  *
@@ -215,7 +287,7 @@ static driver_return_code_t subq_validate_by_position(uint8_t *subq_buf, const u
  */
 static driver_return_code_t subq_read_valid_audio_sector(cyanrip_ctx *ctx, uint8_t *audio_subq_buf, const lsn_t lsn)
 {
-    driver_return_code_t ret = cyanrip_read_audio_subq_sector(ctx->cdio, audio_subq_buf, lsn);
+    driver_return_code_t ret = subq_read_sector(ctx, audio_subq_buf, lsn);
     if (ret) {
         return ret;
     }
@@ -259,7 +331,7 @@ static driver_return_code_t subq_read_valid_audio_sector(cyanrip_ctx *ctx, uint8
  * Reads the Q sub-channel with retries, returning on the first successful read or the last error.
  * Increments total_failures for each failed read attempt.
  *
- * audio_subq_buf must be at least CDIO_CD_FRAMESIZE_RAW + SUBQ_SIZE bytes.
+ * audio_subq_buf must be at least CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW bytes.
  */
 static driver_return_code_t subq_read_with_retries(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
     subq_t *subq, const lsn_t lsn, int *total_failures)
@@ -350,7 +422,11 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number)
     if (prev_track_start_lsn + 1 == track_start_lsn)
         return CDIO_INVALID_LSN;
 
-    uint8_t *audio_subq_buf = av_malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBQ);
+    uint8_t *audio_subq_buf = av_malloc(CYANRIP_CD_FRAMESIZE_RAW_AND_SUBPW);
+
+    /* Both tracks are audio by now, so anything from the previous track's
+     * start up to this track's start will do for the probe. */
+    subq_probe_read_mode(ctx, audio_subq_buf, prev_track_start_lsn, track_start_lsn);
 
     lsn_t lsn;
     subq_t subq;

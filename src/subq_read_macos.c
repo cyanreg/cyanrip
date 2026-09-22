@@ -23,6 +23,15 @@
 #include <sys/errno.h>
 #include <cdio/cdio.h>
 
+/* DKIOCCDREAD only offers the formatted Q sub-channel (kCDSectorAreaSubChannelQ) */
+driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *audio_subpw_buf, const lsn_t lsn)
+{
+    (void)p_cdio;
+    (void)audio_subpw_buf;
+    (void)lsn;
+    return DRIVER_OP_UNSUPPORTED;
+}
+
 driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *audio_subq_buf, const lsn_t lsn)
 {
     const int fd = cdio_get_device_fd((CdIo_t *)p_cdio);

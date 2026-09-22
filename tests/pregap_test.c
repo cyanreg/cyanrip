@@ -84,6 +84,10 @@ typedef struct {
     int simulate_libcdio_pregap_support;
     int nonbcd;
     int nocrc; /* drive hands back the formatted Q without its CRC */
+    int no_raw_pw; /* drive can't read raw P-W: the formatted Q is all there is */
+    int raw_pw_garbage; /* drive accepts raw P-W reads but returns zeros */
+    lsn_t stale; /* the drive can't decode this sector's Q: the formatted read hands
+                  * back the frame before it, raw P-W the damaged frame itself */
     int q_offset; /* Q sub-channel runs this many sectors ahead of the TOC */
     lsn_t ctx_start_lsn; /* fed to cyanrip_ctx.start_lsn in run(); only matters for the first track */
 
@@ -95,6 +99,7 @@ typedef struct {
     int num_mode2;
 
     int reads_issued;
+    enum cyanrip_subq_read_mode mode_chosen;
 } fake_disc_t;
 
 /* The disc/drive the overridden cdio_get_* and cyanrip_read_audio_subq_sector()
@@ -105,6 +110,7 @@ static fake_disc_t disc;
 static void make_disc(lsn_t prev_start, lsn_t pregap_start, lsn_t cur_start)
 {
     memset(&disc, 0, sizeof(disc));
+    disc.stale = CDIO_INVALID_LSN;
     disc.first_track_num = 1;
     disc.prev_track_number = 5;
     disc.cur_track_number = 6;
@@ -160,23 +166,21 @@ static void true_subq_at(lsn_t content_lsn, track_t *out_track, uint8_t *out_ind
  * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
  * test binary): generates synthetic Q sub-channel bytes for `disc` instead
  * of talking to real hardware. */
-driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *buf,
-                                                      lsn_t lsn)
+/* Builds the 16 byte Q sub-channel frame of a sector as the drive would hand
+ * it back formatted: 12 bytes of Q, zero padded. Returns 0 when the sector is
+ * faulted and the frame is left all zero (CRC field 0, never valid). */
+static int fake_subq_frame(lsn_t lsn, uint8_t *q)
 {
-    (void)p_cdio;
-    disc.reads_issued++;
-
-    uint8_t *q = buf + CDIO_CD_FRAMESIZE_RAW;
     memset(q, 0, 16);
 
     for (int i = 0; i < disc.num_faults; i++) {
         if (disc.faults[i].lsn != lsn)
             continue;
         if (disc.faults[i].remaining < 0)
-            return DRIVER_OP_SUCCESS; /* all-zero sector: CRC field 0, always invalid */
+            return 0;
         if (disc.faults[i].remaining > 0) {
             disc.faults[i].remaining--;
-            return DRIVER_OP_SUCCESS;
+            return 0;
         }
         break;
     }
@@ -215,26 +219,71 @@ driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_
     q[8] = bin_to_bcd((uint8_t)(abs_frames / 75 % 60));
     q[9] = bin_to_bcd((uint8_t)(abs_frames % 75));
 
-    if (disc.nonbcd) {
-        /* Simulate a drive whose firmware hands back raw binary values
-         * instead of BCD for these fields (the on-disc/true CRC below is
-         * still computed over the correct BCD bytes first). */
-        static const int fields[] = { 1, 2, 3, 4, 5, 7, 8, 9 };
-        unsigned crc = test_crc_subq(q);
-        q[10] = (crc >> 8) & 0xFF;
-        q[11] = crc & 0xFF;
-        for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
-            q[fields[i]] = bcd_to_bin(q[fields[i]]);
-        if (disc.nocrc)
-            q[10] = q[11] = 0;
-        return DRIVER_OP_SUCCESS;
-    }
-
     unsigned crc = test_crc_subq(q);
     q[10] = (crc >> 8) & 0xFF;
     q[11] = crc & 0xFF;
+    return 1;
+}
+
+/* Substitutes for the real cyanrip_read_audio_subq_sector() (normally
+ * implemented in subq_read_mmc.c/subq_read_macos.c, neither linked into this
+ * test binary): generates synthetic formatted Q sub-channel bytes for `disc`
+ * instead of talking to real hardware, with the drive quirks the disc asks
+ * for layered on top. */
+driver_return_code_t cyanrip_read_audio_subq_sector(const CdIo_t *p_cdio, uint8_t *buf,
+                                                      lsn_t lsn)
+{
+    (void)p_cdio;
+    disc.reads_issued++;
+
+    uint8_t *q = buf + CDIO_CD_FRAMESIZE_RAW;
+
+    /* The drive couldn't decode this sector's Q and hands back the last
+     * frame it did decode, CRC and all. */
+    if (lsn == disc.stale)
+        lsn -= 1;
+
+    if (!fake_subq_frame(lsn, q))
+        return DRIVER_OP_SUCCESS;
+
+    if (disc.nonbcd) {
+        /* Simulate a drive whose firmware hands back raw binary values
+         * instead of BCD for these fields (the CRC above was computed over
+         * the correct BCD bytes first). */
+        static const int fields[] = { 1, 2, 3, 4, 5, 7, 8, 9 };
+        for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
+            q[fields[i]] = bcd_to_bin(q[fields[i]]);
+    }
     if (disc.nocrc)
         q[10] = q[11] = 0;
+    return DRIVER_OP_SUCCESS;
+}
+
+/* Raw P-W: the same frames, spread one bit per subcode symbol into bit 6,
+ * with P (bit 7) set throughout. No drive quirks apply, since the drive
+ * passes these bits through untouched; only what is on the disc matters. */
+driver_return_code_t cyanrip_read_audio_subpw_sector(const CdIo_t *p_cdio, uint8_t *buf,
+                                                       lsn_t lsn)
+{
+    (void)p_cdio;
+
+    if (disc.no_raw_pw)
+        return DRIVER_OP_UNSUPPORTED;
+
+    disc.reads_issued++;
+
+    uint8_t *pw = buf + CDIO_CD_FRAMESIZE_RAW;
+    memset(pw, 0, CDIO_CD_FRAMESIZE_SUB);
+    if (disc.raw_pw_garbage)
+        return DRIVER_OP_SUCCESS;
+
+    uint8_t q[16];
+    fake_subq_frame(lsn, q);
+    if (lsn == disc.stale)
+        q[6] ^= 0x10; /* a bit error: the frame is intact but for its CRC */
+
+    for (int i = 0; i < CDIO_CD_FRAMESIZE_SUB; i++)
+        pw[i] = 0x80 | (((q[i >> 3] >> (7 - (i & 7))) & 1) << 6);
     return DRIVER_OP_SUCCESS;
 }
 
@@ -282,7 +331,9 @@ static lsn_t run(void)
     memset(&ctx, 0, sizeof(ctx)); /* fresh ctx each time: subq_needs_bcd_fixup starts at 0 */
     ctx.start_lsn = disc.ctx_start_lsn;
     disc.reads_issued = 0;
-    return cyanrip_get_track_pregap_lsn(&ctx, disc.cur_track_number);
+    lsn_t got = cyanrip_get_track_pregap_lsn(&ctx, disc.cur_track_number);
+    disc.mode_chosen = ctx.subq_read_mode;
+    return got;
 }
 
 static void check_lsn(const char *what, lsn_t got, lsn_t want)
@@ -344,7 +395,7 @@ int main(void)
         make_disc(1000, 1300, 1300);
         lsn_t got = run();
         check_lsn("no pregap", got, CDIO_INVALID_LSN);
-        check_true("no pregap: fast path used only 2 reads", disc.reads_issued == 2);
+        check_true("no pregap: fast path used only 2 reads", disc.reads_issued == SUBQ_PROBE_SECTORS + 2);
     }
 
     /* Previous track is a single sector: no room for a pregap, reported as
@@ -387,10 +438,61 @@ int main(void)
         check_true("data track guard (previous): no subq reads", disc.reads_issued == 0);
     }
 
+    /* Which way the Q sub-channel gets read: raw P-W when the drive can, the
+     * formatted Q when it can't or what it returns raw is junk. Reading the
+     * formatted Q through a drive that could do raw would be a regression. */
+    {
+        make_disc(1000, 1150, 1300);
+        lsn_t got = run();
+        check_lsn("raw P-W drive", got, 1150);
+        check_true("raw P-W drive: raw mode chosen", disc.mode_chosen == CYANRIP_SUBQ_READ_RAW_PW);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.no_raw_pw = 1;
+        lsn_t got = run();
+        check_lsn("drive without raw P-W", got, 1150);
+        check_true("drive without raw P-W: formatted mode chosen", disc.mode_chosen == CYANRIP_SUBQ_READ_FORMATTED_Q);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.raw_pw_garbage = 1;
+        lsn_t got = run();
+        check_lsn("drive returning junk raw P-W", got, 1150);
+        check_true("drive returning junk raw P-W: formatted mode chosen", disc.mode_chosen == CYANRIP_SUBQ_READ_FORMATTED_Q);
+    }
+
+    /* A sector the drive can't decode the Q of, right at the boundary. The
+     * formatted Q hands back the previous sector's frame with a valid CRC,
+     * which nothing can tell from a real read: the pregap comes out one
+     * sector short. Raw P-W exposes the failed CRC instead; the search then
+     * can't place the boundary and says so rather than guessing. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1150;
+        disc.no_raw_pw = 1;
+        lsn_t got = run();
+        check_lsn("stale formatted frame at the boundary", got, 1151);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1150;
+        lsn_t got = run();
+        check_lsn("stale frame at the boundary, seen through raw P-W", got, CDIO_INVALID_LSN);
+    }
+    /* The same stale sector away from the boundary is harmless either way. */
+    {
+        make_disc(1000, 1150, 1300);
+        disc.stale = 1200;
+        lsn_t got = run();
+        check_lsn("stale frame inside the pregap", got, 1150);
+    }
+
     /* A drive whose firmware returns raw binary MSF fields instead of BCD
      * must still resolve the pregap correctly once the quirk is detected. */
     {
         make_disc(1000, 1150, 1300);
+        disc.no_raw_pw = 1;
         disc.nonbcd = 1;
         lsn_t got = run();
         check_lsn("non-BCD drive quirk", got, 1150);
@@ -400,12 +502,14 @@ int main(void)
      * vetted by their absolute time instead, in whichever encoding fits. */
     {
         make_disc(1000, 1150, 1300);
+        disc.no_raw_pw = 1;
         disc.nocrc = 1;
         lsn_t got = run();
         check_lsn("drive without Q CRC", got, 1150);
     }
     {
         make_disc(1000, 1150, 1300);
+        disc.no_raw_pw = 1;
         disc.nocrc = 1;
         disc.nonbcd = 1;
         lsn_t got = run();
@@ -413,6 +517,7 @@ int main(void)
     }
     {
         make_disc(1000, 1300, 1300);
+        disc.no_raw_pw = 1;
         disc.nocrc = 1;
         lsn_t got = run();
         check_lsn("drive without Q CRC, no pregap", got, CDIO_INVALID_LSN);
@@ -422,6 +527,7 @@ int main(void)
      * absolute time and never becomes a candidate at all. */
     {
         make_disc(1000, 1300, 1500);
+        disc.no_raw_pw = 1;
         disc.nocrc = 1;
         disc.jitter[0] = (lsn_jitter_t){ .lsn = 1250, .reports_as = 1305 };
         disc.num_jitter = 1;
@@ -432,6 +538,7 @@ int main(void)
     /* The two together: no CRC, and Q handed back 2 sectors early. */
     {
         make_disc(1000, 1150, 1300);
+        disc.no_raw_pw = 1;
         disc.nocrc = 1;
         disc.q_offset = 2;
         lsn_t got = run();
