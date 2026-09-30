@@ -9,8 +9,9 @@ on:
       - master
       - workflow
   release:
-    types: 
+    types:
       - released
+      - prereleased
   workflow_dispatch:
 
 jobs:
@@ -66,6 +67,73 @@ jobs:
         run: |
           export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig:$PKG_CONFIG_PATH"
           meson test -C build --print-errorlogs
+
+  linux-static:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    container: alpine:3.22
+    permissions:
+      contents: write
+    steps:
+      - name: Install dependencies
+        run: |
+          apk add bash build-base meson ninja pkgconf cmake nasm autoconf automake libtool \
+            git curl xz xz-dev xz-static bzip2 tar zlib-dev zlib-static bzip2-dev bzip2-static \
+            openssl-dev openssl-libs-static libxml2-dev libxml2-static linux-headers
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          .github/static-build.sh
+          cp cyanrip cyanrip-linux-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanrip-linux-amd64
+          path: cyanrip-linux-amd64
+
+      - name: Upload the release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          apk add github-cli
+          gh release upload "${{ github.event.release.tag_name }}" cyanrip-linux-amd64 --clobber
+
+  macos-dmg:
+    if: github.event_name == 'release'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install meson ninja pkg-config cmake nasm autoconf automake libtool
+
+      - name: Build
+        run: .github/static-build.sh
+
+      - name: Create the disk image
+        run: |
+          mkdir dmg
+          cp cyanrip README.md LICENSE.md dmg/
+          codesign --force --sign - dmg/cyanrip
+          hdiutil create -volname cyanrip -srcfolder dmg -ov -format UDZO \
+            cyanrip-macos-arm64.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanrip-macos-arm64
+          path: cyanrip-macos-arm64.dmg
+
+      - name: Upload the release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" cyanrip-macos-arm64.dmg --clobber
 
   mingw:
     runs-on: windows-latest
