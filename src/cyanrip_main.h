@@ -164,6 +164,7 @@ typedef struct cyanrip_settings {
     int decode_hdcd;
     int disable_accurip;
     int disable_coverart_db;
+    int no_raw_subchannel;
     int overread_leadinout;
     int eject_on_success_rip;
     enum cyanrip_pregap_action pregap_action[198];

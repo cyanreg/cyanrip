@@ -1626,6 +1626,8 @@ int main(int argc, char **argv)
                 "AcoustID user API key, to submit fingerprints of verified rips");
     GEN_OPT_ONE(opts_list, bool,    no_coverart_db, "U", 0, 0, 0, 0, 0,
                 "Disable Cover art DB query and retrieval");
+    GEN_OPT_ONE(opts_list, bool,    no_raw_subchannel, "", 0, 0, 0, 0, 0,
+                "Read the Q sub-channel formatted instead of raw P-W");
     GEN_OPT_ONE(opts_list, int32_t, cover_size, "m", 1, 1, -1, -1, 1200,
                 "Cover art max size: 250, 500, 1200, or -1 for original");
     GEN_OPT_ONE(opts_list, bool,    no_coverart_embed, "G", 0, 0, 0, 0, 0,
@@ -1700,6 +1702,7 @@ int main(int argc, char **argv)
     settings.disable_accurip            = no_accurip;
     settings.disable_acoustid           = no_acoustid;
     settings.acoustid_key               = acoustid_key;
+    settings.no_raw_subchannel          = no_raw_subchannel;
     settings.disable_coverart_db        = no_coverart_db;
     settings.disable_coverart_embedding = no_coverart_embed;
     settings.print_info_only            = info;
