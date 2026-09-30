@@ -211,6 +211,11 @@ void subq_probe_read_mode(cyanrip_ctx *ctx, uint8_t *audio_subq_buf,
     if (ctx->subq_read_mode != CYANRIP_SUBQ_READ_UNDETERMINED)
         return;
 
+    if (ctx->settings.no_raw_subchannel) {
+        ctx->subq_read_mode = CYANRIP_SUBQ_READ_FORMATTED_Q;
+        return;
+    }
+
     int nb_read = 0, nb_valid = 0;
     driver_return_code_t ret = DRIVER_OP_SUCCESS;
     for (lsn_t lsn = first_lsn; lsn < end_lsn && nb_read < SUBQ_PROBE_SECTORS; lsn++) {

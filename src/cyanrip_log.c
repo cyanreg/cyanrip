@@ -284,7 +284,9 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                     ctx->subq_probe_valid_frames, ctx->subq_probe_frames);
         break;
     case CYANRIP_SUBQ_READ_FORMATTED_Q:
-        if (ctx->subq_probe_frames)
+        if (ctx->settings.no_raw_subchannel)
+            cyanrip_log(ctx, 0, "Q sub-channel:  formatted Q (raw P-W disabled)\n");
+        else if (ctx->subq_probe_frames)
             cyanrip_log(ctx, 0, "Q sub-channel:  formatted Q (%i of %i raw P-W frames valid)\n",
                         ctx->subq_probe_valid_frames, ctx->subq_probe_frames);
         else
