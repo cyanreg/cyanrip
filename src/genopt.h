@@ -45,6 +45,8 @@
  *     GEN_OPT_INIT(opts_list, 16);
  *     // Adds an optional boolean option called unround, with a -u flag
  *     GEN_OPT_ONE(opts_list, bool  , unround, "u", 0, 0, 0, 0, "Boolean option called unround");
+ *     // An empty flag string gives a long-only option (--verbose)
+ *     GEN_OPT_ONE(opts_list, bool  , verbose, "",  0, 0, 0, 0, "Long-only boolean option");
  *     // Adds a mandatory string option called output
  *     GEN_OPT_ONE(opts_list, char *, output,  "o", 1, 1, 0, 0, "Destination file");
  *     // Adds a mandatory string option array called input, with at most 8
@@ -154,7 +156,7 @@ typedef struct GenOpt {
     do {                                                                       \
         optlist[opts_list_nb] = (GenOpt) {                                     \
             .name = #valname,                                                  \
-            .flag = "-"valflag,                                                \
+            .flag = (valflag)[0] ? "-"valflag : NULL,                          \
             .flagname = "--"#valname,                                          \
             .type = _Generic((val),                                            \
                 bool:                 GEN_OPT_TYPE_BOOL,                       \
@@ -530,11 +532,14 @@ static inline int gen_opt_parse_fn(void *log_ctx, GenOpt *opts_list,
                     continue;
                 }
                 char fnbuf[64];
-                GEN_OPT_LOG(GEN_OPT_PHDR,
+                const char *flag = opts_list[j].flag;
+                /* Long-only options have no "(-x)", pad its width instead */
+                GEN_OPT_LOG(log_ctx, GEN_OPT_LOG_INFO, "    %s%s%s%s:%*s%s",
                             genopt_flagname_fmt(fnbuf, sizeof(fnbuf),
                                                 opts_list[j].flagname),
-                            opts_list[j].flag,
-                            pad_to - (int)strlen(opts_list[j].flagname), " ",
+                            flag ? " (" : "", flag ? flag : "", flag ? ")" : "",
+                            pad_to - (int)strlen(opts_list[j].flagname) +
+                            (flag ? 0 : (int)strlen(" (-x)")), " ",
                             opts_list[j].help);
                 GEN_OPT_PRINT_DEFAULT_VAL(opts_list[j], 0);
                 GEN_OPT_LOG(log_ctx, GEN_OPT_LOG_INFO, "\n");
