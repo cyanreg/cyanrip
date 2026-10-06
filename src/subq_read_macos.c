@@ -34,9 +34,8 @@ driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, 
     }
 
     const int fd = cdio_get_device_fd((CdIo_t *)p_cdio);
-    if (fd < 0) {
+    if (fd < 0)
         return DRIVER_OP_ERROR;
-    }
 
     dk_cd_read_t cd_read = {
         .offset = block_size*lsn,
@@ -48,17 +47,15 @@ driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, 
     if (ioctl(fd, DKIOCCDREAD, &cd_read) >= 0)
         return DRIVER_OP_SUCCESS;
 
-    /* Map the ioctl() failure to the closest driver_return_code_t, so that
-     * callers can retry on errors that are actually transient, i.e. DRIVER_OP_ERROR.
-     */
+    /* Only DRIVER_OP_ERROR is retried */
     switch (errno) {
-        case EBADF:  /* fd is invalid, e.g. the device was already closed */
+        case EBADF:
             return DRIVER_OP_UNINIT;
-        case EINVAL: /* Invalid argument, e.g. bad offset/buffer length */
+        case EINVAL:
             return DRIVER_OP_BAD_PARAMETER;
-        case ENOTTY: /* DKIOCCDREAD is not supported on this fd/device */
+        case ENOTTY:
             return DRIVER_OP_UNSUPPORTED;
-        default:     /* Most likely a transient read error (e.g. EIO), retryable */
+        default:
             return DRIVER_OP_ERROR;
     }
 }
