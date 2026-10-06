@@ -102,48 +102,34 @@ enum coverart_lookup_sizes {
     COVERART_LOOKUP_SIZE_1200
 };
 
-/* How to handle drives that return raw binary MSF fields instead
- * of BCD in the Q sub-channel.
- * 
- * XLD handles it the same way. The equivalent field is nonBCD in xld_cdread_t
- * XLD/XLDCDDABackend.c (see: xld_cdda_read_pregap())
-*/
+/* Whether the drive returns binary instead of BCD in the Q sub-channel, like XLD's nonBCD */
 enum cyanrip_bcd_fixup_status {
     CYANRIP_BCD_FIXUP_UNDETERMINED = 0,
     CYANRIP_BCD_FIXUP_REQUIRED = 1,
     CYANRIP_BCD_FIXUP_NOT_REQUIRED = 2,
 };
 
-/* How the Q sub-channel is read for the pregap search. Raw P-W is preferred
- * where the drive supports it, since the Q CRC then comes off the disc rather
- * than from the drive, which may substitute its last good frame for a sector
- * it can't read. Settled by a probe on first use.
- */
 enum cyanrip_subq_read_mode {
     CYANRIP_SUBQ_READ_UNDETERMINED = 0,
     CYANRIP_SUBQ_READ_RAW_PW = 1,
     CYANRIP_SUBQ_READ_FORMATTED_Q = 2,
 };
 
-/* How the pregap search of a track went, for the report. The search runs
- * before the log file exists, so what it has to say is kept here and
- * written out with the gaps. */
+/* Pregap search outcome, kept for the log which doesn't exist yet when it runs */
 enum cyanrip_pregap_search_result {
-    CYANRIP_PREGAP_SEARCH_NOT_RUN = 0,  /* nothing to search: first or data track, or the TOC knew */
-    CYANRIP_PREGAP_SEARCH_DONE,         /* a result was reached, pregap or none */
-    CYANRIP_PREGAP_SEARCH_UNREADABLE,   /* unreadable sectors at the boundary, no way to place it */
-    CYANRIP_PREGAP_SEARCH_CRC_BUDGET,   /* too many Q frames failed the CRC */
-    CYANRIP_PREGAP_SEARCH_READ_ERROR,   /* a read failed outright */
+    CYANRIP_PREGAP_SEARCH_NOT_RUN = 0,
+    CYANRIP_PREGAP_SEARCH_DONE,
+    CYANRIP_PREGAP_SEARCH_UNREADABLE,
+    CYANRIP_PREGAP_SEARCH_CRC_BUDGET,
+    CYANRIP_PREGAP_SEARCH_READ_ERROR,
 };
 
 typedef struct cyanrip_pregap_info {
     enum cyanrip_pregap_search_result result;
-    int damaged_frames;  /* damaged Q frames the boundary had to be placed with */
-    int repaired_frames; /* of which repaired outright (single bit error) */
-    int q_skew;          /* sectors the Q sub-channel ran ahead (+) or behind (-)
-                          * of the TOC at the boundary; the pregap was placed
-                          * by the frame's absolute time to make up for it */
-    lsn_t failed_lsn;    /* CYANRIP_PREGAP_SEARCH_READ_ERROR: where and with what */
+    int damaged_frames;
+    int repaired_frames; /* single bit errors */
+    int q_skew;          /* Q sub-channel ahead (+) or behind (-) the TOC */
+    lsn_t failed_lsn;
     int failed_error;
 } cyanrip_pregap_info;
 
@@ -317,7 +303,7 @@ typedef struct cyanrip_ctx {
 
     enum cyanrip_bcd_fixup_status subq_bcd_fixup_status;
     enum cyanrip_subq_read_mode subq_read_mode;
-    int subq_probe_frames; /* raw P-W frames the probe read, and how many had a valid CRC */
+    int subq_probe_frames;
     int subq_probe_valid_frames;
 
     /* ETA */
