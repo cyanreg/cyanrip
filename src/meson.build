@@ -16,6 +16,9 @@ endif
 
 static_build = get_option('default_library') == 'static'
 
+# The macOS sub-channel reader needs cdio_get_device_fd()
+libcdio_version = host_machine.system() == 'darwin' ? '>= 2.3.0' : '>= 2.0'
+
 # Required dependencies
 dependencies = [
     # ffmpeg libs
@@ -26,7 +29,7 @@ dependencies = [
     dependency('libavutil', version: '>= 57.25.100'),
 
     # other dependencies
-    dependency('libcdio', version: '>= 2.0'),
+    dependency('libcdio', version: libcdio_version),
     dependency('libcdio_paranoia', version: '>= 10.2'),
     dependency('libmusicbrainz5', version: '>= 5.1', static: static_build),
     dependency('libcurl', version: '>=7.66.0'),
