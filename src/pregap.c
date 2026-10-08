@@ -108,8 +108,10 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
     if (!ret && subq.adr == 1 && subq.track_number == prev_track_number) {
         const lsn_t confirm_lsn = lsn - 1;
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, confirm_lsn, &total_failures);
-        if (ret && !subq_read_failure_is_skippable(ret, total_failures))
+        if (ret && !subq_read_failure_is_skippable(ret, total_failures)) {
+            lsn = confirm_lsn;
             goto fail;
+        }
         if (!ret && subq.adr == 1 && subq.track_number == prev_track_number) {
             av_free(audio_subq_buf);
             return CDIO_INVALID_LSN;
@@ -138,8 +140,10 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
 
             /* Confirm with the sector below, a wrong left bound can't be recovered from */
             ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, lsn - 1, &total_failures);
-            if (ret && !subq_read_failure_is_skippable(ret, total_failures))
+            if (ret && !subq_read_failure_is_skippable(ret, total_failures)) {
+                lsn = lsn - 1;
                 goto fail;
+            }
             if (!ret && subq.adr == 1 && subq.track_number == prev_track_number)
                 break;
             continue;
@@ -159,8 +163,10 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
             continue;
         }
         ret = subq_read_with_retries(ctx, audio_subq_buf, &subq, confirm_lsn, &total_failures);
-        if (ret && !subq_read_failure_is_skippable(ret, total_failures))
+        if (ret && !subq_read_failure_is_skippable(ret, total_failures)) {
+            lsn = confirm_lsn;
             goto fail;
+        }
         if (!ret && subq.adr == 1 && subq.track_number == track_number) {
             right_bound = lsn;
             right_bound_is_pregap = is_pregap;

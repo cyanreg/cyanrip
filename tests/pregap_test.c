@@ -70,6 +70,7 @@ typedef struct {
     int stale_damage; /* 0: spare byte, 1: one bit of absolute time, 2: both */
     int q_offset; /* Q sub-channel runs this many sectors ahead of the TOC */
     lsn_t ctx_start_lsn; /* ctx->start_lsn, for the first track */
+    lsn_t read_error; /* reads of this sector fail outright, not just its CRC */
 
     lsn_fault_t faults[MAX_FAULTS];
     int num_faults;
@@ -89,6 +90,7 @@ static void make_disc(lsn_t prev_start, lsn_t pregap_start, lsn_t cur_start)
 {
     memset(&disc, 0, sizeof(disc));
     disc.stale = CDIO_INVALID_LSN;
+    disc.read_error = CDIO_INVALID_LSN;
     disc.first_track_num = 1;
     disc.prev_track_number = 5;
     disc.cur_track_number = 6;
@@ -194,6 +196,8 @@ static int fake_subq_frame(lsn_t lsn, uint8_t *q)
 static driver_return_code_t fake_read_subq(uint8_t *buf, lsn_t lsn)
 {
     disc.reads_issued++;
+    if (lsn == disc.read_error)
+        return DRIVER_OP_NOT_PERMITTED;
 
     uint8_t *q = buf + CDIO_CD_FRAMESIZE_RAW;
 
@@ -221,6 +225,8 @@ static driver_return_code_t fake_read_subpw(uint8_t *buf, lsn_t lsn)
         return DRIVER_OP_UNSUPPORTED;
 
     disc.reads_issued++;
+    if (lsn == disc.read_error)
+        return DRIVER_OP_NOT_PERMITTED;
 
     uint8_t *pw = buf + CDIO_CD_FRAMESIZE_RAW;
     memset(pw, 0, CDIO_CD_FRAMESIZE_SUB);
@@ -682,6 +688,32 @@ int main(void)
         lsn_t got = run();
         check_lsn("wide dead zone gives up", got, CDIO_INVALID_LSN);
         check_true("failure budget bounds the read count", disc.reads_issued < 2000);
+    }
+
+    /* Read errors on the confirming reads report the sector that failed */
+    {
+        make_disc(1000, 1300, 1300);
+        disc.read_error = 1298;
+        lsn_t got = run();
+        check_lsn("read error confirming no pregap", got, CDIO_INVALID_LSN);
+        check_true("read error confirming no pregap: reported",
+                   disc.info.result == CYANRIP_PREGAP_SEARCH_READ_ERROR &&
+                   disc.info.failed_error == DRIVER_OP_NOT_PERMITTED);
+        check_lsn("read error confirming no pregap: failed LSN", disc.info.failed_lsn, 1298);
+    }
+    {
+        make_disc(1000, 1150, 1300);
+        disc.read_error = 1148;
+        lsn_t got = run();
+        check_lsn("read error confirming the left bound", got, CDIO_INVALID_LSN);
+        check_lsn("read error confirming the left bound: failed LSN", disc.info.failed_lsn, 1148);
+    }
+    {
+        make_disc(1000, 1100, 1300);
+        disc.read_error = 1150;
+        lsn_t got = run();
+        check_lsn("read error confirming the right bound", got, CDIO_INVALID_LSN);
+        check_lsn("read error confirming the right bound: failed LSN", disc.info.failed_lsn, 1150);
     }
 
     if (fails) {
