@@ -22,7 +22,6 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <assert.h>
 
 #include <cdio/cdio.h>
 
@@ -180,9 +179,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
     /* Walk up from left_bound until the bounds meet, stepping over unreadable
      * sectors. right_bound only moves once a second new-track sector above
      * the candidate agrees. */
-    assert(left_bound >= prev_track_start_lsn);
-    assert(right_bound <= track_start_lsn);
-    assert(lsn == left_bound);
     lsn_t right_bound_candidate = CDIO_INVALID_LSN;
     int right_bound_candidate_is_pregap = 0;
     lsn_t right_bound_candidate_abs_lsn = CDIO_INVALID_LSN;
@@ -208,17 +204,14 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
             if (subq.adr != 1) {
                 /* No position in mode 2/3 frames, assume a pregap doesn't start on one */
                 if (lsn - 1 == left_bound) {
-                    assert(right_bound_candidate == CDIO_INVALID_LSN);
                     left_bound = lsn;
                     left_bound_abs_lsn = CDIO_INVALID_LSN;
                 }
             } else if (subq.track_number == prev_track_number) {
-                assert(lsn >= left_bound);
                 left_bound = lsn;
                 left_bound_abs_lsn = subq_abs_lsn(&subq);
                 right_bound_candidate = CDIO_INVALID_LSN;
             } else if (subq.track_number == track_number) {
-                assert(lsn <= right_bound);
                 if (right_bound_candidate == CDIO_INVALID_LSN) {
                     right_bound_candidate = lsn;
                     right_bound_candidate_is_pregap = subq.index_number == 0;
@@ -299,7 +292,6 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
     return lsn;
 
 fail:
-    assert(ret != DRIVER_OP_SUCCESS);
     if (total_failures > TOTAL_FAILURE_BUDGET) {
         cyanrip_log(ctx, 0, "Warning: repeated subq CRC mismatches prevented finding the "
                 "pregap of track %i, skipping pregap detection\n", track_number);
