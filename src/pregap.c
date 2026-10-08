@@ -68,7 +68,7 @@ lsn_t cyanrip_get_track_pregap_lsn(cyanrip_ctx *ctx, const track_t track_number,
     if (track_number == first_track_number || track_number <= 1)
         return ctx->start_lsn;
 
-    const uint8_t prev_track_number = track_number - 1;
+    const track_t prev_track_number = track_number - 1;
 
     if (cdio_get_track_format(ctx->cdio, prev_track_number) != TRACK_FORMAT_AUDIO)
         return CDIO_INVALID_LSN;
