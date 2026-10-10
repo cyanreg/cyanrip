@@ -419,7 +419,7 @@ static int crip_replaygain_meta_album(cyanrip_ctx *ctx)
     return 0;
 }
 
-/* Drives give a disc or track without an MCN or ISRC as empty or as zeroes */
+/* An MCN or ISRC of nothing but zeroes is none at all */
 static int crip_code_is_set(const char *code)
 {
     return code[strspn(code, "0")] != '\0';
@@ -1906,7 +1906,7 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
-    /* Rather than once for every path built from them, mid-rip */
+    /* Syntax errors would otherwise only come up mid-rip, for every path */
     const char *schemes[][2] = {
         { "directory", ctx->settings.folder_name_scheme },
         { "track",     ctx->settings.track_name_scheme  },
