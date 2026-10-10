@@ -229,7 +229,8 @@ static int fetch_image(cyanrip_ctx *ctx, CURL *curl_ctx, CRIPArt *art,
         art->size = 0;
     } else {
         char header[99];
-        snprintf(header, sizeof(header), "data:%s;base64,", content_type);
+        snprintf(header, sizeof(header), "data:%s;base64,",
+                 content_type ? content_type : "application/octet-stream");
 
         size_t data_len = AV_BASE64_SIZE(art->size);
         char *data = av_mallocz(strlen(header) + data_len);

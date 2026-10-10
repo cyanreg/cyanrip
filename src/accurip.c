@@ -79,13 +79,19 @@ typedef struct RecvCtx {
     size_t size;
 } RecvCtx;
 
+/* Kept NUL-terminated, for the error page check */
 static size_t receive_data(void *buffer, size_t size, size_t nb, void *opaque)
 {
     RecvCtx *rctx = opaque;
 
-    rctx->data = av_realloc(rctx->data, rctx->size + (size * nb));
-    memcpy(rctx->data + rctx->size, buffer, size * nb);
+    uint8_t *data = av_realloc(rctx->data, rctx->size + (size * nb) + 1);
+    if (!data)
+        return 0;
+
+    memcpy(data + rctx->size, buffer, size * nb);
+    rctx->data = data;
     rctx->size += size * nb;
+    rctx->data[rctx->size] = '\0';
 
     return size * nb;
 }
@@ -168,7 +174,11 @@ int crip_fill_accurip(cyanrip_ctx *ctx)
     }
 
     /* If we have a binary we're pretty sure we've found a match */
-    if (strcmp(content_type, "application/octet-stream")) {
+    if (!rctx.data) {
+        cyanrip_log(ctx, 0, "Unable to get AccuRIP DB data: missing entry!\n");
+        ctx->ar_db_status = CYANRIP_ACCUDB_NOT_FOUND;
+        goto end;
+    } else if (!content_type || strcmp(content_type, "application/octet-stream")) {
         /* Atrocious heuristics to determine whether we have an error or binary data, don't look */
         char *html_loc = strstr((const char *)rctx.data, "html");
         if (html_loc && (html_loc - (char *)rctx.data) < 64) {
