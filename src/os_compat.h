@@ -71,7 +71,7 @@ typedef struct stat cyanrip_stat_t;
 #endif
 
 #if defined(__MACH__)
-#define HAS_COLUMN 0
+#define HAS_CH_COLUMN 0
 #endif
 
 #if defined(HAVE_WMAIN)
