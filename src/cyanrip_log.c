@@ -99,8 +99,16 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         cyanrip_log(ctx, 0, "    Frames:      %u\n", t->end_lsn_sig - t->start_lsn_sig + 1);
         print_offsets(ctx, t);
 
-        if (t->computed_crcs)
+        if (t->computed_crcs) {
             cyanrip_log(ctx, 0, "\n  CRC32:         %08X\n", t->eac_crc);
+            if (!t->edc_sectors)
+                cyanrip_log(ctx, 0, "  Sector EDC:    none to check\n");
+            else if (t->edc_errors)
+                cyanrip_log(ctx, 0, "  Sector EDC:    %i of %i sectors mismatched\n",
+                            t->edc_errors, t->edc_sectors);
+            else
+                cyanrip_log(ctx, 0, "  Sector EDC:    all %i sectors match\n", t->edc_sectors);
+        }
 
         if (!ctx->settings.disable_data_tracks) {
             cyanrip_log(ctx, 0, "\n  File(s):\n");

@@ -58,15 +58,26 @@ def bcd(v):
     return ((v // 10) << 4) | (v % 10)
 
 
+def edc(data):
+    """ECMA-130's EDC: CRC-32 with polynomial 0x8001801B, LSB first."""
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0xD8018001 if crc & 1 else 0)
+    return crc
+
+
 def mode1_sector(lba, payload):
     """A MODE1/2352 sector: sync, BCD MSF header, mode byte, 2048 bytes of
-    payload; EDC/ECC left zeroed (nothing in the tests parses it)."""
+    payload and the EDC; ECC left zeroed (nothing in the tests checks it)."""
     m, rem = divmod(lba + PREGAP_SECTORS, 60 * SECTORS_PER_SEC)
     s, f = divmod(rem, SECTORS_PER_SEC)
     sync = b"\x00" + b"\xff" * 10 + b"\x00"
     header = bytes([bcd(m), bcd(s), bcd(f), 0x01])
     data = payload[:2048].ljust(2048, b"\x00")
-    return (sync + header + data).ljust(SECTOR, b"\x00")
+    sector = sync + header + data
+    return (sector + struct.pack("<I", edc(sector))).ljust(SECTOR, b"\x00")
 
 
 def gen_bins(audio):

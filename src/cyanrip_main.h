@@ -190,6 +190,8 @@ typedef struct cyanrip_track {
 
     int computed_crcs;
     uint32_t eac_crc;
+    int edc_sectors; /* Data track sectors with an EDC to check */
+    int edc_errors; /* Of those, the ones that never matched it */
     uint32_t acurip_checksum_v1;
     uint32_t acurip_checksum_v1_450;
     uint32_t acurip_checksum_v2;

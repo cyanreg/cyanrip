@@ -771,6 +771,32 @@ static int crip_read_raw_frame(cyanrip_ctx *ctx, uint8_t *data, lsn_t lsn)
     return AVERROR_EXTERNAL;
 }
 
+/* Whether a raw sector's EDC matches its contents, -1 if it has none: mode 0,
+ * formless mode 2, or a mode 2 form 2 sector without the optional EDC */
+static int data_sector_edc_ok(const AVCRC *edc, const uint8_t *s)
+{
+    static const uint8_t sync[12] = { 0x00, 0xff, 0xff, 0xff, 0xff, 0xff,
+                                      0xff, 0xff, 0xff, 0xff, 0xff, 0x00 };
+    if (memcmp(s, sync, sizeof(sync)))
+        return 0;
+
+    switch (s[15]) {
+    case 1:
+        return av_crc(edc, 0, s, 2064) == AV_RL32(&s[2064]);
+    case 2:
+        /* CD-ROM XA repeats the subheader, formless mode 2 has none */
+        if (memcmp(&s[16], &s[20], 4))
+            return -1;
+        if (!(s[18] & 0x20))
+            return av_crc(edc, 0, &s[16], 2056) == AV_RL32(&s[2072]);
+        if (!AV_RL32(&s[2348]))
+            return -1;
+        return av_crc(edc, 0, &s[16], 2332) == AV_RL32(&s[2348]);
+    default:
+        return -1;
+    }
+}
+
 /* Copies a data track out sector by sector, as a raw MODE1/2352 binary,
  * which is what the CUE sheet the rip generates references. */
 static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -824,6 +850,12 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
     const AVCRC *crc_table = av_crc_get_table(AV_CRC_32_IEEE_LE);
     uint32_t crc = UINT32_MAX;
 
+    /* ECMA-130's EDC, x^32 + x^31 + x^16 + x^15 + x^4 + x^3 + x + 1, LSB first */
+    AVCRC edc_table[257];
+    av_crc_init(edc_table, 1, 32, 0xD8018001, sizeof(edc_table));
+
+    t->edc_sectors = t->edc_errors = 0;
+
     const int start_err = ctx->total_error_count;
 
     CRIPRipProgress prog;
@@ -837,14 +869,26 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
             goto end;
         }
 
+        /* Some drives return damaged sectors without signalling an error,
+         * which only the EDC tells apart */
         int err = crip_read_raw_frame(ctx, data, t->start_lsn + i);
-        for (int j = 0; err && (j < ctx->settings.max_retries); j++)
+        int edc = err ? 0 : data_sector_edc_ok(edc_table, data);
+        for (int j = 0; (err || !edc) && (j < ctx->settings.max_retries); j++) {
             err = crip_read_raw_frame(ctx, data, t->start_lsn + i);
+            edc = err ? 0 : data_sector_edc_ok(edc_table, data);
+        }
 
         if (err) {
             cyanrip_log(ctx, 0, "\nFrame read failed at LSN %i!\n", t->start_lsn + i);
             memset(data, 0, CDIO_CD_FRAMESIZE_RAW);
             ctx->total_error_count++;
+        } else if (edc >= 0) {
+            t->edc_sectors++;
+            if (!edc) {
+                cyanrip_log(ctx, 0, "\nSector EDC mismatch at LSN %i!\n", t->start_lsn + i);
+                t->edc_errors++;
+                ctx->total_error_count++;
+            }
         }
 
         /* Stop now if requested */

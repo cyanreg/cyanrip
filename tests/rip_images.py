@@ -152,6 +152,22 @@ def sc_mixed():
     rip("nodata", "mixed.cue", "-X")
     expect("nodata", "2.flac:2", "3.flac:2", "log.log", "sheet.cue")
 
+    # Every sector's EDC is checked, so a damaged one is caught even when the
+    # read itself succeeds
+    if "Sector EDC:    all 150 sectors match" not in (WORK / "mixed.log").read_text():
+        fail("mixed: data track EDCs not verified")
+
+    shutil.copy(WORK / "mixed.cue", WORK / "damaged.cue")
+    damaged = bytearray((WORK / "mixed.bin").read_bytes())
+    damaged[10 * 2352 + 100] ^= 0x01
+    (WORK / "damaged.bin").write_bytes(damaged)
+    ec, log = crip("-d", WORK / "damaged.cue", "-N", "-A", "-U", "-s", "0",
+                   "-P", "0", "-r", "1", "-o", "flac", "-D", WORK / "out_damaged",
+                   "-L", "log", "-M", "sheet")
+    if ec == 0 or "Sector EDC mismatch at LSN 10!" not in log or \
+       "1 of 150 sectors mismatched" not in log:
+        fail(f"damaged: EDC mismatch not reported (exit {ec})")
+
 
 def sc_trailing():
     # A trailing data track with a pregap: the pregap is dropped rather than
