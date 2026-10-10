@@ -1,6 +1,7 @@
 0.9.4-rc1
 =========
  - New option parser: long options, typed values, saner errors
+ - Option values out of their range, overflowing, or NaN, are refused rather than clamped
  - CUE sheet-only mode, without ripping anything (-J)
  - Rip log checksum verification (-Y)
  - Label and catalog number tagging from MusicBrainz
@@ -13,6 +14,8 @@
  - Automatic deemphasis of preemphasized discs now actually happens
  - CUE sheets reference their files relative to the sheet
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
+ - Naming schemes are checked before ripping, and condition tokens matching no
+   key compare as written
  - Merged pregaps get the right INDEX 01 in CUE sheets, and the log gives
    the bounds of pregap tracks and of the tracks they were split from
  - The first track's pregap on discs not starting at track 1 is handled
@@ -28,6 +31,7 @@
  - AccurateRip lookups now find discs with data tracks, and each track is
    checked against its own database entry; the AccurateRip ID is logged
  - Fixed a crash on overlong filenames
+ - Fixed crashes on unexpected AccurateRip replies
  - FFmpeg 8.0+ compatibility
 
 0.9.3
