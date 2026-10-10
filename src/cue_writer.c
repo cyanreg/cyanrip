@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <libavutil/bprint.h>
+
 #include "cyanrip_log.h"
 #include "cue_writer.h"
 #include "os_compat.h"
@@ -43,12 +45,43 @@ int cyanrip_cue_init(cyanrip_ctx *ctx)
     return 0;
 }
 
+/* CUE sheets have no way of escaping a quote inside a quoted string, so
+ * replace them the way file names get them, and keep values on one line */
+static char *cue_str(cyanrip_ctx *ctx, const char *str)
+{
+    int unicode = ctx->settings.sanitize_method == CRIP_SANITIZE_UNICODE ||
+                  ctx->settings.sanitize_method == CRIP_SANITIZE_OS_UNICODE;
+    int quote = 0;
+    char *ret = NULL;
+    AVBPrint bp;
+
+    if (!str)
+        return NULL;
+
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    for (; *str; str++) {
+        if (*str == '"') {
+            av_bprintf(&bp, "%s", !unicode ? "'" : quote ? "”" : "“");
+            quote ^= 1;
+        } else if (*str == '\n' || *str == '\r') {
+            av_bprint_chars(&bp, ' ', 1);
+        } else {
+            av_bprint_chars(&bp, *str, 1);
+        }
+    }
+
+    av_bprint_finalize(&bp, &ret);
+    return ret;
+}
+
 #define CLOG(FORMAT, DICT, TAG)                                                \
     do {                                                                       \
-        if (dict_get(DICT, TAG)) {                                             \
+        char *val = cue_str(ctx, dict_get(DICT, TAG));                         \
+        if (val) {                                                             \
             for (int Z = 0; Z < ctx->settings.outputs_num; Z++)                \
-                fprintf(ctx->cuefile[Z], FORMAT, dict_get(DICT, TAG));         \
+                fprintf(ctx->cuefile[Z], FORMAT, val);                         \
         }                                                                      \
+        av_free(val);                                                          \
     } while (0)
 
 void cyanrip_cue_start(cyanrip_ctx *ctx)
@@ -63,9 +96,11 @@ void cyanrip_cue_start(cyanrip_ctx *ctx)
             strcmp(d->key, "album") && strcmp(d->key, "title")) {
             for (int Z = 0; Z < ctx->settings.outputs_num; Z++) {
                 char *tmp = av_strdup(d->key);
+                char *val = cue_str(ctx, d->value);
                 for (int i = 0; tmp[i]; i++)
                     tmp[i] = av_toupper(tmp[i]);
-                fprintf(ctx->cuefile[Z], "REM %s \"%s\"\n", tmp, d->value);
+                fprintf(ctx->cuefile[Z], "REM %s \"%s\"\n", tmp, val);
+                av_free(val);
                 av_free(tmp);
             }
         }

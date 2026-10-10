@@ -418,6 +418,15 @@ def sc_cue_only():
     if crip("-d", WORK / "basic.cue", "-J", "-I")[0] != 1:
         fail("cue_only: -J with -I did not error out")
 
+    # A quote in a value can't be escaped, and must not end the string
+    rip("quotes", "basic.cue", "-J", "-a", 'album=12" Mix:album_artist=A "B"',
+        "-t", '1=title=Say "Hi"\nagain')
+    for line in (WORK / "out_quotes" / "sheet.cue").read_text().splitlines():
+        if line.strip().startswith(("TITLE", "PERFORMER")) and line.count('"') != 2:
+            fail(f"quotes: broken CUE line {line!r}")
+    if 'TITLE "Say \u201cHi\u201d again"' not in (WORK / "out_quotes" / "sheet.cue").read_text():
+        fail("quotes: quotes and line breaks not replaced")
+
 
 def sc_errors():
     # A broken scheme stops the rip before anything is written

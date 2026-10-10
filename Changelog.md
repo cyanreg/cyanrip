@@ -13,6 +13,7 @@
  - Embedded cover art is now typed as a front cover, so file managers thumbnail it
  - Automatic deemphasis of preemphasized discs now actually happens
  - CUE sheets reference their files relative to the sheet
+ - Quotes and line breaks in metadata no longer break CUE sheet lines
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
  - Naming schemes are checked before ripping, and condition tokens matching no
    key compare as written
