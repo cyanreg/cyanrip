@@ -349,6 +349,15 @@ fail:
     return AVERROR(EINVAL);
 }
 
+int crip_check_scheme(cyanrip_ctx *ctx, const char *scheme)
+{
+    AVBPrint buf;
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    int ret = process_cond(ctx, &buf, NULL, "", scheme);
+    av_bprint_finalize(&buf, NULL);
+    return ret;
+}
+
 /* Schemes with conditionals easily produce spaces at the edges of path
  * components or before the extension, which no one ever wants */
 static void crip_trim_path_components(char *path)

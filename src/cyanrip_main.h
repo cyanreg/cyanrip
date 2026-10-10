@@ -298,6 +298,10 @@ typedef struct cyanrip_out_fmt {
 
 extern const cyanrip_out_fmt crip_fmt_info[];
 
+/* Whether a naming scheme parses, which doesn't depend on the metadata,
+ * logging why not */
+int crip_check_scheme(cyanrip_ctx *ctx, const char *scheme);
+
 char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
                     const cyanrip_out_fmt *fmt, void *arg);
 

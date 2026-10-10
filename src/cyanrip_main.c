@@ -1904,6 +1904,22 @@ int main(int argc, char **argv)
     if (cyanrip_ctx_init(&ctx, &settings))
         return 1;
 
+    /* Rather than once for every path built from them, mid-rip */
+    const char *schemes[][2] = {
+        { "directory", ctx->settings.folder_name_scheme },
+        { "track",     ctx->settings.track_name_scheme  },
+        { "log",       ctx->settings.log_name_scheme    },
+        { "CUE",       ctx->settings.cue_name_scheme    },
+    };
+    for (int i = 0; i < FF_ARRAY_ELEMS(schemes); i++) {
+        if (crip_check_scheme(ctx, schemes[i][1]) < 0) {
+            cyanrip_log(ctx, 0, "Invalid %s naming scheme \"%s\"!\n",
+                        schemes[i][0], schemes[i][1]);
+            ctx->total_error_count++;
+            goto end;
+        }
+    }
+
     if (!settings.offset && !offset_set && !settings.print_info_only &&
         !find_drive_offset_range && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC)) {
         cyanrip_log(ctx, 0, "Offset is unset! To continue with an offset of 0, run with -s 0!\n");

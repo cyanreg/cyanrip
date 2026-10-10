@@ -420,6 +420,13 @@ def sc_cue_only():
 
 
 def sc_errors():
+    # A broken scheme stops the rip before anything is written
+    ec, log = crip("-d", WORK / "basic.cue", "-N", "-A", "-U", "-s", "0", "-P", "0",
+                   "-o", "flac", "-D", WORK / "out_badscheme", "-F", "{track")
+    if ec != 1 or "Invalid track naming scheme" not in log or \
+       (WORK / "out_badscheme").exists():
+        fail(f"badscheme: not refused up front (exit {ec})")
+
     # Schemes sending multiple tracks to one file must be warned about
     rip("collide", "basic.cue", "-F", "{album}")
     if "resolve to the same file" not in (WORK / "collide.log").read_text():

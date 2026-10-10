@@ -146,6 +146,32 @@ int main(void)
     check_track_path("{if #nokey# == #nokey#same}{track}", t, "folder/same1.flac");
     check_track_path("{if #nokey# != #nokey#differ}{track}", t, "folder/1.flac");
 
+    /* Syntax errors are caught without any metadata, as main() checks the
+     * schemes before anything is looked up. The truncated conditions used
+     * to leak their values. */
+    static const char *const bad_schemes[] = {
+        "{track", "{if #track#}", "{if #track# ~ #1#x}",
+        "{if #track# == }", "{if #track# == #1}",
+    };
+    for (int i = 0; i < FF_ARRAY_ELEMS(bad_schemes); i++) {
+        if (!crip_check_scheme(&ctx, bad_schemes[i])) {
+            printf("FAIL: scheme \"%s\" passed the check\n", bad_schemes[i]);
+            fails++;
+        }
+    }
+
+    static const char *const good_schemes[] = {
+        "{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]",
+        "{if #totaldiscs# > #1#|disc|.}{track} - {title}",
+        "{album}{if #totaldiscs# > #1# CD|disc|}", "plain", "",
+    };
+    for (int i = 0; i < FF_ARRAY_ELEMS(good_schemes); i++) {
+        if (crip_check_scheme(&ctx, good_schemes[i])) {
+            printf("FAIL: scheme \"%s\" failed the check\n", good_schemes[i]);
+            fails++;
+        }
+    }
+
     if (fails) {
         printf("%i check(s) failed\n", fails);
         return 1;
