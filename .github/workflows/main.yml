@@ -28,7 +28,18 @@ jobs:
 
       - name: Test
         run: meson test -C build --print-errorlogs
-  
+
+      # UBSan only prints by default, and the rip tests keep cyanrip's
+      # output only when it fails
+      - name: Test with sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          meson setup build-san -Db_sanitize=address,undefined -Db_lundef=false
+          ninja -C build-san
+          meson test -C build-san --print-errorlogs
+
   macos:
     runs-on: macos-latest
     steps:
