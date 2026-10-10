@@ -207,6 +207,9 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
 
         READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid", 0);
 
+        /* As Picard names it, which is what taggers and players look for */
+        READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "musicbrainz_trackid", 0);
+
         ctx->tracks[i].mb_length_ms = mb5_track_get_length(track);
         if (!ctx->tracks[i].mb_length_ms && recording)
             ctx->tracks[i].mb_length_ms = mb5_recording_get_length(recording);

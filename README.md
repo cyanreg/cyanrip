@@ -391,7 +391,7 @@ Besides any tags given via `-a` and `-t`, these metadata keys are available:
 | `disc`, `totaldiscs`, `discname` | The disc's position in the release, and its title if it has one |
 | `track`, `tracktotal` | The track's number (padded as described above), and the disc's track count |
 | `title`, `artist`, `isrc` | The track's |
-| `mbid` | The track's MusicBrainz recording ID |
+| `mbid`, `musicbrainz_trackid` | The track's MusicBrainz recording ID, the latter being the tag taggers and players read it from |
 | `musicbrainz_albumid`, `musicbrainz_discid`, `cddb`, `disc_mcn` | The release and disc IDs, and the barcode the disc itself carries |
 | `format` | The output format, e.g. `FLAC` |
 
