@@ -13,6 +13,8 @@
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
  - Merged pregaps get the right INDEX 01 in CUE sheets, and the log gives
    the bounds of pregap tracks and of the tracks they were split from
+ - The first track's pregap on discs not starting at track 1 is handled
+   like track 1's, rather than written to memory before the track list
  - Data tracks are ripped to raw MODE1/2352 binaries and referenced from the CUE sheet
  - Data tracks no longer leave stray files
  - Data track sectors are checked against their EDC, which catches damaged

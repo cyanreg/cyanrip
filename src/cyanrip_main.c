@@ -1291,7 +1291,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     /* Pregaps */
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *ct = &ctx->tracks[i - 0];
-        cyanrip_track *lt = ct->number > 1 ? &ctx->tracks[i - 1] : NULL;
+        cyanrip_track *lt = i ? &ctx->tracks[i - 1] : NULL;
 
         if (ct->pregap_lsn == CDIO_INVALID_LSN)
             continue;
@@ -1307,7 +1307,7 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
             else
                 cyanrip_log(ctx, 0, "merging into track %i\n", lt->number);
 
-            if ((ct->number - 1) == 0)
+            if (!lt)
                 ct->dropped_pregap_start = ct->pregap_lsn;
             break;
         case CYANRIP_PREGAP_DROP:
@@ -1324,14 +1324,16 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
                 lt->end_lsn = ct->pregap_lsn - 1;
             break;
         case CYANRIP_PREGAP_TRACK:
-            cyanrip_log(ctx, 0, "splitting off into a new track, number %i\n", ct->number > 1 ? ct->number : 0);
+            cyanrip_log(ctx, 0, "splitting off into a new track, number %i\n",
+                        lt ? ct->number : ct->number - 1);
 
-            if (lt)
+            /* The first track's pregap gets the number before it, others
+             * push the numbers up */
+            if (lt) {
                 lt->end_lsn = ct->pregap_lsn - 1;
-
-            if (ct->number > 1) /* Push all track numbers up if needed */
                 for (int j = i; j < ctx->nb_tracks; j++)
                     ctx->tracks[j].number++;
+            }
 
             memmove(&ctx->tracks[i + 1], &ctx->tracks[i],
                     sizeof(cyanrip_track)*(ctx->nb_tracks - i));

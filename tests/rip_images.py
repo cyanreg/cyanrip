@@ -126,6 +126,26 @@ def sc_pregap():
     if "INDEX 00 00:00:00\n    INDEX 01 00:01:00" not in sheet:
         fail("merge: track 2 indices don't match its merged pregap")
 
+    # A disc starting at track 3 handles its first pregap as track 1's would
+    # be, rather than as if a track came before it
+    shutil.copy(WORK / "pregap.bin", WORK / "first3gap.bin")
+    (WORK / "first3gap.cue").write_text(
+        'FILE "first3gap.bin" BINARY\n'
+        "  TRACK 03 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:02:00\n"
+        "  TRACK 04 AUDIO\n    INDEX 01 00:04:00\n"
+        "  TRACK 05 AUDIO\n    INDEX 01 00:06:00\n")
+    rip("first3", "first3gap.cue")
+    expect("first3", "3.flac:2", "4.flac:2", "5.flac:2", "log.log", "sheet.cue")
+    if "unmerged" not in (WORK / "first3.log").read_text():
+        fail("first3: first pregap taken for one following a track")
+
+    rip("first3_track", "first3gap.cue", "-p", "3=track")
+    expect("first3_track", "2.flac:2", "3.flac:2", "4.flac:2", "5.flac:2",
+           "log.log", "sheet.cue")
+
+    rip("first3_merge", "first3gap.cue", "-p", "3=merge")
+    expect("first3_merge", "3.flac:4", "4.flac:2", "5.flac:2", "log.log", "sheet.cue")
+
 
 def data_track(name, img, track, lsn, frames):
     """The ripped data track must be the image's sectors, byte for byte"""
