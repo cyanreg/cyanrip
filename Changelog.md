@@ -5,6 +5,7 @@
  - Rip log checksum verification (-Y)
  - Label and catalog number tagging from MusicBrainz
  - Discs and tracks without an MCN or ISRC are no longer tagged with zeroes
+ - -S sets the speed of drives which don't advertise it, rather than refusing to
  - MusicBrainz submission URLs are printed as a QR code (needs libqrencode)
  - AcoustID fingerprinting (needs libchromaprint): fingerprints are submitted
    when the disc is accurately ripped and on MusicBrainz, and tagged otherwise

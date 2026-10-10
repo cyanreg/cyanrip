@@ -266,11 +266,10 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
     cyanrip_log(ctx, 0, "%s%s\n",
                 ctx->settings.over_under_read_frames < 0 ? "Underread mode: " : "Overread mode:  ",
                 ctx->settings.overread_leadinout ? "read in lead-in/lead-out" : "fill with silence in lead-in/lead-out");
-    if (ctx->settings.speed && (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED))
+    if (ctx->settings.speed)
         cyanrip_log(ctx, 0, "Speed:          %ix\n", ctx->settings.speed);
     else
-        cyanrip_log(ctx, 0, "Speed:          default (%s)\n",
-                    (ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED) ? "changeable" : "unchangeable");
+        cyanrip_log(ctx, 0, "Speed:          default\n");
     cyanrip_log(ctx, 0, "C2 errors:      %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
     if (ctx->settings.paranoia_level == crip_max_paranoia_level)

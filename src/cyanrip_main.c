@@ -231,21 +231,19 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     cdio_cddap_verbose_set(ctx->drive, CDDA_MESSAGE_LOGIT, CDDA_MESSAGE_FORGETIT);
 
+    /* Drives may not advertise a speed setting they honour, so try anyway */
     if (settings->speed) {
-        if (!(ctx->mcap & CDIO_DRIVE_CAP_MISC_SELECT_SPEED)) {
-            cyanrip_log(ctx, 0, "Device does not support changing speeds!\n");
-            cyanrip_ctx_end(&ctx);
-            return AVERROR(EINVAL);
-        }
-
         ret = cdio_cddap_speed_set(ctx->drive, settings->speed);
         msg = cdio_cddap_errors(ctx->drive);
         if (msg) {
             cyanrip_log(ctx, 0, "cdio error: %s\n", msg);
             cdio_cddap_free_messages(msg);
         }
-        if (ret)
+        if (ret) {
+            cyanrip_log(ctx, 0, "Device does not support changing speeds!\n");
+            cyanrip_ctx_end(&ctx);
             return AVERROR(EINVAL);
+        }
     }
 
     ctx->paranoia = cdio_paranoia_init(ctx->drive);
