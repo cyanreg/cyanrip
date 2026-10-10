@@ -38,6 +38,7 @@
    checked against its own database entry; the AccurateRip ID is logged
  - Fixed a crash on overlong filenames
  - Fixed crashes on unexpected AccurateRip replies
+ - Refusing to rip without an offset, and finding no offset with -f, exit with an error
  - FFmpeg 8.0+ compatibility
 
 0.9.3
