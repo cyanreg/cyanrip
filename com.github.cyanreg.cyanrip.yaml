@@ -64,6 +64,16 @@ modules:
             url: https://github.com/fukuchi/libqrencode/archive/refs/tags/v4.1.1.tar.gz
             sha256: 5385bc1b8c2f20f3b91d258bf8ccc8cf62023935df2d2676b5b67049f31a049c
 
+    - name: chromaprint
+      buildsystem: cmake-ninja
+      config-opts:
+          - -DBUILD_TOOLS=OFF
+          - -DBUILD_TESTS=OFF
+      sources:
+          - type: archive
+            url: https://github.com/acoustid/chromaprint/releases/download/v1.6.1/chromaprint-1.6.1.tar.gz
+            sha256: 3368805af0ee47b9df74df10b5001a44569e01df2844dab520031720dde9ad23
+
     - name: cyanrip
       buildsystem: meson
       sources:
