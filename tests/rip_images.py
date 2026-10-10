@@ -429,6 +429,10 @@ def sc_cue_only():
 
 
 def sc_errors():
+    # Finding no offset is a failure, not a successful run
+    if crip("-d", WORK / "basic.cue", "-f", "-N", "-A", "-U")[0] != 1:
+        fail("offset finding on a disc without AccurateRip entries didn't fail")
+
     # A broken scheme stops the rip before anything is written
     ec, log = crip("-d", WORK / "basic.cue", "-N", "-A", "-U", "-s", "0", "-P", "0",
                    "-o", "flac", "-D", WORK / "out_badscheme", "-F", "{track")

@@ -534,7 +534,8 @@ static int search_for_offset(cyanrip_track *t, int *offset_found,
     return 0;
 }
 
-static void search_for_drive_offset(cyanrip_ctx *ctx, int range)
+/* Returns whether an offset was found */
+static int search_for_drive_offset(cyanrip_ctx *ctx, int range)
 {
     int had_ar = 0, did_check = 0;
     int offset_found = 0, offset_found_samples = 0;
@@ -622,13 +623,14 @@ end:
         } else {
             cyanrip_log(ctx, 0, "Was not able to find drive offset with a radius of %i frames"
                         ", trying again with a larger radius...\n", range);
-            search_for_drive_offset(ctx, 2*range);
+            return search_for_drive_offset(ctx, 2*range);
         }
-        return;
-    } else {
-        cyanrip_log(ctx, 0, "Drive offset of %c%i found (confidence: %i)!\n",
-                    offset_found_samples >= 0 ? '+' : '-', abs(offset_found_samples), offset_found);
+        return 0;
     }
+
+    cyanrip_log(ctx, 0, "Drive offset of %c%i found (confidence: %i)!\n",
+                offset_found_samples >= 0 ? '+' : '-', abs(offset_found_samples), offset_found);
+    return 1;
 }
 
 static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
@@ -1923,6 +1925,7 @@ int main(int argc, char **argv)
     if (!settings.offset && !offset_set && !settings.print_info_only &&
         !find_drive_offset_range && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC)) {
         cyanrip_log(ctx, 0, "Offset is unset! To continue with an offset of 0, run with -s 0!\n");
+        ctx->total_error_count++;
         goto end;
     }
 
@@ -2014,7 +2017,8 @@ int main(int argc, char **argv)
     }
 
     if (find_drive_offset_range) {
-        search_for_drive_offset(ctx, find_drive_offset_range);
+        if (!search_for_drive_offset(ctx, find_drive_offset_range))
+            ctx->total_error_count++;
         goto end;
     }
 
