@@ -32,6 +32,12 @@ json_test = executable('json_test',
 )
 test('JSON reader', json_test)
 
+genopt_test = executable('genopt_test',
+    sources: [ 'genopt.c' ],
+    include_directories: [ '../src' ],
+)
+test('Option parsing', genopt_test)
+
 ## Integration tests
 ## =================
 ## Rip the disc image fixtures with the built binary and verify the
