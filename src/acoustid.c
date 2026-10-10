@@ -240,7 +240,7 @@ static int submit_fingerprints(cyanrip_ctx *ctx)
             continue;
 
         char duration[32];
-        snprintf(duration, sizeof(duration), "%zu", (t->nb_samples + 22050) / 44100);
+        snprintf(duration, sizeof(duration), "%i", (int)((t->nb_samples + 22050) / 44100));
 
         ret |= add_param(&body, curl_ctx, "duration", nb, duration);
         ret |= add_param(&body, curl_ctx, "fingerprint", nb, t->acoustid_fingerprint);
