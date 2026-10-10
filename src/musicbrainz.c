@@ -128,13 +128,8 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
             cyanrip_log(ctx, 0, "Got empty medium list.\n");
             return 1;
         }
-    } else {
-        medium_list_extra = mb5_release_media_matching_discid(release, discid);
-        if (!medium_list_extra) {
-            cyanrip_log(ctx, 0, "No mediums match DiscID!\n");
-            return 0;
-        }
-
+    } else if ((medium_list_extra = mb5_release_media_matching_discid(release, discid)) &&
+               mb5_medium_list_size(medium_list_extra)) {
         medium = mb5_medium_list_item(medium_list_extra, 0);
         if (!medium) {
             cyanrip_log(ctx, 0, "Got empty medium list.\n");
@@ -152,6 +147,44 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
                 }
             }
         }
+    } else {
+        /* A release given via -R which the DiscID isn't attached to: take
+         * its only medium, or the only one with as many tracks as the disc */
+        if (medium_list_extra)
+            mb5_medium_list_delete(medium_list_extra);
+        medium_list_extra = NULL;
+
+        int nb_audio = 0;
+        for (int i = 0; i < ctx->nb_cd_tracks; i++)
+            nb_audio += !ctx->tracks[i].track_is_data;
+
+        for (int i = 0; i < num_cds; i++) {
+            Mb5Medium tmp_medium = mb5_medium_list_item(medium_full_list, i);
+            int nb = mb5_track_list_size(mb5_medium_get_tracklist(tmp_medium));
+            if (num_cds > 1 && nb != ctx->nb_cd_tracks && nb != nb_audio)
+                continue;
+            if (medium) {
+                cyanrip_log(ctx, 0, "Several of the release's discs could be this one, "
+                            "pick one via -c!\n");
+                return 1;
+            }
+            medium = tmp_medium;
+            av_dict_set_int(&ctx->meta, "disc", i + 1, 0);
+        }
+
+        if (!num_cds) {
+            cyanrip_log(ctx, 0, "The release lists no discs to take the tracks from!\n");
+            return 1;
+        } else if (!medium) {
+            cyanrip_log(ctx, 0, "None of the release's discs has %i tracks, pick one via -c!\n",
+                        nb_audio);
+            return 1;
+        }
+
+        int nb = mb5_track_list_size(mb5_medium_get_tracklist(medium));
+        if (nb != ctx->nb_cd_tracks && nb != nb_audio)
+            cyanrip_log(ctx, 0, "The release's disc has %i tracks, this one %i!\n",
+                        nb, nb_audio);
     }
 
     READ_MB(mb5_medium_get_title, medium, ctx->meta, "discname", 0);
@@ -210,35 +243,24 @@ static int mb_wait(int64_t delay_ms)
     return quit_now;
 }
 
-static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, char *release_str, int discnumber)
+/* Looks a DiscID or a release up, waiting out servers too busy to answer */
+static Mb5Metadata mb_query(cyanrip_ctx *ctx, Mb5Query query, const char *entity,
+                            const char *id, tQueryResult *res)
 {
-    int ret = 0, notfound = 0, possible_stub = 0;
-    const char *ua = "cyanrip/" PROJECT_VERSION_STRING " ( https://github.com/cyanreg/cyanrip )";
-    Mb5Query query = mb5_query_new(ua, NULL, 0);
-    if (!query) {
-        cyanrip_log(ctx, 0, "Could not connect to MusicBrainz.\n");
-        return 1;
-    }
-
     char *names[] = { "inc" };
     char *values[] = { "recordings artist-credits labels" };
     Mb5Metadata metadata = NULL;
-    tQueryResult res = eQuery_Success;
 
-    const char *discid = dict_get(ctx->meta, "musicbrainz_discid");
-    if (!discid) {
-        cyanrip_log(ctx, 0, "Missing DiscID!\n");
-        goto end;
-    }
+    *res = eQuery_Success;
 
     for (int i = 0; i <= MB_MAX_RETRIES; i++) {
-        metadata = mb5_query_query(query, "discid", discid, 0, 1, names, values);
+        metadata = mb5_query_query(query, entity, id, 0, 1, names, values);
         if (metadata)
             break;
 
-        /* The DiscID not being in the database is a definitive answer */
-        res = mb5_query_get_lastresult(query);
-        if (res == eQuery_ResourceNotFound)
+        /* Not being in the database is a definitive answer */
+        *res = mb5_query_get_lastresult(query);
+        if (*res == eQuery_ResourceNotFound)
             break;
 
         int chars = mb5_query_get_lasterrormessage(query, NULL, 0) + 1;
@@ -265,12 +287,94 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             break;
     }
 
+    return metadata;
+}
+
+static int mb_release(cyanrip_ctx *ctx, Mb5Release release, const char *discid,
+                      int discnumber)
+{
+    READ_MB(mb5_release_get_id, release, ctx->meta, "musicbrainz_albumid", 0);
+    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "releasecomment", 0);
+    READ_MB(mb5_release_get_date, release, ctx->meta, "date", 0);
+    READ_MB(mb5_release_get_title, release, ctx->meta, "album", 0);
+    READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode", 0);
+    READ_MB(mb5_release_get_packaging, release, ctx->meta, "packaging", 0);
+    READ_MB(mb5_release_get_country, release, ctx->meta, "country", 0);
+    READ_MB(mb5_release_get_status, release, ctx->meta, "releasestatus", 0);
+
+    /* Label info */
+    Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
+    if (mb5_labelinfo_list_size(labelinfolist) >= 1) {
+        Mb5LabelInfo *labelinfo = mb5_labelinfo_list_item(labelinfolist, 0);
+        READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalognumber", 0);
+
+        Mb5Label *label = mb5_labelinfo_get_label(labelinfo);
+        READ_MB(mb5_label_get_name, label, ctx->meta, "label", 0);
+    }
+
+    Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
+    if (artistcredit)
+        mb_credit(artistcredit, ctx->meta, "album_artist");
+
+    cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
+                dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
+
+    /* Read track metadata */
+    return mb_tracks(ctx, release, discid, discnumber);
+}
+
+/* A release given via -R, which the DiscID doesn't lead to */
+static int mb_release_by_id(cyanrip_ctx *ctx, Mb5Query query, const char *release_str,
+                            const char *discid, int discnumber)
+{
+    tQueryResult res;
+    Mb5Metadata metadata = mb_query(ctx, query, "release", release_str, &res);
     if (!metadata) {
         if (res == eQuery_ResourceNotFound)
+            cyanrip_log(ctx, 0, "Release ID %s not found on MusicBrainz!\n", release_str);
+        return 1;
+    }
+
+    int ret = 1;
+    Mb5Release release = mb5_metadata_get_release(metadata);
+    if (release) {
+        cyanrip_log(ctx, 0, "Using release %s as given, its tracks matched to the disc's in order\n",
+                    release_str);
+        ret = mb_release(ctx, release, discid, discnumber);
+    }
+
+    mb5_metadata_delete(metadata);
+    return ret;
+}
+
+static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int release_idx, char *release_str, int discnumber)
+{
+    int ret = 0, notfound = 0, possible_stub = 0, not_listed = 0;
+    const char *ua = "cyanrip/" PROJECT_VERSION_STRING " ( https://github.com/cyanreg/cyanrip )";
+    Mb5Query query = mb5_query_new(ua, NULL, 0);
+    if (!query) {
+        cyanrip_log(ctx, 0, "Could not connect to MusicBrainz.\n");
+        return 1;
+    }
+
+    tQueryResult res;
+    Mb5Metadata metadata = NULL;
+
+    const char *discid = dict_get(ctx->meta, "musicbrainz_discid");
+    if (!discid) {
+        cyanrip_log(ctx, 0, "Missing DiscID!\n");
+        goto end;
+    }
+
+    metadata = mb_query(ctx, query, "discid", discid, &res);
+    if (!metadata) {
+        if (res == eQuery_ResourceNotFound) {
             notfound = 1;
-        else if (!quit_now)
+            goto end_meta;
+        } else if (!quit_now) {
             cyanrip_log(ctx, 0, "MusicBrainz lookup failed, try again later, "
                         "or disable it via -N\n");
+        }
 
         ret = 1;
         goto end;
@@ -356,45 +460,40 @@ static int mb_metadata(cyanrip_ctx *ctx, int manual_metadata_specified, int rele
             av_dict_free(&tmp_dict);
         }
         if (i == num_releases) {
-            cyanrip_log(ctx, 0, "Release ID %s not found in release list for DiscID %s!\n", release_str, discid);
-            ret = 1;
+            cyanrip_log(ctx, 0, "Release ID %s not found in release list for DiscID %s, "
+                        "looking it up\n", release_str, discid);
+            not_listed = 1;
             goto end_meta;
         }
     } else {
         release = mb5_release_list_item(release_list, 0);
     }
 
-    READ_MB(mb5_release_get_id, release, ctx->meta, "musicbrainz_albumid", 0);
-    READ_MB(mb5_release_get_disambiguation, release, ctx->meta, "releasecomment", 0);
-    READ_MB(mb5_release_get_date, release, ctx->meta, "date", 0);
-    READ_MB(mb5_release_get_title, release, ctx->meta, "album", 0);
-    READ_MB(mb5_release_get_barcode, release, ctx->meta, "barcode", 0);
-    READ_MB(mb5_release_get_packaging, release, ctx->meta, "packaging", 0);
-    READ_MB(mb5_release_get_country, release, ctx->meta, "country", 0);
-    READ_MB(mb5_release_get_status, release, ctx->meta, "releasestatus", 0);
-
-    /* Label info */
-    Mb5LabelInfoList *labelinfolist = mb5_release_get_labelinfolist(release);
-    if (mb5_labelinfo_list_size(labelinfolist) >= 1) {
-        Mb5LabelInfo *labelinfo = mb5_labelinfo_list_item(labelinfolist, 0);
-        READ_MB(mb5_labelinfo_get_catalognumber, labelinfo, ctx->meta, "catalognumber", 0);
-
-        Mb5Label *label = mb5_labelinfo_get_label(labelinfo);
-        READ_MB(mb5_label_get_name, label, ctx->meta, "label", 0);
-    }
-
-    Mb5ArtistCredit artistcredit = mb5_release_get_artistcredit(release);
-    if (artistcredit)
-        mb_credit(artistcredit, ctx->meta, "album_artist");
-
-    cyanrip_log(ctx, 0, "Found MusicBrainz release: %s - %s\n",
-                dict_get(ctx->meta, "album"), dict_get(ctx->meta, "album_artist"));
-
-    /* Read track metadata */
-    mb_tracks(ctx, release, discid, discnumber);
+    mb_release(ctx, release, discid, discnumber);
 
 end_meta:
     mb5_metadata_delete(metadata); /* This frees _all_ metadata */
+
+    /* The release can be used without the DiscID leading to it, e.g. for
+     * discs not on MusicBrainz yet, or for pseudo-releases */
+    if (release_str && (notfound || not_listed) && !quit_now) {
+        if (!mb_release_by_id(ctx, query, release_str, discid, discnumber)) {
+            ctx->mb_release_forced = 1;
+            /* Printing the info prints the URL anyway */
+            if (notfound && ctx->mb_submission_url) {
+                cyanrip_log(ctx, 0, "The disc isn't on MusicBrainz yet, consider attaching "
+                            "it to the release via the following URL%s\n",
+                            ctx->settings.print_info_only ? "." : ":");
+                if (!ctx->settings.print_info_only) {
+                    cyanrip_log(ctx, 0, "%s\n", ctx->mb_submission_url);
+                    crip_print_qrcode(ctx->mb_submission_url);
+                }
+            }
+        } else {
+            ret = 1;
+        }
+        notfound = 0;
+    }
 
 end:
     mb5_query_delete(query);

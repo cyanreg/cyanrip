@@ -142,6 +142,8 @@ static const char *submission_blocker(cyanrip_ctx *ctx)
         return "disc not in the AccurateRip database";
     if (ctx->settings.disable_mb)
         return "MusicBrainz disabled";
+    if (ctx->mb_release_forced)
+        return "MusicBrainz release given via -R, rather than found by the DiscID";
 
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];

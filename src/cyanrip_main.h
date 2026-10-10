@@ -241,6 +241,7 @@ typedef struct cyanrip_ctx {
     int disregard_cd_isrc; /* If one track doesn't have ISRC, universally the rest won't */
 
     char *mb_submission_url;
+    int mb_release_forced; /* Release given via -R, rather than found by the DiscID */
 
     /* Non-track bound cover art */
     CRIPArt cover_arts[32];

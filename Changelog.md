@@ -5,6 +5,8 @@
  - CUE sheet-only mode, without ripping anything (-J)
  - Rip log checksum verification (-Y)
  - Label and catalog number tagging from MusicBrainz
+ - -R takes releases the disc isn't attached to, e.g. for discs not on
+   MusicBrainz yet, or for pseudo-releases
  - Discs and tracks without an MCN or ISRC are no longer tagged with zeroes
  - -S sets the speed of drives which don't advertise it, rather than refusing to
  - MusicBrainz submission URLs are printed as a QR code (needs libqrencode)

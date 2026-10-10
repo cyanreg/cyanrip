@@ -142,7 +142,7 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -I                   | Only print CD metadata and information, will not rip or eject the CD                        |
 | -a `string`          | Album metadata, syntax is described below                                                   |
 | -t `number=string`   | Track metadata, syntax is described below                                                   |
-| -R `int` or `string` | Sets the MusicBrainz release to use, either as an index starting from 1 or an ID string     |
+| -R `int` or `string` | Sets the MusicBrainz release to use, as an index from 1 or an ID, read [below](#metadata)   |
 | -c `int/int`         | Tag multi-disc albums as such, syntax is `disc/totaldiscs`, read below                      |
 | -C `path` or `url`   | Sets cover image to embed into each track, syntax is described below                        |
 | -N                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
@@ -163,6 +163,10 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 
 Metadata
 --------
+If the disc is on MusicBrainz under several releases, cyanrip lists them, and `-R` picks one, by its index in the list or its ID.
+
+`-R` also takes the ID of a release the disc isn't attached to, such as a release whose disc isn't on MusicBrainz yet, or a pseudo-release with translated titles. The release's tracks are then matched to the disc's in order. Of a multi-disc release, the disc with as many tracks as this one is used, or the one given via `-c`. Fingerprints of such rips are never submitted to [AcoustID](#acoustid), as nothing ties the disc to the release.
+
 In case the MusicBrainz database doesn't contain the disc information, is incomplete, or incorrect, you can manually add metadata via the -a argument for album metadata and -t argument for track metadata:
 
 `-a album="Name":album_artist="Artist":date="2018":random_tag="Value"`
