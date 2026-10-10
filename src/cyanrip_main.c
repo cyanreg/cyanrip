@@ -421,13 +421,19 @@ static int crip_replaygain_meta_album(cyanrip_ctx *ctx)
     return 0;
 }
 
+/* Drives give a disc or track without an MCN or ISRC as empty or as zeroes */
+static int crip_code_is_set(const char *code)
+{
+    return code[strspn(code, "0")] != '\0';
+}
+
 static void crip_fill_mcn(cyanrip_ctx *ctx)
 {
     /* Get disc MCN */
     if (ctx->rcap & CDIO_DRIVE_CAP_READ_MCN) {
         const char *mcn = cdio_get_mcn(ctx->cdio);
         if (mcn) {
-            if (strlen(mcn))
+            if (crip_code_is_set(mcn))
                 av_dict_set(&ctx->meta, "disc_mcn", mcn, 0);
             cdio_free((void *)mcn);
         }
@@ -634,7 +640,7 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
         if (!ctx->disregard_cd_isrc && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) && !dict_get(t->meta, "isrc")) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);
             if (isrc_str) {
-                if (strlen(isrc_str))
+                if (crip_code_is_set(isrc_str))
                     av_dict_set(&t->meta, "isrc", isrc_str, 0);
                 else
                     ctx->disregard_cd_isrc = 1;
