@@ -219,6 +219,12 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
         char *tok = pos + 1;
         pos = end + 1;
 
+        if (strchr(tok, '{')) {
+            cyanrip_log(ctx, 0, "Invalid scheme syntax, \"{\" inside \"{\", "
+                        "tags in conditions are written as |tag|!\n");
+            goto fail;
+        }
+
         if (!strncmp(tok, "if", strlen("if")) &&
             (tok[strlen("if")] == ' ' || tok[strlen("if")] == '#')) {
             char *cond = av_strdup(tok);

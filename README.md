@@ -361,7 +361,7 @@ If the condition is a direct comparison (`==` or `!=`), then the 2 tokens are co
 
 If an arithmetic comparison is used when both tokens are strings, the result of `strcmp` is used. If only one is a string, its pointer (always above 0, __unless__ the token did not match a metadata key, in which case 0) is used.
 
-If the condition is true, everything after the last token's `#` is copied, with any metadata tags there wrapped with `|`. Otherwise, nothing is copied.
+If the condition is true, everything after the last token's `#` is copied, with any metadata tags there wrapped with `|`. Otherwise, nothing is copied. Braces don't nest: inside a condition, a tag is written as `|year|`, never as `{year}`, and cyanrip refuses schemes which try.
 
 Examples are easier to understand, by default the folder value of `{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]` is used. This resolves to `Album [FLAC]` if there's nothing in the `releasecomment` key, or `Album (Release comment) [FLAC]` if there is.
 

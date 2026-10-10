@@ -152,6 +152,8 @@ int main(void)
     static const char *const bad_schemes[] = {
         "{track", "{if #track#}", "{if #track# ~ #1#x}",
         "{if #track# == }", "{if #track# == #1}",
+        /* Braces don't nest, tags in conditions are written as |tag| */
+        "{if #album_artist# == #Various Artists#|VA ({year})|}",
     };
     for (int i = 0; i < FF_ARRAY_ELEMS(bad_schemes); i++) {
         if (!crip_check_scheme(&ctx, bad_schemes[i])) {
