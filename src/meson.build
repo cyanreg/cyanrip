@@ -53,6 +53,7 @@ sources = [
     'qrcode.c',
     'coverart.c',
     'accurip.c',
+    'json.c',
 
     'cue_writer.c',
 

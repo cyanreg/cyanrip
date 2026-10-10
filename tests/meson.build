@@ -24,6 +24,14 @@ naming_test = executable('naming_test',
 )
 test('Naming schemes', naming_test)
 
+json_test = executable('json_test',
+    sources: [ 'json.c' ],
+    include_directories: [ '../src' ],
+    objects: cyanrip_exe.extract_objects([ 'json.c' ]),
+    dependencies: unit_test_deps,
+)
+test('JSON reader', json_test)
+
 ## Integration tests
 ## =================
 ## Rip the disc image fixtures with the built binary and verify the
