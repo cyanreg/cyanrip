@@ -42,6 +42,7 @@
 #include "qrcode.h"
 #include "coverart.h"
 #include "accurip.h"
+#include "acoustid.h"
 #include "os_compat.h"
 #include "cyanrip_encode.h"
 
@@ -95,6 +96,7 @@ static void free_track(cyanrip_ctx *ctx, cyanrip_track *t)
     crip_free_art(&t->art);
     av_dict_free(&t->meta);
     av_free(t->ar_db_entries);
+    av_free(t->acoustid_fingerprint);
 }
 
 static void cyanrip_ctx_end(cyanrip_ctx **s)
@@ -111,6 +113,7 @@ static void cyanrip_ctx_end(cyanrip_ctx **s)
         crip_free_art(&ctx->cover_arts[i]);
 
     cyanrip_finalize_ebur128(ctx, 0);
+    crip_free_fingerprint(ctx);
     av_free(ctx->mb_submission_url);
 
     if (ctx->paranoia)
@@ -177,6 +180,11 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
 
     if (ctx->settings.print_info_only)
         ctx->settings.eject_on_success_rip = 0;
+
+    /* Both ReplayGain and AcoustID tags are only known once every track has
+     * been ripped, so the files must be written after */
+    ctx->separate_writeout = ctx->settings.enable_replaygain ||
+                             crip_acoustid_enabled(ctx);
 
     cdio_init();
 
@@ -989,6 +997,12 @@ repeat_ripping:;
     cyanrip_checksum_ctx checksum_ctx;
     crip_init_checksum_ctx(ctx, &checksum_ctx, t);
 
+    ret = crip_init_fingerprint(ctx);
+    if (ret < 0) {
+        cyanrip_log(ctx, 0, "Error initializing fingerprinting: %s\n", av_err2str(ret));
+        goto fail;
+    }
+
     /* Reset sample peak for this attempt - a bad sample from a discarded
      * (non-matching) repeat ripping pass must not stick around forever. */
     t->sample_peak_rel_amp = 0.0;
@@ -1004,6 +1018,7 @@ repeat_ripping:;
         }
 
         crip_process_checksums(&checksum_ctx, data, bytes);
+        crip_process_fingerprint(ctx, data, bytes);
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
@@ -1058,6 +1073,7 @@ repeat_ripping:;
 
         /* Update checksums */
         crip_process_checksums(&checksum_ctx, data, bytes);
+        crip_process_fingerprint(ctx, data, bytes);
 
          /* Update sample peak */
         t->sample_peak_rel_amp = FFMAX(sample_peak_rel_amp(data, bytes), t->sample_peak_rel_amp);
@@ -1091,6 +1107,7 @@ repeat_ripping:;
             bytes = offs;
 
         crip_process_checksums(&checksum_ctx, data, bytes);
+        crip_process_fingerprint(ctx, data, bytes);
 
         if (!ctx->settings.ripping_retries || repeat_mode_encode) {
             ret = cyanrip_send_pcm_to_encoders(ctx, t->enc_ctx, ctx->settings.outputs_num,
@@ -1105,6 +1122,7 @@ repeat_ripping:;
     calc_global_peak = 0;
 
     crip_finalize_checksums(&checksum_ctx, t);
+    crip_finalize_fingerprint(ctx, t);
 
     if (ctx->settings.ripping_retries) {
         int matches = 0;
@@ -1536,6 +1554,10 @@ int main(int argc, char **argv)
                 "Disable MusicBrainz lookup");
     GEN_OPT_ONE(opts_list, bool,    no_accurip, "A", 0, 0, 0, 0, 0,
                 "Disable AccurateRip database query and validation");
+    GEN_OPT_ONE(opts_list, bool,    no_acoustid, "B", 0, 0, 0, 0, 0,
+                "Disable AcoustID fingerprinting");
+    GEN_OPT_ONE(opts_list, char *,  acoustid_key, "k", 1, 1, NULL, 0, 0,
+                "AcoustID user API key, to submit fingerprints of verified rips");
     GEN_OPT_ONE(opts_list, bool,    no_coverart_db, "U", 0, 0, 0, 0, 0,
                 "Disable Cover art DB query and retrieval");
     GEN_OPT_ONE(opts_list, int32_t, cover_size, "m", 1, 1, -1, -1, 1200,
@@ -1610,6 +1632,8 @@ int main(int argc, char **argv)
     settings.disable_data_tracks        = no_data_tracks;
     settings.disable_mb                 = no_musicbrainz;
     settings.disable_accurip            = no_accurip;
+    settings.disable_acoustid           = no_acoustid;
+    settings.acoustid_key               = acoustid_key;
     settings.disable_coverart_db        = no_coverart_db;
     settings.disable_coverart_embedding = no_coverart_embed;
     settings.print_info_only            = info;
@@ -2223,9 +2247,11 @@ int main(int argc, char **argv)
         if (!ctx->settings.print_info_only)
             cyanrip_finalize_ebur128(ctx, 1);
 
-        if (ctx->settings.enable_replaygain &&
+        if (ctx->separate_writeout &&
             !ctx->settings.print_info_only) {
-            crip_replaygain_meta_album(ctx);
+            if (ctx->settings.enable_replaygain)
+                crip_replaygain_meta_album(ctx);
+            crip_acoustid_finish(ctx);
 
             /**
              * Writeout tracks.
@@ -2352,8 +2378,10 @@ int main(int argc, char **argv)
 
         cyanrip_finalize_ebur128(ctx, 1);
 
-        if (ctx->settings.enable_replaygain) {
-            crip_replaygain_meta_album(ctx);
+        if (ctx->separate_writeout) {
+            if (ctx->settings.enable_replaygain)
+                crip_replaygain_meta_album(ctx);
+            crip_acoustid_finish(ctx);
 
             /**
              * Writeout tracks.

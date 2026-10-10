@@ -174,6 +174,10 @@ static int mb_tracks(cyanrip_ctx *ctx, Mb5Release release, const char *discid, i
 
         READ_MB(mb5_recording_get_id, recording, ctx->tracks[i].meta, "mbid", 0);
 
+        ctx->tracks[i].mb_length_ms = mb5_track_get_length(track);
+        if (!ctx->tracks[i].mb_length_ms && recording)
+            ctx->tracks[i].mb_length_ms = mb5_recording_get_length(recording);
+
         /* Prefer the track title over the recording title */
         READ_MB(mb5_track_get_title, track, ctx->tracks[i].meta, "title", 0);
 

@@ -306,6 +306,42 @@ def sc_art():
                 fail(f"art: {f}.flac picture type {ptype!r}")
 
 
+def fingerprint(name, track):
+    return probe(WORK / f"out_{name}" / f"{track}.flac", "-show_entries",
+                 "format_tags=acoustid_fingerprint")
+
+
+def sc_acoustid():
+    # Nothing can be verified without the AccurateRip and MusicBrainz
+    # lookups, so the fingerprints go in the tags rather than to AcoustID
+    rip("fp", "basic.cue")
+    log = (WORK / "fp.log").read_text()
+    if "built without libchromaprint" in log:
+        print("acoustid: built without libchromaprint, skipping")
+        return
+    if "2 fingerprints saved to tags, not submitted: AccurateRip disabled" not in log:
+        fail("fp: fingerprints not reported as saved to tags")
+    if not FFPROBE:
+        return
+
+    fps = [fingerprint("fp", t) for t in (1, 2)]
+    if not all(fp.startswith("AQ") for fp in fps) or fps[0] == fps[1]:
+        fail(f"fp: fingerprint tags {fps!r}")
+
+    # Fingerprints are kilobytes long on real tracks, they stay out of the log
+    if fps[0] and fps[0] in (WORK / "out_fp" / "log.log").read_text():
+        fail("fp: fingerprint written to the rip log")
+
+    # The files must wait for the fingerprints even without ReplayGain
+    rip("fp_norg", "basic.cue", "-K")
+    if fingerprint("fp_norg", 1) != fps[0]:
+        fail("fp_norg: no fingerprint tag without ReplayGain")
+
+    rip("fp_off", "basic.cue", "-B")
+    if fingerprint("fp_off", 1):
+        fail("fp_off: fingerprint tagged despite -B")
+
+
 def sc_cue_only():
     # -J generates and prints the CUE sheet without ripping anything
     rip("cue", "pregap.cue", "-J")

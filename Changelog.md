@@ -5,6 +5,8 @@
  - Rip log checksum verification (-Y)
  - Label and catalog number tagging from MusicBrainz
  - MusicBrainz submission URLs are printed as a QR code (needs libqrencode)
+ - AcoustID fingerprinting (needs libchromaprint): fingerprints are submitted
+   when the disc is accurately ripped and on MusicBrainz, and tagged otherwise
  - Embedded cover art is now typed as a front cover, so file managers thumbnail it
  - Automatic deemphasis of preemphasized discs now actually happens
  - CUE sheets reference their files relative to the sheet

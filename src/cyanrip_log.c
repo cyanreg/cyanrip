@@ -28,6 +28,7 @@
 #include "cyanrip_log.h"
 #include "fun512.h"
 #include "accurip.h"
+#include "acoustid.h"
 
 #define CLOG(FORMAT, DICT, TAG)                                                \
     if (dict_get(DICT, TAG))                                                   \
@@ -326,6 +327,14 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
                                                 ctx->ar_db_status == CYANRIP_ACCUDB_FOUND ? "found" :
                                                 ctx->ar_db_status == CYANRIP_ACCUDB_MISMATCH ? "mismatch" :
                                                 "disabled");
+
+#ifdef HAVE_CHROMAPRINT
+    cyanrip_log(ctx, 0, "AcoustID:       %s\n", !crip_acoustid_enabled(ctx) ? "disabled" :
+                                                ctx->settings.acoustid_key ? "fingerprinting, submitting accurate rips" :
+                                                "fingerprinting, no user API key to submit with");
+#else
+    cyanrip_log(ctx, 0, "AcoustID:       unsupported (built without libchromaprint)\n");
+#endif
 
     cyanrip_log(ctx, 0, "Total time:     %s\n", duration);
 

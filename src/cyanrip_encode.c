@@ -935,6 +935,14 @@ static int open_output(cyanrip_ctx *ctx, cyanrip_enc_ctx *s)
     /* Add metadata */
     av_dict_copy(&s->avf->metadata, s->t->meta, 0);
 
+    /* ID3 has no frame for the fingerprint, it goes in a TXXX frame, under
+     * the description Picard reads it from */
+    const char *fingerprint = dict_get(s->avf->metadata, "acoustid_fingerprint");
+    if (fingerprint && s->cfmt->codec == AV_CODEC_ID_MP3) {
+        av_dict_set(&s->avf->metadata, "Acoustid Fingerprint", fingerprint, 0);
+        av_dict_set(&s->avf->metadata, "acoustid_fingerprint", NULL, 0);
+    }
+
     /* Write header */
     ret = avformat_write_header(s->avf, NULL);
     if (ret < 0) {
@@ -1111,7 +1119,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
     s->t = t;
     s->ctx = ctx;
     s->cfmt = cfmt;
-    s->separate_writeout = ctx->settings.enable_replaygain;
+    s->separate_writeout = ctx->separate_writeout;
     atomic_init(&s->status, 0);
     atomic_init(&s->quit, 0);
 

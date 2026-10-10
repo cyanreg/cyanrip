@@ -53,6 +53,7 @@ sources = [
     'qrcode.c',
     'coverart.c',
     'accurip.c',
+    'acoustid.c',
     'json.c',
 
     'cue_writer.c',
@@ -71,6 +72,16 @@ if qrencode.found()
     dependencies += qrencode
 else
     message('libqrencode not found, MusicBrainz URLs won\'t be printed as QR codes')
+endif
+
+# Optional, for AcoustID fingerprinting
+chromaprint = dependency('libchromaprint', version: '>= 1.4', required: false,
+                         static: static_build)
+if chromaprint.found()
+    conf.set('HAVE_CHROMAPRINT', 1)
+    dependencies += chromaprint
+else
+    message('libchromaprint not found, tracks won\'t be fingerprinted for AcoustID')
 endif
 
 # Check for wmain support (Windows/MinGW)

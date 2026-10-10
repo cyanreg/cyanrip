@@ -133,6 +133,8 @@ typedef struct cyanrip_settings {
     int enable_replaygain;
     int generate_cue_only;
     int disable_data_tracks;
+    int disable_acoustid;
+    char *acoustid_key; /* User API key, to submit fingerprints with */
 
     enum cyanrip_output_formats outputs[CYANRIP_FORMATS_NB];
     int outputs_num;
@@ -212,12 +214,17 @@ typedef struct cyanrip_track {
     double ebu_true_peak;
     double sample_peak_rel_amp; /* Relative amplitude of the largest sample absolute value, (0.0-1.0) */
 
+    char *acoustid_fingerprint;
+    int mb_length_ms; /* Length of the track on MusicBrainz, 0 if unknown */
+
     struct cyanrip_track *pt;
     struct cyanrip_track *nt;
 
     struct cyanrip_dec_ctx *dec_ctx;
     struct cyanrip_enc_ctx *enc_ctx[CYANRIP_FORMATS_NB];
 } cyanrip_track;
+
+typedef struct CRIPFingerprint CRIPFingerprint;
 
 typedef struct cyanrip_ctx {
     cdrom_drive_t     *drive;
@@ -252,6 +259,7 @@ typedef struct cyanrip_ctx {
 
     /* State */
     int success;
+    int separate_writeout; /* Files are only written once the disc is ripped */
     int total_error_count;
     lsn_t start_lsn;
     lsn_t end_lsn;
@@ -262,6 +270,9 @@ typedef struct cyanrip_ctx {
     CRSlidingWinCtx eta_ctx;
     lsn_t frames_read;
     lsn_t frames_to_read;
+
+    /* AcoustID fingerprinter, reused for every track */
+    CRIPFingerprint *fingerprint;
 
     /* Album EBUR128 values */
     struct cyanrip_dec_ctx *peak_ctx;

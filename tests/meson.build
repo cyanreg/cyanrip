@@ -48,6 +48,7 @@ rip_scenarios = [
     'nrg',
     'filters',
     'art',
+    'acoustid',
     'cue_only',
     'errors',
     'verify_log',

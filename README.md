@@ -82,6 +82,7 @@ Complete list of dependencies:
 Optional dependencies:
 
  * libqrencode (to print MusicBrainz submission URLs as scannable QR codes)
+ * libchromaprint (to fingerprint tracks for [AcoustID](#acoustid))
 
 All are available on any up-to-date Linux distribution's package repositories. To compile and install on any *NIX platform:
 
@@ -146,6 +147,8 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -C `path` or `url`   | Sets cover image to embed into each track, syntax is described below                        |
 | -N                   | Disables MusicBrainz lookup and ignores lack of manual metadata to continue                 |
 | -A                   | Disables AccurateRip database query and comparison                                          |
+| -B                   | Disables AcoustID fingerprinting, read [below](#acoustid) for details                       |
+| -k `string`          | AcoustID user API key, to submit fingerprints of verified rips, read [below](#acoustid)     |
 | -U                   | Disables Cover art DB database query and retrieval                                          |
 | -m                   | Lookup cover art with max size: 250, 500, 1200, -1 (no limit, default)                      |
 | -G                   | Disables embedding of cover art images                                                      |
@@ -300,9 +303,19 @@ An incomplete list of releases mastered with preemphasis can be found at [this w
 
 ReplayGain
 ----------
-cyanrip will automatically compute ReplayGain tags and add them to all files while ripping. Note, that this requires to hold all **compressed** audio data for the entire CD in RAM while ripping, which may be from 300 to 600 megabytes, depending on the output used. Low-power and low-RAM devices can turn this off via the `-K` switch.
+cyanrip will automatically compute ReplayGain tags and add them to all files while ripping. Note, that this requires to hold all **compressed** audio data for the entire CD in RAM while ripping, which may be from 300 to 600 megabytes, depending on the output used. Low-power and low-RAM devices can turn this off via the `-K` switch, along with [AcoustID](#acoustid) fingerprinting via `-B`, which needs the same.
 
 The tags generated are ReplayGain 2.0 compliant, which is backwards-compatible with ReplayGain 1.0. The **true peak** value is calculated and used.
+
+AcoustID
+--------
+When built with libchromaprint, cyanrip computes an [AcoustID](https://acoustid.org/) fingerprint of every audio track while ripping. Like `fpcalc` and MusicBrainz Picard, it fingerprints the first 2 minutes of each track.
+
+If the whole disc checks out, the fingerprints are submitted to AcoustID, each linked to its MusicBrainz recording. Every audio track must be accurately ripped according to AccurateRip, and must have a MusicBrainz recording within 30 seconds of the track's length. Submitting needs your own user API key, found on your [AcoustID account page](https://acoustid.org/api-key) and given via `-k`. Nothing is submitted without it.
+
+Otherwise, the fingerprints are saved in the files' tags instead, in the same tag Picard uses: `ACOUSTID_FINGERPRINT`, or `TXXX:Acoustid Fingerprint` for MP3. Picard submits a fingerprint it finds there, rather than computing it again. MP4 based outputs don't get the tag, as FFmpeg can't write freeform iTunes tags.
+
+Whether to submit or tag is only known once the whole disc is ripped, so like ReplayGain, this holds the compressed audio in RAM until the end. `-B` disables fingerprinting.
 
 
 Paranoia level
