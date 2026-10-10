@@ -142,6 +142,13 @@ int main(void)
                      "folder/Disc.flac");
     check_track_path("  {track}", t, "folder/1.flac");
 
+    /* A drive letter keeps its colon, colons anywhere else don't */
+    ctx.settings.folder_name_scheme = "d:/music";
+    check_track_path("{track}", t, "d:/music/1.flac");
+    ctx.settings.folder_name_scheme = "music:here";
+    check_track_path("{track}", t, "music\u2236here/1.flac");
+    ctx.settings.folder_name_scheme = "folder";
+
     /* Tokens matching no key compare as written */
     check_track_path("{if #nokey# == #nokey#same}{track}", t, "folder/same1.flac");
     check_track_path("{if #nokey# != #nokey#differ}{track}", t, "folder/1.flac");

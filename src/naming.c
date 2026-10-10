@@ -409,8 +409,15 @@ char *crip_get_path(cyanrip_ctx *ctx, enum CRIPPathType type, int create_dirs,
     AVBPrint buf;
     av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
 
-    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix,
-                     ctx->settings.folder_name_scheme))
+    /* A drive letter's colon would get sanitized like any other */
+    const char *folder = ctx->settings.folder_name_scheme;
+    if (av_toupper(folder[0]) >= 'A' && av_toupper(folder[0]) <= 'Z' &&
+        folder[1] == ':' && (folder[2] == '/' || folder[2] == '\\')) {
+        av_bprint_append_data(&buf, folder, 2);
+        folder += 2;
+    }
+
+    if (process_cond(ctx, &buf, ctx->meta, fmt->folder_suffix, folder))
         goto end;
 
     av_bprint_chars(&buf, OS_DIR_CHAR, 1);

@@ -371,6 +371,8 @@ The track number is only zero-padded to the number of digits the disc's track co
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
 
+Characters a file name can't hold are replaced in the literal text of a scheme too, except for the drive letter of an absolute Windows path, as in `-D "D:/Music/{album}"`. Use `/` to separate directories.
+
 Whitespace at the edges of every path component, and between the file name and its extension, is trimmed. Conditional bodies containing spaces (like the example above, when used as its own subdirectory) would otherwise leave dangling spaces on one of their branches.
 
 Besides any tags given via `-a` and `-t`, these metadata keys are available:
