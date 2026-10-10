@@ -289,8 +289,10 @@ static int submit_fingerprints(cyanrip_ctx *ctx)
     if (code == 200 && status && !strcmp(status, "ok")) {
         int nb_accepted = crip_json_count(crip_json_get(data, data_end, "submissions"),
                                           data_end);
-        cyanrip_log(ctx, 0, "AcoustID: submitted %i fingerprints, pending import\n",
-                    nb_accepted < 0 ? nb : nb_accepted);
+        if (nb_accepted < 0)
+            nb_accepted = nb;
+        cyanrip_log(ctx, 0, "AcoustID: submitted %i fingerprint%s, pending import\n",
+                    nb_accepted, nb_accepted == 1 ? "" : "s");
         goto end;
     }
 
@@ -338,8 +340,8 @@ void crip_acoustid_finish(cyanrip_ctx *ctx)
     }
 
     if (nb)
-        cyanrip_log(ctx, 0, "AcoustID: %i fingerprints saved to tags, not submitted: %s\n",
-                    nb, reason);
+        cyanrip_log(ctx, 0, "AcoustID: %i fingerprint%s saved to tags, not submitted: %s\n",
+                    nb, nb == 1 ? "" : "s", reason);
 }
 
 #else
