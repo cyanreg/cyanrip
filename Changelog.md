@@ -16,6 +16,8 @@
    when the disc is accurately ripped and on MusicBrainz, and tagged otherwise
  - Embedded cover art is now typed as a front cover, so file managers thumbnail it
  - Automatic deemphasis of preemphasized discs now actually happens
+ - Preemphasis signalled in the subcode is read from each track itself, rather
+   than from wherever the drive last read
  - CUE sheets reference their files relative to the sheet
  - Quotes and line breaks in metadata no longer break CUE sheet lines
  - CUE sheets of discs with split off pregaps number their tracks right, and

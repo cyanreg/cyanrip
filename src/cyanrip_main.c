@@ -26,6 +26,7 @@
 #include <cdio/mmc.h>
 #include <cdio/mmc_ll_cmds.h>
 #include <cdio/read.h>
+#include <cdio/util.h>
 
 #include <libavutil/bprint.h>
 #include <libavutil/avstring.h>
@@ -653,13 +654,20 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
         /* TOC preemphasis flag*/
         t->preemphasis = cdio_cddap_track_preemp(ctx->drive, t->cd_track_number);
 
-        /* Subcode preemphasis flag */
+        /* Subcode preemphasis flag. The subchannel is given for wherever the
+         * drive last read, so read from inside the track first, and only
+         * take it if it's this track's. */
         if (!t->preemphasis && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC)) {
+            uint8_t frame[CDIO_CD_FRAMESIZE_RAW];
             cdio_subchannel_t subchannel_data = { 0 };
-            driver_return_code_t ret = cdio_audio_read_subchannel(ctx->cdio, &subchannel_data);
+            lsn_t lsn = cdio_get_track_lsn(ctx->cdio, t->cd_track_number) + 75;
+            driver_return_code_t ret = cdio_read_audio_sectors(ctx->cdio, frame, lsn, 1);
+            if (ret == DRIVER_OP_SUCCESS)
+                ret = cdio_audio_read_subchannel(ctx->cdio, &subchannel_data);
             if (ret != DRIVER_OP_SUCCESS) {
                 cyanrip_log(ctx, 0, "Unable to read track %i subchannel info!\n", t->number);
-            } else {
+            } else if (subchannel_data.track == t->cd_track_number ||
+                       subchannel_data.track == cdio_to_bcd8(t->cd_track_number)) {
                 t->preemphasis = t->preemphasis_in_subcode = subchannel_data.control & 0x01;
             }
         }
