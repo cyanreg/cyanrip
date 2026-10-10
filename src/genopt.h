@@ -230,10 +230,11 @@ typedef struct GenOpt {
                     minvals, maxvals, rangelow, rangehigh, helpstr);           \
         optlist[opts_list_nb].sep = sepchar;                                   \
                                                                                \
-        for (int i = 0; i < maxvals; i++) {                                    \
-            optlist[opts_list_nb].val[i] = _Generic((valname[i]),              \
-                                                    char *: (&(valname[i])),   \
-                                                    default: (&(valname[i]))); \
+        for (int genopt_i = 0; genopt_i < maxvals; genopt_i++) {               \
+            optlist[opts_list_nb].val[genopt_i] =                              \
+                _Generic((valname[genopt_i]),                                  \
+                         char *: (&(valname[genopt_i])),                       \
+                         default: (&(valname[genopt_i])));                     \
         }                                                                      \
         opts_list_nb++;                                                        \
     } while (0)
