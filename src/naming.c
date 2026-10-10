@@ -234,7 +234,7 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             int val1_origin_is_tag = 1;
             char *val1 = get_dir_tag_val(ctx, meta, ofmt, cond_tok);
             if (!val1) {
-                val1 = av_strdup(tok);
+                val1 = av_strdup(cond_tok);
                 val1_origin_is_tag = 0;
             }
 
@@ -265,6 +265,8 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             cond_tok = av_strtok(NULL, "#", &cond_save);
             if (!cond_tok) {
                 cyanrip_log(ctx, 0, "Invalid scheme syntax, no terminating \"#\"!\n");
+                av_free(cond);
+                av_free(val1);
                 goto fail;
             }
 
@@ -278,6 +280,9 @@ static int process_cond(cyanrip_ctx *ctx, AVBPrint *buf, AVDictionary *meta,
             cond_tok = av_strtok(NULL, "#", &cond_save);
             if (!cond_tok) {
                 cyanrip_log(ctx, 0, "Invalid scheme syntax, no terminating \"#\"!\n");
+                av_free(cond);
+                av_free(val1);
+                av_free(val2);
                 goto fail;
             }
 

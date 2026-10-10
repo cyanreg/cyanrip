@@ -142,6 +142,10 @@ int main(void)
                      "folder/Disc.flac");
     check_track_path("  {track}", t, "folder/1.flac");
 
+    /* Tokens matching no key compare as written */
+    check_track_path("{if #nokey# == #nokey#same}{track}", t, "folder/same1.flac");
+    check_track_path("{if #nokey# != #nokey#differ}{track}", t, "folder/1.flac");
+
     if (fails) {
         printf("%i check(s) failed\n", fails);
         return 1;
