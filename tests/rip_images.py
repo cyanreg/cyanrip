@@ -100,6 +100,13 @@ def sc_basic():
     rip("basic", "basic.cue")
     expect("basic", "1.flac:4", "2.flac:4", "log.log", "sheet.cue")
 
+    # The frames an offset needs read are no part of the track's duration
+    rip("offset", "basic.cue", "-s", "48")
+    log = (WORK / "out_offset" / "log.log").read_text()
+    durations = [l.split()[1] for l in log.splitlines() if l.strip().startswith("Duration:")]
+    if durations != ["00:04.00", "00:04.00"]:
+        fail(f"offset: logged durations {durations}")
+
 
 def log_frames(name):
     """Frame counts the log reports, one per track"""

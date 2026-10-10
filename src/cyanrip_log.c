@@ -68,8 +68,10 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
 
 void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
 {
+    /* What's read includes the frames the offset needs, the track doesn't */
     char length[16];
-    cyanrip_frames_to_duration(t->frames, length);
+    cyanrip_frames_to_duration(t->track_is_data ? t->frames :
+                               t->nb_samples / (CDIO_CD_FRAMESIZE_RAW >> 2), length);
 
     cyanrip_log(ctx, 0, "  Preemphasis:   ");
     if (!t->preemphasis) {
