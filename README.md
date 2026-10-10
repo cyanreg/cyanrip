@@ -352,11 +352,27 @@ If the condition is true, everything after the last token's `#` is copied, with 
 
 Examples are easier to understand, by default the folder value of `{album}{if #releasecomment# > #0# (|releasecomment|)} [{format}]` is used. This resolves to `Album [FLAC]` if there's nothing in the `releasecomment` key, or `Album (Release comment) [FLAC]` if there is.
 
-The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. So this resolves to `01 - Title.flac` if there's a single CD, or `1.01 - Title.flac` if there are more than 1 CDs and you're ripping the first one.
+The default track file name syntax is: `{if #totaldiscs# > #1#|disc|.}{track} - {title}`. So this resolves to `1 - Title.flac` if there's a single CD, or `1.1 - Title.flac` if there are more than 1 CDs and you're ripping the first one.
+
+The track number is only zero-padded to the number of digits the disc's track count needs: `1` on a disc of 9 tracks, but `01` on one of 12. For two digits regardless, use `{if #tracktotal# < #10#0}{track}`.
 
 A useful example is to have separate directories for each disc: `-D "{album}{if #totaldiscs# > #1# CD|disc|} [{format}]" -F "{track} - {title}"`.
 
 Whitespace at the edges of every path component, and between the file name and its extension, is trimmed. Conditional bodies containing spaces (like the example above, when used as its own subdirectory) would otherwise leave dangling spaces on one of their branches.
+
+Besides any tags given via `-a` and `-t`, these metadata keys are available:
+
+| Key | Value |
+|-----|-------|
+| `album`, `album_artist`, `date`, `releasecomment` | The release's, from MusicBrainz |
+| `year` | The year part of `date` |
+| `label`, `catalognumber`, `barcode`, `country`, `packaging`, `releasestatus` | The release's, from MusicBrainz |
+| `disc`, `totaldiscs`, `discname` | The disc's position in the release, and its title if it has one |
+| `track`, `tracktotal` | The track's number (padded as described above), and the disc's track count |
+| `title`, `artist`, `isrc` | The track's |
+| `mbid` | The track's MusicBrainz recording ID |
+| `musicbrainz_albumid`, `musicbrainz_discid`, `cddb`, `disc_mcn` | The release and disc IDs, and the barcode the disc itself carries |
+| `format` | The output format, e.g. `FLAC` |
 
 The ripping log name and location can be modified via the `-L` argument. By default its set to `{album}{if #totaldiscs# > #1# CD|disc|}`, which resolves to `Album name.log` for 1 CD and `Album name CD1.log` if there are multiple CDs and you're ripping the first.
 
