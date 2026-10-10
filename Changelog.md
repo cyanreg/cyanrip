@@ -19,6 +19,7 @@
  - Data tracks no longer leave stray files
  - Data track sectors are checked against their EDC, which catches damaged
    reads the drive doesn't report
+ - CUE sheets give CD-ROM XA data tracks, as on Enhanced CDs, as MODE2/2352
  - Mixed mode CDs no longer lose 152 seconds of the last audio track
  - DiscID, CDDB ID and the MusicBrainz submission URL now match libdiscid on
    discs with data tracks and on discs not starting at track 1

@@ -167,6 +167,7 @@ typedef struct cyanrip_track {
     int index; /* Array position + 1 */
 
     int track_is_data;
+    int data_mode; /* Sector mode of a data track, 1 or 2 */
     int preemphasis;
     int preemphasis_in_subcode;
 

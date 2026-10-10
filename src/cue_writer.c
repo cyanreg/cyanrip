@@ -122,7 +122,8 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
         if (!write_appended_pregap)
             fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
-                    t->track_is_data ? "MODE1/2352" : "AUDIO");
+                    !t->track_is_data ? "AUDIO" :
+                    t->data_mode == 2 ? "MODE2/2352" : "MODE1/2352");
 
         av_free(path);
     }

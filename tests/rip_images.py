@@ -18,6 +18,16 @@ FFPROBE = shutil.which("ffprobe")
 fails = 0
 
 
+def edc(data):
+    """ECMA-130's EDC, as gen_fixtures.py computes it"""
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0xD8018001 if crc & 1 else 0)
+    return crc
+
+
 def fail(msg):
     global fails
     print("FAIL:", msg)
@@ -200,6 +210,33 @@ def sc_trailing():
     rip("merge", "trailing.cue", "-p", "3=merge")
     expect("merge", "1.flac:2", "2.flac:2", "3.bin", "log.log", "sheet.cue")
     data_track("merge", "trailing.bin", 3, 300, 225)
+
+    # CD-Extra data tracks are CD-ROM XA, the CUE sheet must say mode 2, and
+    # the form 1 EDC covers the subheader rather than the sync and header
+    xa = bytearray((WORK / "trailing.bin").read_bytes())
+    for lsn in range(375, 525):
+        sector = xa[lsn * 2352:(lsn + 1) * 2352]
+        sector[15] = 2
+        sector[16:2072] = bytes([0, 0, 0x08, 0] * 2) + sector[16:2064]
+        sector[2072:2076] = edc(sector[16:2072]).to_bytes(4, "little")
+        xa[lsn * 2352:(lsn + 1) * 2352] = sector
+    (WORK / "xa.bin").write_bytes(xa)
+    (WORK / "xa.cue").write_text((WORK / "trailing.cue").read_text()
+                                 .replace("trailing.bin", "xa.bin")
+                                 .replace("MODE1/2352", "MODE2/2352"))
+
+    # The sectors win over a TOC calling them mode 1
+    shutil.copy(WORK / "xa.bin", WORK / "xa_toc.bin")
+    (WORK / "xa_toc.cue").write_text((WORK / "trailing.cue").read_text()
+                                     .replace("trailing.bin", "xa_toc.bin"))
+
+    for name, img, extra in (("xa", "xa.cue", ()), ("xa_cue", "xa.cue", ("-J",)),
+                             ("xa_toc", "xa_toc.cue", ())):
+        rip(name, img, *extra)
+        if "TRACK 03 MODE2/2352" not in (WORK / f"out_{name}" / "sheet.cue").read_text():
+            fail(f"{name}: CUE sheet doesn't give the data track as mode 2")
+    if "Sector EDC:    all 150 sectors match" not in (WORK / "xa.log").read_text():
+        fail("xa: mode 2 form 1 EDCs not verified")
 
 
 def write_toc(name, sectors, tracks):

@@ -299,6 +299,11 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         t->index = i + 1;
         t->number = t->cd_track_number = i + first_track_nb;
         t->track_is_data = !cdio_cddap_track_audiop(ctx->drive, t->number);
+        if (t->track_is_data) {
+            track_format_t format = cdio_get_track_format(ctx->cdio, t->number);
+            t->data_mode = (format == TRACK_FORMAT_XA || format == TRACK_FORMAT_CDI ||
+                            format == TRACK_FORMAT_PSX) ? 2 : 1;
+        }
         t->pregap_lsn = cdio_get_track_pregap_lsn(ctx->cdio, t->number);
         t->dropped_pregap_start = CDIO_INVALID_LSN;
         t->merged_pregap_end = CDIO_INVALID_LSN;
@@ -805,7 +810,7 @@ static int data_sector_edc_ok(const AVCRC *edc, const uint8_t *s)
     }
 }
 
-/* Copies a data track out sector by sector, as a raw MODE1/2352 binary,
+/* Copies a data track out sector by sector, as a raw 2352 byte binary,
  * which is what the CUE sheet the rip generates references. */
 static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
 {
@@ -864,6 +869,9 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
 
     t->edc_sectors = t->edc_errors = 0;
 
+    /* What the TOC says the track is can be wrong, the sectors can't */
+    int nb_mode[3] = { 0 };
+
     const int start_err = ctx->total_error_count;
 
     CRIPRipProgress prog;
@@ -890,8 +898,12 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
             cyanrip_log(ctx, 0, "\nFrame read failed at LSN %i!\n", t->start_lsn + i);
             memset(data, 0, CDIO_CD_FRAMESIZE_RAW);
             ctx->total_error_count++;
-        } else if (edc >= 0) {
-            t->edc_sectors++;
+        } else {
+            if (data[15] == 1 || data[15] == 2)
+                nb_mode[data[15]]++;
+
+            if (edc >= 0)
+                t->edc_sectors++;
             if (!edc) {
                 cyanrip_log(ctx, 0, "\nSector EDC mismatch at LSN %i!\n", t->start_lsn + i);
                 t->edc_errors++;
@@ -923,6 +935,9 @@ static int cyanrip_rip_data_track(cyanrip_ctx *ctx, cyanrip_track *t)
         crip_progress_report(ctx, &prog, "Ripping", t->number, i + 1, t->frames,
                              ctx->total_error_count - start_err);
     }
+
+    if (nb_mode[1] || nb_mode[2])
+        t->data_mode = nb_mode[2] > nb_mode[1] ? 2 : 1;
 
     t->eac_crc = crc ^ UINT32_MAX;
     t->computed_crcs = 1;
