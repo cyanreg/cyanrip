@@ -225,6 +225,8 @@ You can override what's done with each pregap on a per-track basis using the `-p
 
 If the pregap offset isn't available for a given track, this argument will do nothing.
 
+Splitting off track 1's pregap, the hidden track of discs which have one, gives it its own file as track 0. As CUE sheets have no track 0, the sheet gives that file as track 1's `INDEX 00`.
+
 cyanrip guarantees that there will be no discontinuities between tracks, unless the drop action is used to delete a pregap.
 
 
