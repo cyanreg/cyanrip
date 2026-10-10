@@ -226,9 +226,9 @@ cyanrip guarantees that there will be no discontinuities between tracks, unless 
 
 Data tracks
 -----------
-Mixed mode CDs and Enhanced CDs (CD-Extra) carry one or more data tracks alongside the audio. cyanrip rips those too, as raw `MODE1/2352` sectors written to a `.bin` file next to the audio tracks, and references them from the generated CUE sheet. Sectors are read whole, with their sync pattern, header and EDC/ECC intact, so the result is what a disc image would contain rather than just the 2048 bytes of user data per sector.
+Mixed mode CDs and Enhanced CDs (CD-Extra) carry one or more data tracks alongside the audio. cyanrip rips those too, as raw 2352 byte sectors written to a `.bin` file next to the audio tracks, and references them from the generated CUE sheet, as `MODE1/2352`, or `MODE2/2352` for the CD-ROM XA tracks of Enhanced CDs. Sectors are read whole, with their sync pattern, header and EDC/ECC intact, so the result is what a disc image would contain rather than just the 2048 bytes of user data per sector.
 
-Data tracks are read directly rather than through cd-paranoia, which only knows how to read audio. There is no drive offset correction: a data sector is addressed by its own header, so unlike audio it is never off by a fraction of a sector. Damaged sectors are retried as many times as `-r` allows, and a sector that never reads is written out as zeroes and counted as an error.
+Data tracks are read directly rather than through cd-paranoia, which only knows how to read audio. There is no drive offset correction: a data sector is addressed by its own header, so unlike audio it is never off by a fraction of a sector. Damaged sectors are retried as many times as `-r` allows, and a sector that never reads is written out as zeroes and counted as an error. Every sector is also checked against its EDC, as some drives return damaged sectors without reporting an error, and the log says how many matched. One that never does is kept as read, and counted as an error.
 
 A data track's own pregap is dropped by default, as it holds no user data. Pass `-p track_number=merge` to prepend it to the `.bin` instead, which the CUE sheet will reflect. The [pregap handling](#pregap-handling) section covers the rest.
 
@@ -400,7 +400,7 @@ CUE sheet
 ---------
 cyanrip will generate a CUE sheet from which a byte-exact duplicate of the disc can be made. By default, pregaps are kept in the CUE sheet as being appended to the previous track (except for the first track, where the pregap is dropped and signalled as silence). This is reffered to as "noncompliant" by [hydrogenaudio](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_.28Noncompliant.29).
 
-Data tracks are referenced as `BINARY` files holding `MODE1/2352` sectors, unless skipped with `-X`, in which case the CUE sheet still names a file that isn't there.
+Data tracks are referenced as `BINARY` files holding `MODE1/2352` or `MODE2/2352` sectors, unless skipped with `-X`, in which case the CUE sheet still names a file that isn't there.
 
 Custom changes in the way pregaps are handled will be reflected in the CUE file. For example, dropping a pregap will signal [silence](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_gaps_left_out) in the CUE sheet. Appending a pregap to the track will accordingly mark the track as [having two audio indices](https://wiki.hydrogenaud.io/index.php?title=Cue_sheet#Multiple_files_with_corrected_gaps).
 
