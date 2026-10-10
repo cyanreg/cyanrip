@@ -91,6 +91,13 @@ def sc_basic():
     expect("basic", "1.flac:4", "2.flac:4", "log.log", "sheet.cue")
 
 
+def log_frames(name):
+    """Frame counts the log reports, one per track"""
+    log = (WORK / f"out_{name}" / "log.log").read_text()
+    return [int(l.split()[1]) for l in log.splitlines()
+            if l.strip().startswith("Frames:")]
+
+
 def sc_pregap():
     # Track 1 HTOA stays unmerged by default, track 2 pregap merges into track 1
     rip("def", "pregap.cue")
@@ -101,8 +108,23 @@ def sc_pregap():
     expect("track", "0.flac:2", "1.flac:2", "2.flac:1", "3.flac:2",
            "4.flac:1", "log.log", "sheet.cue")
 
+    # The log describes the files, split off tracks and the ones they were
+    # split from included
+    if log_frames("track") != [150, 150, 75, 150, 75]:
+        fail(f"track: logged frames {log_frames('track')}")
+
     rip("drop", "pregap.cue", "-p", "2=drop")
     expect("drop", "1.flac:2", "2.flac:2", "3.flac:1", "log.log", "sheet.cue")
+
+    # A merged pregap starts the file, so index 1 comes a second in
+    rip("merge", "pregap.cue", "-p", "2=merge")
+    expect("merge", "1.flac:2", "2.flac:3", "3.flac:1", "log.log", "sheet.cue")
+    if log_frames("merge") != [150, 225, 75]:
+        fail(f"merge: logged frames {log_frames('merge')}")
+
+    sheet = (WORK / "out_merge" / "sheet.cue").read_text()
+    if "INDEX 00 00:00:00\n    INDEX 01 00:01:00" not in sheet:
+        fail("merge: track 2 indices don't match its merged pregap")
 
 
 def data_track(name, img, track, lsn, frames):

@@ -1330,6 +1330,11 @@ static void setup_track_offsets_and_report(cyanrip_ctx *ctx)
     for (int i = 0; i < ctx->nb_tracks; i++) {
         cyanrip_track *t = &ctx->tracks[i];
 
+        /* What the log and CUE sheet report: the files' bounds, with the
+         * pregaps handled, but before the offset shifts them */
+        t->start_lsn_sig = t->start_lsn;
+        t->end_lsn_sig = t->end_lsn;
+
         if (t->track_is_data)
             t->frames = t->end_lsn - t->start_lsn + 1;
         else
