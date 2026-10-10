@@ -16,6 +16,8 @@
  - Automatic deemphasis of preemphasized discs now actually happens
  - CUE sheets reference their files relative to the sheet
  - Quotes and line breaks in metadata no longer break CUE sheet lines
+ - CUE sheets of discs with split off pregaps number their tracks right, and
+   give a split off hidden track as track 1's INDEX 00 rather than as track 0
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
  - Naming schemes are checked before ripping, and condition tokens matching no
    key compare as written

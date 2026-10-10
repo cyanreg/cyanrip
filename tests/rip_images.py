@@ -123,6 +123,17 @@ def sc_pregap():
     if log_frames("track") != [150, 150, 75, 150, 75]:
         fail(f"track: logged frames {log_frames('track')}")
 
+    # A split off HTOA holds track 1's INDEX 00, there being no track 0, and
+    # tracks are numbered by their number, not by their position
+    rip("htoa", "pregap.cue", "-p", "1=track", "-J")
+    sheet = (WORK / "out_htoa" / "sheet.cue").read_text()
+    tracks = [l.split()[1] for l in sheet.splitlines() if l.strip().startswith("TRACK")]
+    if tracks != ["01", "02", "03"]:
+        fail(f"htoa: CUE sheet tracks {tracks}")
+    if 'FILE "0.flac" WAVE\n  TRACK 01 AUDIO\n' not in sheet or \
+       'INDEX 00 00:00:00\nFILE "1.flac" WAVE\n    INDEX 01 00:00:00' not in sheet:
+        fail("htoa: hidden track not given as track 1's INDEX 00")
+
     rip("drop", "pregap.cue", "-p", "2=drop")
     expect("drop", "1.flac:2", "2.flac:2", "3.flac:1", "log.log", "sheet.cue")
 

@@ -123,7 +123,7 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         && t->merged_pregap_end == CDIO_INVALID_LSN);
     if (write_appended_pregap) {
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
-            fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->index);
+            fprintf(ctx->cuefile[Z], "  TRACK %02d AUDIO\n", t->number);
 
         CLOG("    TITLE \"%s\"\n", t->meta, "title");
         CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
@@ -132,6 +132,13 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
         for (int Z = 0; Z < ctx->settings.outputs_num; Z++)
             fprintf(ctx->cuefile[Z], "    INDEX 00 %s\n", time_00);
     }
+
+    /* A hidden track split off track 1 can't be track 0, which CUE sheets
+     * don't have, so its file holds track 1's INDEX 00 instead, and track
+     * 1's own file only its INDEX 01 */
+    const int htoa = t->number == 0 && t->nt && !t->track_is_data;
+    const int after_htoa = t->pt && t->pt->number == 0 && !t->pt->track_is_data;
+    const cyanrip_track *tm = htoa ? t->nt : t; /* Whose TRACK this file starts */
 
     for (int Z = 0; Z < ctx->settings.outputs_num; Z++) {
         char *path = crip_get_path(ctx,
@@ -155,18 +162,18 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
                 ctx->settings.outputs[Z] == CYANRIP_FORMAT_MP3 ? "MP3" :
                 t->track_is_data ? "BINARY" : "WAVE");
 
-        if (!write_appended_pregap)
-            fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", t->number,
+        if (!write_appended_pregap && !after_htoa)
+            fprintf(ctx->cuefile[Z], "  TRACK %02d %s\n", tm->number,
                     !t->track_is_data ? "AUDIO" :
                     t->data_mode == 2 ? "MODE2/2352" : "MODE1/2352");
 
         av_free(path);
     }
 
-    if (!t->track_is_data && !write_appended_pregap) {
-        CLOG("    TITLE \"%s\"\n", t->meta, "title");
-        CLOG("    PERFORMER \"%s\"\n", t->meta, "artist");
-        CLOG("    ISRC %s\n", t->meta, "isrc");
+    if (!t->track_is_data && !write_appended_pregap && !after_htoa) {
+        CLOG("    TITLE \"%s\"\n", tm->meta, "title");
+        CLOG("    PERFORMER \"%s\"\n", tm->meta, "artist");
+        CLOG("    ISRC %s\n", tm->meta, "isrc");
     }
 
     if (t->dropped_pregap_start != CDIO_INVALID_LSN) {
@@ -180,11 +187,13 @@ void cyanrip_cue_track(cyanrip_ctx *ctx, cyanrip_track *t)
     }
 
     for (int Z = 0; Z < ctx->settings.outputs_num; Z++) {
-        if (t->preemphasis && !ctx->settings.deemphasis &&
+        if (!after_htoa && tm->preemphasis && !ctx->settings.deemphasis &&
             !ctx->settings.force_deemphasis)
             fprintf(ctx->cuefile[Z], "    FLAGS PRE\n");
 
-        if (t->dropped_pregap_start != CDIO_INVALID_LSN &&
+        if (htoa) {
+            fprintf(ctx->cuefile[Z], "    INDEX 00 %s\n", time_01);
+        } else if (t->dropped_pregap_start != CDIO_INVALID_LSN &&
             t->dropped_pregap_start != t->start_lsn) {
             fprintf(ctx->cuefile[Z], "    PREGAP %s\n",   time_00);
             fprintf(ctx->cuefile[Z], "    INDEX 01 %s\n", time_01);
