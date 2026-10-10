@@ -17,6 +17,9 @@
  - Naming schemes: stricter parsing, whitespace trimming, filename collision warnings
  - Naming schemes are checked before ripping, and condition tokens matching no
    key compare as written
+ - Naming schemes with braces inside braces are refused, rather than mangled
+ - Absolute Windows paths in naming schemes keep their drive letter
+ - The OS specific sanitation methods replace colons on macOS too
  - Merged pregaps get the right INDEX 01 in CUE sheets, and the log gives
    the bounds of pregap tracks and of the tracks they were split from
  - The first track's pregap on discs not starting at track 1 is handled
