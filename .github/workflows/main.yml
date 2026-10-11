@@ -1,10 +1,18 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
-    branches: [ master, workflow ]
+    branches:
+      - master
+      - workflow
   release:
-    types: [ released ]
+    types:
+      - released
+      - prereleased
+  workflow_dispatch:
 
 jobs:
   linux:
@@ -60,6 +68,73 @@ jobs:
           export PKG_CONFIG_PATH="$(brew --prefix curl)/lib/pkgconfig:$PKG_CONFIG_PATH"
           meson test -C build --print-errorlogs
 
+  linux-static:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    container: alpine:3.22
+    permissions:
+      contents: write
+    steps:
+      - name: Install dependencies
+        run: |
+          apk add bash build-base meson ninja pkgconf cmake nasm autoconf automake libtool \
+            git curl xz xz-dev xz-static bzip2 tar zlib-dev zlib-static bzip2-dev bzip2-static \
+            openssl-dev openssl-libs-static libxml2-dev libxml2-static linux-headers
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          .github/static-build.sh
+          cp cyanrip cyanrip-linux-amd64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanrip-linux-amd64
+          path: cyanrip-linux-amd64
+
+      - name: Upload the release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          apk add github-cli
+          gh release upload "${{ github.event.release.tag_name }}" cyanrip-linux-amd64 --clobber
+
+  macos-dmg:
+    if: github.event_name == 'release'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install meson ninja pkg-config cmake nasm autoconf automake libtool
+
+      - name: Build
+        run: .github/static-build.sh
+
+      - name: Create the disk image
+        run: |
+          mkdir dmg
+          cp cyanrip README.md LICENSE.md dmg/
+          codesign --force --sign - dmg/cyanrip
+          hdiutil create -volname cyanrip -srcfolder dmg -ov -format UDZO \
+            cyanrip-macos-arm64.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyanrip-macos-arm64
+          path: cyanrip-macos-arm64.dmg
+
+      - name: Upload the release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" cyanrip-macos-arm64.dmg --clobber
+
   mingw:
     runs-on: windows-latest
     env:
@@ -80,6 +155,7 @@ jobs:
           zip cyanrip cyanrip.exe
 
       - name: "Upload artifact"
+        if: github.ref == 'refs/heads/master' || github.event_name == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: cyanrip-${{ matrix.runs-on }}
@@ -87,6 +163,7 @@ jobs:
 
       - name: Get Release
         id: get_release
+        if: github.ref == 'refs/heads/master' || github.event_name == 'release'
         shell: bash
         run: |
           echo "::set-output name=upload_url_release::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/$(cut -d/ -f3 <<< ${{ github.ref }}) | jq -r ."upload_url")"
@@ -94,7 +171,7 @@ jobs:
           echo "::set-output name=nightly_id::$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly | jq -r ."id")"
 
       - name: Upload a Release Asset
-        if: steps.get_release.outputs.upload_url_release != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release != 'null'
         uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -105,7 +182,7 @@ jobs:
           asset_content_type: application/vnd.microsoft.portable-executable
 
       - name: Upload versioned Nightly asset
-        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
         uses: WebFreak001/deploy-nightly@v1.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -119,7 +196,7 @@ jobs:
 
       - name: Delete existing nightly latest
         id: del_nightly_release
-        if: steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
+        if: steps.get_release.conclusion == 'success' && steps.get_release.outputs.upload_url_release == 'null' && steps.get_release.outputs.upload_url_nightly != 'null'
         uses: mknejp/delete-release-assets@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

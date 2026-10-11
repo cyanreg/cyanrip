@@ -122,6 +122,7 @@ Arguments are optional, except `-s`. By default cyanrip will rip all tracks from
 | -Z `int`             | Rips tracks until their checksums match `<int>` number of times. For very damaged CDs.      |
 | -S `int`             | Sets the drive speed if possible (default is unset, usually maximum)                        |
 | -p `number=string`   | Specifies what to do with the pregap, syntax is described below                             |
+| --no-raw-subchannel  | Read formatted Q sub-channel for [pregap detection](#pregap-handling) instead of raw P-W    |
 | -P `int`             | Sets the [paranoia level](#paranoia-level), default is max, 0 disables checking completely  |
 | -O                   | Overread into lead-in/lead-out areas, if unsupported by drive may freeze ripping            |
 | -H                   | Enable HDCD decoding, read below for details                                                |
@@ -212,6 +213,8 @@ To adjust the directories and filenames, read the [naming scheme](#naming-scheme
 
 Pregap handling
 ---------------
+Pregaps are found by reading the Q sub-channel around each track boundary and looking for the sectors marked index 0. Where the drive supports it, the raw P-W sub-channel is read, so damaged frames are detected and single-bit errors corrected; otherwise the drive's formatted Q sub-channel is used, which `--no-raw-subchannel` also forces. The log header says which was used, and its Gaps section lists the pregaps found. For CUE/BIN images, the pregaps come from the CUE sheet.
+
 By default, track 1 pregap is ignored, while any other track's pregap is merged into the previous track. This is identical to EAC's default behaviour.
 
 You can override what's done with each pregap on a per-track basis using the `-p track_number=action` argument. This argument must be specified separately for each track.

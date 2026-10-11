@@ -1,0 +1,61 @@
+/*
+ * This file is part of cyanrip.
+ *
+ * cyanrip is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * cyanrip is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with cyanrip; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#include "subq_read.h"
+
+#include <IOKit/storage/IOCDTypes.h>
+#include <IOKit/storage/IOCDMediaBSDClient.h>
+#include <sys/errno.h>
+#include <cdio/cdio.h>
+
+driver_return_code_t cyanrip_read_audio_subchannel_sector(const CdIo_t *p_cdio, uint8_t *buf, const lsn_t lsn,
+                                                          enum cyanrip_subchannel subchannel, size_t block_size)
+{
+    uint8_t sector_area;
+    switch (subchannel) {
+    case CYANRIP_SUBCHANNEL_Q:      sector_area = kCDSectorAreaSubChannelQ; break;
+    case CYANRIP_SUBCHANNEL_PW_RAW: sector_area = kCDSectorAreaSubChannel;  break;
+    default:                        return DRIVER_OP_BAD_PARAMETER;
+    }
+
+    const int fd = cdio_get_device_fd((CdIo_t *)p_cdio);
+    if (fd < 0)
+        return DRIVER_OP_ERROR;
+
+    dk_cd_read_t cd_read = {
+        .offset = block_size*lsn,
+        .sectorArea = kCDSectorAreaUser | sector_area,
+        .sectorType = kCDSectorTypeCDDA,
+        .bufferLength = block_size,
+        .buffer = buf,
+    };
+    if (ioctl(fd, DKIOCCDREAD, &cd_read) >= 0)
+        return DRIVER_OP_SUCCESS;
+
+    /* Only DRIVER_OP_ERROR is retried */
+    switch (errno) {
+        case EBADF:
+            return DRIVER_OP_UNINIT;
+        case EINVAL:
+            return DRIVER_OP_BAD_PARAMETER;
+        case ENOTTY:
+            return DRIVER_OP_UNSUPPORTED;
+        default:
+            return DRIVER_OP_ERROR;
+    }
+}
