@@ -205,10 +205,11 @@ def sc_mixed():
     if "Sector EDC:    all 150 sectors match" not in (WORK / "mixed.log").read_text():
         fail("mixed: data track EDCs not verified")
 
-    shutil.copy(WORK / "mixed.cue", WORK / "damaged.cue")
     damaged = bytearray((WORK / "mixed.bin").read_bytes())
     damaged[10 * 2352 + 100] ^= 0x01
     (WORK / "damaged.bin").write_bytes(damaged)
+    (WORK / "damaged.cue").write_text((WORK / "mixed.cue").read_text()
+                                      .replace("mixed.bin", "damaged.bin"))
     ec, log = crip("-d", WORK / "damaged.cue", "-N", "-A", "-U", "-s", "0",
                    "-P", "0", "-r", "1", "-o", "flac", "-D", WORK / "out_damaged",
                    "-L", "log", "-M", "sheet")
