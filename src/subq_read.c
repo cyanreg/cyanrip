@@ -22,6 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <libavutil/bswap.h>
+#include <libavutil/crc.h>
+
 /* Max distance between a Q frame's absolute time and the sector read, same as cdrdao */
 #define SUBQ_POSITION_TOLERANCE 20
 
@@ -39,15 +42,8 @@ static inline uint8_t subq_bcd_to_bin(uint8_t x)
 /* CRC-16/GSM over the first 10 bytes */
 static inline unsigned int subq_crc(const uint8_t* subq_buf)
 {
-    int length = 10;
-    const unsigned crc_poly = 0x1021;
-    unsigned r = 0x0000;
-    while (length--) {
-        r ^= *subq_buf++ << 8;
-        for (int i = 0; i < 8; i++)
-            r = r & 0x8000 ? (r << 1) ^ crc_poly : r << 1;
-    }
-    return ~r & 0xFFFFU;
+    const AVCRC *crc_table = av_crc_get_table(AV_CRC_16_CCITT);
+    return av_bswap16(av_crc(crc_table, 0, subq_buf, 10)) ^ 0xFFFF;
 }
 
 static inline unsigned int subq_read_crc(const uint8_t *subq_buf)
