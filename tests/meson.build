@@ -44,6 +44,10 @@ test('Option parsing', genopt_test)
 ## finished files.
 python = import('python').find_installation()
 
+# From 2.2.1 on, libcdio numbers a CUE sheet's tracks from 1, whatever the
+# first one's number is
+cue_track_numbers = dependency('libcdio').version().version_compare('< 2.2.1')
+
 rip_scenarios = [
     'info',
     'basic',
@@ -64,6 +68,7 @@ foreach s : rip_scenarios
     test(s, python,
          args: [ files('rip_images.py'), cyanrip_exe,
                  meson.current_source_dir() / 'fixtures', s ],
+         env: { 'CUE_TRACK_NUMBERS': cue_track_numbers ? '1' : '0' },
          suite: 'images',
          timeout: 120)
 endforeach

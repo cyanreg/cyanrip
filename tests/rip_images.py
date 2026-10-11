@@ -3,6 +3,7 @@
 # Usage: rip_images.py <cyanrip-binary> <fixtures-dir> <scenario>
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,9 @@ FIX = Path(sys.argv[2])
 SCENARIO = sys.argv[3]
 
 FFPROBE = shutil.which("ffprobe")
+
+# Whether libcdio keeps the track numbers of CUE sheets not starting at 1
+CUE_TRACK_NUMBERS = os.environ.get("CUE_TRACK_NUMBERS", "1") == "1"
 
 fails = 0
 
@@ -153,6 +157,10 @@ def sc_pregap():
     sheet = (WORK / "out_merge" / "sheet.cue").read_text()
     if "INDEX 00 00:00:00\n    INDEX 01 00:01:00" not in sheet:
         fail("merge: track 2 indices don't match its merged pregap")
+
+    if not CUE_TRACK_NUMBERS:
+        print("first3: libcdio renumbers CUE sheet tracks, skipping")
+        return
 
     # A disc starting at track 3 handles its first pregap as track 1's would
     # be, rather than as if a track came before it
@@ -320,6 +328,10 @@ def sc_discid():
                                 (4, "MODE1/2352", 14000)])
     check_ids("extra2.cue", "1R2GmWmzvVJpk3OOqrZc8TEHcmQ-", "08001A02",
               "1+2+2150+150+1150", "00003c28-0000b091-2200c004")
+
+    if not CUE_TRACK_NUMBERS:
+        print("first3: libcdio renumbers CUE sheet tracks, skipping")
+        return
 
     # Offsets are hashed by track number rather than by position
     write_toc("first3", 3000, [(3, "AUDIO", 0), (4, "AUDIO", 1000),
