@@ -1,7 +1,7 @@
 project('cyanrip', 'c',
     license: 'LGPL2.1+',
     default_options: [ 'buildtype=debugoptimized', 'c_std=c99', 'warning_level=1' ],
-    version: '0.9.4-rc2',
+    version: '0.9.4-rc3',
     meson_version: '>=0.53.0',
 )
 
