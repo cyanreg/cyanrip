@@ -6,6 +6,7 @@ buildCyanrip() {
     build_neon
     build_libmusicbrainz
     build_libqrencode
+    build_chromaprint
     build_ffmpeg
     build_cyanrip
 }
@@ -105,6 +106,17 @@ build_libqrencode() {
     pkg-config --exists libqrencode
 }
 
+build_chromaprint() {
+    # The bundled kissfft is used rather than whichever FFT is found first,
+    # so the library depends on nothing but the C++ runtime, which its
+    # pkg-config file leaves out. Its directory is given, as the find root
+    # path would keep CMake from finding it in the source tree.
+    cyan_do_vcs "https://github.com/acoustid/chromaprint.git" &&
+    cyan_do_cmakeinstall -DFFT_LIB=kissfft -DKISSFFT_SOURCE_DIR="$(cygpath -m "$PWD/src/3rdparty/kissfft")" \
+        -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF &&
+    echo "Libs.private: -lstdc++" >> "$CYANRIPINSTALLDIR/lib/pkgconfig/libchromaprint.pc"
+}
+
 build_ffmpeg() {
     cyan_do_vcs "https://github.com/FFmpeg/FFmpeg.git"
     cyan_do_separate_confmakeinstall --pkg-config-flags=--static \
@@ -126,7 +138,7 @@ build_cyanrip() {
     cd "$CYANRIPREPODIR"
     cyan_hide_conflicting_libs
     PKG_CONFIG=pkg-config \
-    CFLAGS+=" -DLIBXML_STATIC -DCURL_STATICLIB $(printf ' -I%s' "$(cygpath -m "$CYANRIPINSTALLDIR/include")")" \
+    CFLAGS+=" -DLIBXML_STATIC -DCURL_STATICLIB -DCHROMAPRINT_NODLL $(printf ' -I%s' "$(cygpath -m "$CYANRIPINSTALLDIR/include")")" \
         LDFLAGS+="$(printf ' -L%s' "$(cygpath -m "$CYANRIPINSTALLDIR/lib")")" \
         meson setup build --default-library=static --buildtype=release --prefix="$CYANRIPINSTALLDIR" --backend=ninja &&
     ninja -C build && strip --strip-all build/src/cyanrip.exe -o cyanrip.exe
