@@ -231,6 +231,7 @@ typedef struct cyanrip_ctx {
     cdrom_drive_t     *drive;
     cdrom_paranoia_t  *paranoia;
     CdIo_t            *cdio;
+    int64_t            last_media_check; /* When get_media_changed() last asked the drive */
     FILE              *logfile[CYANRIP_FORMATS_NB];
     FILE              *cuefile[CYANRIP_FORMATS_NB];
     cyanrip_settings   settings;
