@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import wave
 from pathlib import Path
 
 CRIP = sys.argv[1]
@@ -301,6 +302,31 @@ def check_ids(img, discid, cddb, toc, arid):
                       ("arid", arid)):
         if have.get(key) != want:
             fail(f"discid {img}: {key} {have.get(key)} != {want}")
+
+
+def sc_session_gap():
+    # An Enhanced CD: the last audio track ends where session 1's lead-out
+    # starts, one session gap before the data track. Drives can't read the
+    # lead-out, so the frame a positive offset needs past the track's end
+    # must be filled with silence, as at the end of a single session disc.
+    write_toc("session_gap", 14400, [(1, "AUDIO", 0), (2, "AUDIO", 1000),
+                                     (3, "MODE1/2352", 13400)])
+    with open(WORK / "session_gap.bin", "r+b") as f:
+        f.seek(2000 * 2352)
+        f.write(b"\x7f" * 2352)
+
+    rip("session_gap", "session_gap.cue", "-s", "6", "-X", "-l", "2",
+        "-o", "wav")
+    log = (WORK / "out_session_gap" / "log.log").read_text()
+    if "Appended:    1 frames of silence" not in log:
+        fail("session_gap: no silence appended in place of the lead-out")
+
+    with wave.open(str(WORK / "out_session_gap" / "2.wav")) as w:
+        if w.getnframes() != 1000 * 588:
+            fail(f"session_gap: {w.getnframes()} samples, not {1000 * 588}")
+        w.setpos(w.getnframes() - 6)
+        if w.readframes(6) != bytes(24):
+            fail("session_gap: the track's end was read from the lead-out")
 
 
 def sc_discid():
