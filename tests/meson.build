@@ -54,6 +54,7 @@ rip_scenarios = [
     'pregap',
     'mixed',
     'trailing',
+    'session_gap',
     'discid',
     'nrg',
     'filters',

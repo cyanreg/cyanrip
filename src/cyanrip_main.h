@@ -266,6 +266,7 @@ typedef struct cyanrip_ctx {
     int total_error_count;
     lsn_t start_lsn;
     lsn_t end_lsn;
+    lsn_t audio_end_lsn; /* Last sector of the audio session, before an Enhanced CD's session gap */
     lsn_t duration_frames;
     lsn_t id_leadout_lsn; /* Lead-out the MusicBrainz and CDDB IDs derive from */
 
