@@ -7,6 +7,7 @@ buildCyanrip() {
     build_libmusicbrainz
     build_libqrencode
     build_chromaprint
+    build_lame
     build_ffmpeg
     build_cyanrip
 }
@@ -39,9 +40,18 @@ cyan_do_vcs() {
     cd "$vcsFolder"
 }
 
+cyan_do_svn() {
+    local svnURL=$1 svnFolder=$2
+    : "${svnFolder:=$(basename "$svnURL")}"
+
+    cd "$CYANRIPBUILDDIR"
+    svn checkout -q "$svnURL" "$svnFolder"
+    cd "$svnFolder"
+}
+
 cyan_do_hide_all_sharedlibs() {
     local files
-    files="$(find /mingw{32,64}/lib /mingw{32/i686,64/x86_64}-w64-mingw32/lib -name "*.dll.a" 2> /dev/null)"
+    files="$(find "$MINGW_PREFIX/lib" "$MINGW_PREFIX/$MINGW_CHOST/lib" -name "*.dll.a" 2> /dev/null)"
     local tomove=()
     for file in $files; do
         [[ -f ${file%*.dll.a}.a ]] && tomove+=("$file")
@@ -81,8 +91,8 @@ build_curl() {
     autoreconf -fi &&
     sed -ri "s;(^SUBDIRS = lib) src (include) scripts;\1 \2;" Makefile.in &&
 #    CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
-    cyan_do_separate_confmakeinstall --with-{winssl,winidn,nghttp2} \
-        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl,zstd,nghttp2,ldap,ldap-lib} \
+    cyan_do_separate_confmakeinstall --with-{schannel,winidn,nghttp2} \
+        --without-{openssl,gnutls,mbedtls,libssh2,ca-bundle,ca-path,brotli,libpsl,zstd,nghttp2,ldap,ldap-lib} \
         --disable-{ldap,ldaps}
 }
 
@@ -115,6 +125,14 @@ build_chromaprint() {
     cyan_do_cmakeinstall -DFFT_LIB=kissfft -DKISSFFT_SOURCE_DIR="$(cygpath -m "$PWD/src/3rdparty/kissfft")" \
         -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF &&
     echo "Libs.private: -lstdc++" >> "$CYANRIPINSTALLDIR/lib/pkgconfig/libchromaprint.pc"
+}
+
+build_lame() {
+    # Since 4.0 the library links against libmpg123 for its decoder, which
+    # FFmpeg's configure doesn't add when linking statically, so build it
+    # here without the decoder. Only the encoder is used.
+    cyan_do_svn "https://svn.code.sf.net/p/lame/svn/trunk/lame" &&
+    cyan_do_separate_confmakeinstall --disable-{frontend,decoder,gtktest}
 }
 
 build_ffmpeg() {
