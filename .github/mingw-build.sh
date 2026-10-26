@@ -7,6 +7,7 @@ buildCyanrip() {
     build_libmusicbrainz
     build_libqrencode
     build_chromaprint
+    build_lame
     build_ffmpeg
     build_cyanrip
 }
@@ -37,6 +38,15 @@ cyan_do_vcs() {
     cd "$CYANRIPBUILDDIR"
     git clone --depth 1 "$vcsURL" "$vcsFolder"
     cd "$vcsFolder"
+}
+
+cyan_do_svn() {
+    local svnURL=$1 svnFolder=$2
+    : "${svnFolder:=$(basename "$svnURL")}"
+
+    cd "$CYANRIPBUILDDIR"
+    svn checkout -q "$svnURL" "$svnFolder"
+    cd "$svnFolder"
 }
 
 cyan_do_hide_all_sharedlibs() {
@@ -115,6 +125,14 @@ build_chromaprint() {
     cyan_do_cmakeinstall -DFFT_LIB=kissfft -DKISSFFT_SOURCE_DIR="$(cygpath -m "$PWD/src/3rdparty/kissfft")" \
         -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF &&
     echo "Libs.private: -lstdc++" >> "$CYANRIPINSTALLDIR/lib/pkgconfig/libchromaprint.pc"
+}
+
+build_lame() {
+    # Since 4.0 the library links against libmpg123 for its decoder, which
+    # FFmpeg's configure doesn't add when linking statically, so build it
+    # here without the decoder. Only the encoder is used.
+    cyan_do_svn "https://svn.code.sf.net/p/lame/svn/trunk/lame" &&
+    cyan_do_separate_confmakeinstall --disable-{frontend,decoder,gtktest}
 }
 
 build_ffmpeg() {
