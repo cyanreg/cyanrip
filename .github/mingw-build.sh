@@ -91,8 +91,8 @@ build_curl() {
     autoreconf -fi &&
     sed -ri "s;(^SUBDIRS = lib) src (include) scripts;\1 \2;" Makefile.in &&
 #    CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
-    cyan_do_separate_confmakeinstall --with-{winssl,winidn,nghttp2} \
-        --without-{ssl,gnutls,mbedtls,libssh2,random,ca-bundle,ca-path,librtmp,brotli,debug,libpsl,zstd,nghttp2,ldap,ldap-lib} \
+    cyan_do_separate_confmakeinstall --with-{schannel,winidn,nghttp2} \
+        --without-{openssl,gnutls,mbedtls,libssh2,ca-bundle,ca-path,brotli,libpsl,zstd,nghttp2,ldap,ldap-lib} \
         --disable-{ldap,ldaps}
 }
 
