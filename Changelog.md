@@ -42,6 +42,8 @@
    discs with data tracks and on discs not starting at track 1
  - AccurateRip lookups now find discs with data tracks, and each track is
    checked against its own database entry; the AccurateRip ID is logged
+ - Disc images are ripped without paranoia by default, as they read back
+   the same data every time; -P still enables it
  - Fixed a crash on overlong filenames
  - Fixed crashes on unexpected AccurateRip replies
  - Refusing to rip without an offset, and finding no offset with -f, exit with an error

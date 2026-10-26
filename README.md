@@ -335,6 +335,8 @@ cyanrip can apply four levels of `cdparanoia` error detection and correction:
 | -P `2`           | Overlapped and verified reads | Re-read sectors to correct for optical drives that supply inconsistent audio data | *n/a*                       |
 | -P `3` or `max`  | All paranoia features         | At present, same as `-P 2`, but includes future `cdparanoia` improvements         | *default*                   |
 
+Disc images (CUE/BIN, NRG and cdrdao TOC files) are ripped with `-P none` by default, as reading an image returns the same data every time, so there is nothing for paranoia to correct. Pass `-P` to use paranoia on them anyway.
+
 
 Paranoia status count
 ---------------------

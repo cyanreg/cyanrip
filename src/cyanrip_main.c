@@ -261,22 +261,29 @@ static int cyanrip_ctx_init(cyanrip_ctx **s, cyanrip_settings *settings)
         return AVERROR(EINVAL);
     }
 
-    cdio_paranoia_modeset(ctx->paranoia, paranoia_level_map[settings->paranoia_level]);
-
-    /* Disc images have no hardware cache to defeat; paranoia's cache probe
-     * reads cachemodel sectors past the seek target on backseeks, which
-     * beyond the leadout gets counted as a read error. 1, not 0, as the
-     * cachemodel size is also the c_block read chunk size, and 0 never
-     * makes progress */
     switch (cdio_get_driver_id(ctx->cdio)) {
     case DRIVER_BINCUE:
     case DRIVER_NRG:
     case DRIVER_CDRDAO:
-        cdio_paranoia_cachemodel_size(ctx->paranoia, 1);
+        /* Disc images read back the same data every time, so there is
+         * nothing for paranoia to correct, unless asked for explicitly */
+        if (ctx->settings.paranoia_level < 0)
+            ctx->settings.paranoia_level = 0;
+        /* Without paranoia, the cachemodel size is only the read chunk
+         * size, and chunks reaching past the leadout fail to read. 1, not 0,
+         * as 0 never makes progress. With paranoia, a cachemodel this small
+         * makes longer images rip as silence or never finish, so keep its
+         * default there */
+        if (!ctx->settings.paranoia_level)
+            cdio_paranoia_cachemodel_size(ctx->paranoia, 1);
         break;
     default:
+        if (ctx->settings.paranoia_level < 0)
+            ctx->settings.paranoia_level = crip_max_paranoia_level;
         break;
     }
+
+    cdio_paranoia_modeset(ctx->paranoia, paranoia_level_map[ctx->settings.paranoia_level]);
 
     ctx->start_lsn = 0;
 
@@ -1496,7 +1503,7 @@ int main(int argc, char **argv)
     settings.disable_coverart_embedding = 0;
     settings.enable_replaygain = 1;
     settings.disable_data_tracks = 0;
-    settings.paranoia_level = FF_ARRAY_ELEMS(paranoia_level_map) - 1;
+    settings.paranoia_level = -1; /* Picked once the source is open */
 
     memset(settings.pregap_action, CYANRIP_PREGAP_DEFAULT, 198*sizeof(*settings.pregap_action));
 
