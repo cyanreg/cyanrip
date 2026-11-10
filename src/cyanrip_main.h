@@ -102,6 +102,37 @@ enum coverart_lookup_sizes {
     COVERART_LOOKUP_SIZE_1200
 };
 
+/* Whether the drive returns binary instead of BCD in the Q sub-channel, like XLD's nonBCD */
+enum cyanrip_bcd_fixup_status {
+    CYANRIP_BCD_FIXUP_UNDETERMINED = 0,
+    CYANRIP_BCD_FIXUP_REQUIRED = 1,
+    CYANRIP_BCD_FIXUP_NOT_REQUIRED = 2,
+};
+
+enum cyanrip_subq_read_mode {
+    CYANRIP_SUBQ_READ_UNDETERMINED = 0,
+    CYANRIP_SUBQ_READ_RAW_PW = 1,
+    CYANRIP_SUBQ_READ_FORMATTED_Q = 2,
+};
+
+/* Pregap search outcome, kept for the log which doesn't exist yet when it runs */
+enum cyanrip_pregap_search_result {
+    CYANRIP_PREGAP_SEARCH_NOT_RUN = 0,
+    CYANRIP_PREGAP_SEARCH_DONE,
+    CYANRIP_PREGAP_SEARCH_UNREADABLE,
+    CYANRIP_PREGAP_SEARCH_CRC_BUDGET,
+    CYANRIP_PREGAP_SEARCH_READ_ERROR,
+};
+
+typedef struct cyanrip_pregap_info {
+    enum cyanrip_pregap_search_result result;
+    int damaged_frames;
+    int repaired_frames; /* single bit errors */
+    int q_skew;          /* Q sub-channel ahead (+) or behind (-) the TOC */
+    lsn_t failed_lsn;
+    int failed_error;
+} cyanrip_pregap_info;
+
 typedef struct cyanrip_settings {
     char *dev_path;
     char *folder_name_scheme;
@@ -119,6 +150,7 @@ typedef struct cyanrip_settings {
     int decode_hdcd;
     int disable_accurip;
     int disable_coverart_db;
+    int no_raw_subchannel;
     int overread_leadinout;
     int eject_on_success_rip;
     enum cyanrip_pregap_action pregap_action[198];
@@ -178,6 +210,7 @@ typedef struct cyanrip_track {
     int frames_after_disc_end;
 
     lsn_t pregap_lsn;
+    cyanrip_pregap_info pregap_info;
     lsn_t start_lsn;
     lsn_t start_lsn_sig;
     lsn_t end_lsn;
@@ -268,6 +301,11 @@ typedef struct cyanrip_ctx {
     lsn_t end_lsn;
     lsn_t duration_frames;
     lsn_t id_leadout_lsn; /* Lead-out the MusicBrainz and CDDB IDs derive from */
+
+    enum cyanrip_bcd_fixup_status subq_bcd_fixup_status;
+    enum cyanrip_subq_read_mode subq_read_mode;
+    int subq_probe_frames;
+    int subq_probe_valid_frames;
 
     /* ETA */
     CRSlidingWinCtx eta_ctx;

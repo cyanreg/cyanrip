@@ -40,8 +40,12 @@ static void print_offsets(cyanrip_ctx *ctx, cyanrip_track *t)
         char pregap_duration[16];
         lsn_t pregap_end = t->merged_pregap_end != CDIO_INVALID_LSN ? t->merged_pregap_end :
                                                                       t->start_lsn_sig;
-        cyanrip_frames_to_duration(pregap_end - t->pregap_lsn, pregap_duration);
+        uint32_t pregap_frames = pregap_end - t->pregap_lsn;
+        /* 2-second lead-in is conventionally counted as part of track 1 pre-gap duration */
+        if (t->number == 1)
+            pregap_frames += CDIO_PREGAP_SECTORS;
 
+        cyanrip_frames_to_duration(pregap_frames, pregap_duration);
         cyanrip_log(ctx, 0, "    Pregap LSN:  %i (duration: %s)\n",
                     t->pregap_lsn, pregap_duration);
     } else {
@@ -274,6 +278,24 @@ void cyanrip_log_start_report(cyanrip_ctx *ctx)
         cyanrip_log(ctx, 0, "Speed:          default\n");
     cyanrip_log(ctx, 0, "C2 errors:      %s by drive\n", (ctx->rcap & CDIO_DRIVE_CAP_READ_C2_ERRS) ?
                 "supported" : "unsupported");
+    switch (ctx->subq_read_mode) {
+    case CYANRIP_SUBQ_READ_RAW_PW:
+        cyanrip_log(ctx, 0, "Q sub-channel:  raw P-W (%i of %i probed frames valid)\n",
+                    ctx->subq_probe_valid_frames, ctx->subq_probe_frames);
+        break;
+    case CYANRIP_SUBQ_READ_FORMATTED_Q:
+        if (ctx->settings.no_raw_subchannel)
+            cyanrip_log(ctx, 0, "Q sub-channel:  formatted Q (raw P-W disabled)\n");
+        else if (ctx->subq_probe_frames)
+            cyanrip_log(ctx, 0, "Q sub-channel:  formatted Q (%i of %i raw P-W frames valid)\n",
+                        ctx->subq_probe_valid_frames, ctx->subq_probe_frames);
+        else
+            cyanrip_log(ctx, 0, "Q sub-channel:  formatted Q (raw P-W unsupported)\n");
+        break;
+    default:
+        cyanrip_log(ctx, 0, "Q sub-channel:  not read\n");
+        break;
+    }
     if (ctx->settings.paranoia_level == crip_max_paranoia_level)
         cyanrip_log(ctx, 0, "Paranoia level: %s\n", "max");
     else if (ctx->settings.paranoia_level == 0)
