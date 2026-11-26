@@ -124,8 +124,8 @@ int RENAME(fifo_push)(AVBufferRef *dst, TYPE *in)
         goto unlock;
 
     /* Block or error, but only for non-NULL pushes */
-    if (in && (ctx->max_queued != -1) &&
-        (ctx->num_queued > (ctx->max_queued + 1))) {
+    while (in && (ctx->max_queued != -1) &&
+           (ctx->num_queued > (ctx->max_queued + 1))) {
         if (!(ctx->block_flags & FRENAME(BLOCK_MAX_OUTPUT))) {
             err = AVERROR(ENOBUFS);
             FREE_FN(&in_clone);
@@ -165,7 +165,7 @@ TYPE *RENAME(fifo_pop)(AVBufferRef *src)
     SNAME *ctx = (SNAME *)src->data;
     pthread_mutex_lock(&ctx->lock);
 
-    if (!ctx->num_queued) {
+    while (!ctx->num_queued) {
         if (!(ctx->block_flags & FRENAME(BLOCK_NO_INPUT)))
             goto unlock;
 
@@ -196,7 +196,7 @@ TYPE *RENAME(fifo_peek)(AVBufferRef *src)
     SNAME *ctx = (SNAME *)src->data;
     pthread_mutex_lock(&ctx->lock);
 
-    if (!ctx->num_queued) {
+    while (!ctx->num_queued) {
         if (!(ctx->block_flags & FRENAME(BLOCK_NO_INPUT)))
             goto unlock;
 
