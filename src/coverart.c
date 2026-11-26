@@ -301,6 +301,18 @@ static int demux_image(cyanrip_ctx *ctx, CRIPArt *art, int info_only)
         goto end;
     }
 
+    /* Without a decoder for the image, as when FFmpeg is built without zlib
+     * for PNG, its dimensions stay unknown, and muxers write broken files
+     * with it embedded */
+    art->no_embed = art->params->width <= 0 || art->params->height <= 0;
+    if (art->no_embed) {
+        const char *title = dict_get(art->meta, "title");
+        const AVCodecDescriptor *cd = avcodec_descriptor_get(art->params->codec_id);
+        cyanrip_log(ctx, 0, "Warning: cover art \"%s\" can't be read (FFmpeg has no %s "
+                    "decoder?), it won't be embedded!\n", title ? title : "track",
+                    cd ? cd->name : avcodec_get_name(art->params->codec_id));
+    }
+
     if (info_only)
         goto end;
 

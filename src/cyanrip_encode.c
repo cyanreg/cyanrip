@@ -1155,7 +1155,7 @@ int cyanrip_init_track_encoding(cyanrip_ctx *ctx, cyanrip_enc_ctx **enc_ctx,
         art = &ctx->cover_arts[i == ctx->nb_cover_arts ? 0 : i];
     }
 
-    if (art->pkt && cfmt->coverart_supported &&
+    if (art->pkt && !art->no_embed && cfmt->coverart_supported &&
         !ctx->settings.disable_coverart_embedding) {
         s->st_img = avformat_new_stream(s->avf, NULL);
         if (!s->st_img) {
