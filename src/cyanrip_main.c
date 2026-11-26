@@ -506,11 +506,16 @@ static const uint8_t *cyanrip_read_frame(cyanrip_ctx *ctx)
     return data;
 }
 
+/* mem is the middle of a buffer reaching bytes before and after it. The
+ * checksum is taken over a frame, so going forward it must start at least a
+ * frame before the end. */
 static int search_for_offset(cyanrip_track *t, int *offset_found,
                              const uint8_t *mem, int dir,
                              int guess, int bytes)
 {
-    if (guess) {
+    const int last_fwd_byte_off = bytes - CDIO_CD_FRAMESIZE_RAW;
+
+    if (guess && guess*4 >= -bytes && guess*4 <= last_fwd_byte_off) {
         const uint8_t *start_addr = mem + guess*4;
         uint32_t accurip_v1 = 0x0;
         for (int j = 0; j < (CDIO_CD_FRAMESIZE_RAW >> 2); j++)
@@ -524,6 +529,9 @@ static int search_for_offset(cyanrip_track *t, int *offset_found,
     for (int byte_off = ((dir < 0) * 4); byte_off < bytes; byte_off += 4) {
         if (quit_now)
             return 0;
+
+        if (dir > 0 && byte_off > last_fwd_byte_off)
+            break;
 
         int offset = dir * (byte_off >> 2);
         if (guess == offset)
@@ -542,12 +550,19 @@ static int search_for_offset(cyanrip_track *t, int *offset_found,
     return 0;
 }
 
+/* The search radius, in frames, starts at 6 and doubles up to this when no
+ * offset is found. Drive offsets are within a few thousand samples, a few
+ * frames. */
+#define MAX_OFFSET_SEARCH_RANGE 48
+
 /* Returns whether an offset was found */
 static int search_for_drive_offset(cyanrip_ctx *ctx, int range)
 {
     int had_ar = 0, did_check = 0;
     int offset_found = 0, offset_found_samples = 0;
     uint8_t *mem = av_malloc(2 * range * CDIO_CD_FRAMESIZE_RAW);
+    if (!mem)
+        return 0;
 
     if (ctx->ar_db_status != CYANRIP_ACCUDB_FOUND)
         goto end;
@@ -628,6 +643,9 @@ end:
             cyanrip_log(ctx, 0, "No track had AccuRip entry, cannot find offset!\n");
         } else if (had_ar && !did_check) {
             cyanrip_log(ctx, 0, "No track was long enough, unable to find drive offset!\n");
+        } else if (2*range > MAX_OFFSET_SEARCH_RANGE) {
+            cyanrip_log(ctx, 0, "Was not able to find drive offset within %i frames "
+                        "(%i samples)!\n", range, range * (CDIO_CD_FRAMESIZE_RAW >> 2));
         } else {
             cyanrip_log(ctx, 0, "Was not able to find drive offset with a radius of %i frames"
                         ", trying again with a larger radius...\n", range);
