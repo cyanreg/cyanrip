@@ -68,7 +68,10 @@ foreach s : rip_scenarios
     test(s, python,
          args: [ files('rip_images.py'), cyanrip_exe,
                  meson.current_source_dir() / 'fixtures', s ],
-         env: { 'CUE_TRACK_NUMBERS': cue_track_numbers ? '1' : '0' },
+         # cyanrip writes UTF-8, which Python on Windows doesn't read by
+         # default before 3.15
+         env: { 'CUE_TRACK_NUMBERS': cue_track_numbers ? '1' : '0',
+                'PYTHONUTF8': '1' },
          suite: 'images',
          timeout: 120)
 endforeach
