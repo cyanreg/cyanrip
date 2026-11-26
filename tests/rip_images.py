@@ -393,6 +393,20 @@ def sc_art():
             if ptype != "Cover (front)":
                 fail(f"art: {f}.flac picture type {ptype!r}")
 
+    # An image FFmpeg can't read, as a PNG is without zlib, is saved but not
+    # embedded, which would leave the tracks unplayable
+    (WORK / "unreadable.png").write_bytes((FIX / "art.png").read_bytes()[:16])
+    rip("art_bad", "basic.cue", "-C", f"Front={WORK / 'unreadable.png'}")
+    expect("art_bad", "1.flac:4", "2.flac:4", "Front.png", "log.log", "sheet.cue")
+    if "cover art \"Front\" can't be read" not in (WORK / "art_bad.log").read_text():
+        fail("art_bad: no warning for the unreadable cover art")
+    if FFPROBE:
+        for f in (1, 2):
+            pics = probe(WORK / "out_art_bad" / f"{f}.flac", "-select_streams",
+                         "v", "-show_entries", "stream=codec_name")
+            if pics:
+                fail(f"art_bad: {f}.flac embedded pictures: {pics!r}, wanted none")
+
 
 def fingerprint(name, track):
     return probe(WORK / f"out_{name}" / f"{track}.flac", "-show_entries",

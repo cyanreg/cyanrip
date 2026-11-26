@@ -229,6 +229,9 @@ void cyanrip_log_track_end(cyanrip_ctx *ctx, cyanrip_track *t)
         if (ctx->settings.print_info_only)
             cyanrip_log(ctx, 0, "\n  Embedded cover art:\n    %s: %s\n",
                         dict_get(art->meta, "title"), art->source_url);
+        else if (art->no_embed)
+            cyanrip_log(ctx, 0, "\n  Embedded cover art:\n    %s: not embedded, its %s image can't be read\n",
+                        dict_get(art->meta, "title"), avcodec_get_name(art->params->codec_id));
         else
             cyanrip_log(ctx, 0, "\n  Embedded cover art:\n    %s: %ix%i %s\n",
                         dict_get(art->meta, "title"), art->params->width, art->params->height, codec_name);

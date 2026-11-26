@@ -157,6 +157,8 @@ typedef struct CRIPArt {
     uint8_t *data;
     size_t size;
     char *extension;
+
+    int no_embed; /* FFmpeg can't read the image, so it's saved but not embedded */
 } CRIPArt;
 
 typedef struct cyanrip_track {
