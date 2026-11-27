@@ -239,7 +239,6 @@ typedef struct cyanrip_ctx {
     cyanrip_track tracks[198];
     int nb_tracks; /* Total number of output tracks */
     int nb_cd_tracks; /* Total tracks the CD signals */
-    int disregard_cd_isrc; /* If one track doesn't have ISRC, universally the rest won't */
 
     char *mb_submission_url;
     int mb_release_forced; /* Release given via -R, rather than found by the DiscID */
