@@ -645,16 +645,12 @@ static void track_read_extra(cyanrip_ctx *ctx, cyanrip_track *t)
 {
     if (!t->track_is_data) {
         /* ISRC code */
-        if (!ctx->disregard_cd_isrc && (ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) && !dict_get(t->meta, "isrc")) {
+        if ((ctx->rcap & CDIO_DRIVE_CAP_READ_ISRC) && !dict_get(t->meta, "isrc")) {
             const char *isrc_str = cdio_get_track_isrc(ctx->cdio, t->cd_track_number);
             if (isrc_str) {
                 if (crip_code_is_set(isrc_str))
                     av_dict_set(&t->meta, "isrc", isrc_str, 0);
-                else
-                    ctx->disregard_cd_isrc = 1;
                 cdio_free((void *)isrc_str);
-            } else {
-                ctx->disregard_cd_isrc = 1;
             }
         }
 
